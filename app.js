@@ -55,10 +55,13 @@ async function onAuth(session) {
   if (error) throw error;
   if (!data) { state.error = "Nejsi ověřený člen KIN. Přihlas se znovu."; await sb.auth.signOut(); return; }
   state.me = data; state.error = null;
-  if (!was) loadContent().catch(() => { state.error = "Obsah se nenačetl. Zkus stránku načíst znovu."; state.checking = false; renderWho(); render(); });
+  // unlocks need the seasons from the content, so they load after it (both at once = haveSet never set, Viktor UAT)
+  if (!was) loadContent()
+    .then(() => loadUnlocks().catch(e => { console.error(e); haveSet = null; }))
+    // history pages and loadout cards wait for the login to know what to load / which boxes to tick
+    .then(() => { if (onHistRoute() || onCardRoute()) { const y = scrollY; render(); scrollTo(0, y); } },
+      () => { state.error = "Obsah se nenačetl. Zkus stránku načíst znovu."; state.checking = false; renderWho(); render(); });
   renderWho(); loadEvent(); subscribe();
-  // history pages and loadout cards wait for the login to know what to load / which boxes to tick
-  if (!was) loadUnlocks().catch(() => { haveSet = null; }).then(() => { if (onHistRoute() || onCardRoute()) { const y = scrollY; render(); scrollTo(0, y); } });
 }
 const onCardRoute = () => /^#\/(squad\/|s\/[^/]+\/role\/)/.test(location.hash);
 const onHistRoute = () => HIST.includes(location.hash.replace(/^#\/?/, "").split(/[/?]/)[0]);
@@ -277,7 +280,7 @@ function authEvent(ev, session) {
   if (!["INITIAL_SESSION", "SIGNED_IN", "SIGNED_OUT"].includes(ev)) return;
   // never await Supabase calls inside the auth callback (supabase-js deadlock), hand off instead
   // a raw database error means nothing to a player (OWASP A10): plain message on the page, detail in the console
-  setTimeout(() => { authQ = authQ.then(() => onAuth(session)).catch(e => { console.error(e); state.error = "Přihlášení se nepovedlo. Zkus to znovu."; renderWho(); }); });
+  setTimeout(() => { authQ = authQ.then(() => onAuth(session)).catch(e => { console.error(e); state.error = "Přihlášení se nepovedlo. Zkus to znovu."; state.checking = false; renderWho(); render(); }); });
 }
 if (sb) sb.auth.onAuthStateChange(authEvent);
 else setTimeout(() => { renderWho(); renderRoster(); });
