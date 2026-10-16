@@ -544,8 +544,9 @@ function shopList(s, r) {
   const ui = k.unlocks_ideal.map(u => `<span class="ref">${unlockText(u)}</span>`).join("");
   const tiles = r.gear.map(g => {
     const opt = !g.item, name = g.item || g.ideal, unlock = opt ? g.ideal_unlock : g.unlock;
-    const alt = g.item && g.ideal && g.ideal !== g.item
-      ? `<div class="alt">${itemIcon(g.ideal_icon, "sm")}<span>Ideál: <b>${esc(g.ideal)}</b> · ${usd(g.ideal_price)}${g.ideal_unlock ? ` · odemknout ${unlockText(g.ideal_unlock)}` : ""}</span></div>` : "";
+    const std = g.std ? `<div class="alt">${itemIcon(g.std_icon, "sm")}<span>Mezistupeň: <b>${esc(g.std)}</b> · ${usd(g.std_price)}${g.std_unlock ? ` · odemknout ${unlockText(g.std_unlock)}` : ""}</span></div>` : "";
+    const alt = std + (g.item && g.ideal && g.ideal !== g.item
+      ? `<div class="alt">${itemIcon(g.ideal_icon, "sm")}<span>Ideál: <b>${esc(g.ideal)}</b> · ${usd(g.ideal_price)}${g.ideal_unlock ? ` · odemknout ${unlockText(g.ideal_unlock)}` : ""}</span></div>` : "");
     return `<li class="tile${opt ? " opt" : ""}">${itemIcon(opt ? g.ideal_icon : g.icon)}<div class="tx">
       <div class="nm"><span class="qty">${g.qty === "?" ? '<span class="unk">?</span>' : g.qty + "×"}</span><span>${esc(name)}</span>${haveBox({ name, unlock })}</div>
       <div class="pr">${opt ? "Volitelně, když máš odemčeno · " : ""}${priceLine(opt ? g.ideal_price : g.price, g.qty)}${unlock ? ` · odemknout <b>${unlockText(unlock)}</b>` : ""}</div>
@@ -664,7 +665,7 @@ const haveBox = e => e.unlock && haveSet
 
 function slotCell(c, key, mode) {
   const g = c.gear.find(x => x.slot === key), e = g && inMode(g, mode);
-  return `<div class="slot${e ? "" : " empty"}"><span class="sl">${SLOT_LABEL[key]}</span>${e ? `${itemIcon(e.icon)}<span class="sn">${esc(e.name)}</span>${e.unlock ? `<span class="su">${unlockText(e.unlock)}</span>` : ""}${haveBox(e)}${e.cost != null ? `<span class="pr">${usd(e.cost)}</span>` : ""}` : key === "slot2" ? '<span class="ph">Sidearm</span>' : ""}</div>`;
+  return `<div class="slot${e ? "" : " empty"}"><span class="sl">${SLOT_LABEL[key]}</span>${e ? `${itemIcon(e.icon)}<span class="sn">${esc(e.name)}</span>${e.unlock ? `<span class="su">${unlockText(e.unlock)}</span>` : ""}${g.std ? `<span class="su">mezistupeň ${esc(g.std)}${g.std_unlock ? ` · ${unlockText(g.std_unlock)}` : ""}</span>` : ""}${haveBox(e)}${e.cost != null ? `<span class="pr">${usd(e.cost)}</span>` : ""}` : key === "slot2" ? '<span class="ph">Sidearm</span>' : ""}</div>`;
 }
 function modeBar() {
   return `<div class="vbar" role="group" aria-label="Varianta výbavy">${[["min", "Minimum", "hned po wipu"], ["ideal", "Ideál", "až máš odemčeno"]].map(([id, l, s]) =>
