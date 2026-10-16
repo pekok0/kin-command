@@ -339,7 +339,7 @@ function variantBar(s) {
     `<button type="button" data-variant="${esc(v.id)}" aria-pressed="${v.id === curVariant}"><b>${esc(v.name)}</b><small>${v.towers.length} věže${v.status === "NÁVRH" ? " · návrh" : ""}</small></button>`).join("")}</div>`;
 }
 
-// Situation sketch drawn from map data: meters, +x east, +y south, origin = church
+// Situation sketch drawn from map data: meters, +x east, +y south, origin = sketch_origin (Ozeti: church)
 function sketchSvg(s, vid) {
   const k = s.sketch, W = 1250, H = 1000, sel = vById(s, vid);
   const pts = a => a.map(([x, y]) => `${x},${y}`).join(" ");
@@ -350,10 +350,11 @@ function sketchSvg(s, vid) {
     const on = sel.towers.includes(t.name), n = t.name.replace("Tower ", "");
     return `<g class="tw${on ? " on" : ""}"><rect x="${t.xy[0] - 34}" y="${t.xy[1] - 34}" width="68" height="68" transform="rotate(45 ${t.xy[0]} ${t.xy[1]})"/><text x="${t.xy[0]}" y="${t.xy[1] + 22}" text-anchor="middle">${n}</text></g>`;
   }).join("");
-  const t2 = k.towers.find(t => t.name === "Tower 2");
+  const t2 = k.towers.find(t => t.name === k.base_tower);
   const base = t2 ? `<text class="lbl fr" x="${t2.xy[0] + 70}" y="${t2.xy[1] + 105}">hlavní báze</text>` : "";
-  const [cx, cy] = k.church;
-  const church = `<path class="cross" d="M${cx} ${cy - 46} V${cy + 46} M${cx - 30} ${cy - 16} H${cx + 30}"/><text class="lbl" x="${cx + 48}" y="${cy - 22}">kostel</text>`;
+  const [cx, cy] = k.landmark.xy;
+  const mark = k.landmark.icon === "cross" ? `<path class="cross" d="M${cx} ${cy - 46} V${cy + 46} M${cx - 30} ${cy - 16} H${cx + 30}"/>` : `<circle class="cross" cx="${cx}" cy="${cy}" r="18"/>`;
+  const church = `${mark}<text class="lbl" x="${cx + 48}" y="${cy - 22}">${esc(k.landmark.label)}</text>`;
   const arrows = s.approaches.map(a => {
     const b = a.bearing * Math.PI / 180, dx = Math.sin(b), dy = -Math.cos(b);
     const rx = Math.min(W / Math.abs(dx || 1e-9), H / Math.abs(dy || 1e-9)) - 120;
@@ -365,7 +366,7 @@ function sketchSvg(s, vid) {
   const north = `<g class="north"><path d="M${W - 110} ${-H + 190} L${W - 110} ${-H + 70} M${W - 140} ${-H + 110} L${W - 110} ${-H + 70} L${W - 80} ${-H + 110}"/><text x="${W - 110}" y="${-H + 240}" text-anchor="middle">S</text></g>`;
   return `<svg class="sketch" viewBox="${-W} ${-H} ${2 * W} ${2 * H}" role="img" aria-label="Náčrtek varianty ${esc(sel.name)}">
     <rect x="${-W}" y="${-H}" width="${2 * W}" height="${2 * H}" class="bg"/>${zones}
-    <polyline class="river" points="${pts(k.river)}"/>${circles}${label}${towers}${church}${base}${arrows}${scale}${north}</svg>`;
+    ${k.river.length ? `<polyline class="river" points="${pts(k.river)}"/>` : ""}${circles}${label}${towers}${church}${base}${arrows}${scale}${north}</svg>`;
 }
 
 function variantPanel(s) {
@@ -376,7 +377,7 @@ function variantPanel(s) {
       <p class="vsum">${esc(v.summary)}</p>
       <p class="vtw">Věže v zóně: ${v.towers.map(t => `<span class="ref">${esc(t.replace("Tower ", "T"))}</span>`).join(" ")}</p>
       ${v.changes.length ? `<h2>${v.id === s.variants[0].id ? "Na co myslet" : "Co je jinak než v Default"}</h2><ul class="bullets">${v.changes.map(c => `<li>${esc(c)}</li>`).join("")}</ul>` : ""}
-      <p class="note">Náčrtek z dat metaforge, řeka přibližně. Kruhy ostatních variant čárkovaně.</p></div></section>`;
+      <p class="note">Náčrtek z dat metaforge${s.sketch.river.length ? ", řeka přibližně" : ""}. Kruhy ostatních variant čárkovaně.</p></div></section>`;
 }
 
 function chip(s, id, label = id) { return `<button type="button" class="rid" data-trace="${esc(id)}" aria-pressed="false" title="Zvýraznit ${esc(id)} ve všech fázích">${esc(label)}</button>`; }
@@ -414,15 +415,15 @@ function viewHome() {
     if (r) cont = `<a class="cont" href="${roleHref(s, r)}"><span class="big">${esc(r.id)}</span><span>Pokračovat na tvou kartu<small>${esc(r.name)} · ${esc(sideLabel(s))}</small></span></a>`;
   }
   const sheets = D.strategies.map(s => `<li><a href="#/s/${s.id}"><b>${esc(s.map)}</b><span class="meta">${esc(s.color)} · ${esc(s.faction)} · ${esc(s.stage)}</span>${s.status === "DRAFT" ? '<span class="tag draft">Draft</span>' : ""}<span class="meta">${arrow()}</span></a></li>`).join("");
-  const pickers = D.strategies.map(s => `
-    <section class="block" aria-labelledby="pick-${s.id}">
-      <h2 id="pick-${s.id}">Kdo jsi? ${esc(sideLabel(s))}</h2>
+  const pickers = D.strategies.map((s, i) => `
+    <details class="block howto"${i ? "" : " open"} aria-labelledby="pick-${s.id}">
+      <summary><h2 id="pick-${s.id}">Kdo jsi? ${esc(sideLabel(s))}${arrow()}</h2></summary>
       <div class="picker">${s.groups.map(g => `
         <div class="pg"><div class="pg-head">${sym(g.symbol, "sm")}<div><b>${esc(g.name)}</b><small>${esc(g.squad)}</small></div></div>
           <ul>${s.roles.filter(r => r.group === g.id).map(r => `<li><button type="button" data-pick="${s.id}/${esc(r.id)}" class="${mine === `${s.id}/${r.id}` ? "is-me" : ""}"><span class="rid">${esc(r.id)}</span><span>${esc(r.name)}</span></button></li>`).join("")}</ul>
         </div>`).join("")}
       </div>
-    </section>`).join("");
+    </details>`).join("");
   return `
     <div class="home-head"><img class="crest" src="znacka/kin-emblem.svg" alt="Emblém Kinetic Solutions" width="150" height="150"><h1>Central Command</h1>
       <p class="lede">Strategie Kinetic Solutions. Vyber si svou roli a uvidíš, co koupit, čím jedeš a co děláš v každé fázi. Na briefingu jedeme podle plátna.</p>
@@ -447,6 +448,7 @@ function stratHead(s, tab) {
   return `
     <header class="strat-head"><div><div class="t-row"><h1>${esc(s.map)} <span>· ${esc(s.color)}</span></h1>${s.status === "DRAFT" ? '<span class="tag draft" title="Strategie zatím není vyhlášená za platnou">Draft</span>' : ""}</div><p>${esc(s.faction)} · ${esc(s.stage)}</p></div></header>
     ${variantBar(s)}
+    <nav class="tabs" aria-label="Strana">${D.strategies.filter(x => x.map === s.map).map(x => `<a href="#/s/${x.id}${tab === "platno" ? "" : "/" + tab}"${x.id === s.id ? ' aria-current="page"' : ""}>${esc(x.color)}</a>`).join("")}</nav>
     <nav class="tabs" aria-label="Strategie">${tabs.map(([k, l]) => `<a href="#/s/${s.id}${k === "platno" ? "" : "/" + k}"${k === tab ? ' aria-current="page"' : ""}>${l}</a>`).join("")}</nav>`;
 }
 
@@ -897,7 +899,7 @@ function viewPlayer(m, rows, season, have) {
 function renderNav(active) {
   const mine = me.get(), [msid, mrid] = (mine || "/").split("/"), ms = S(msid), mr = ms && roleOf(ms, mrid);
   document.getElementById("nav").innerHTML =
-    D.strategies.map(s => `<a href="#/s/${s.id}"${active === s.id ? ' aria-current="page"' : ""}>${esc(sideLabel(s))}</a>`).join("") +
+    [...new Set(D.strategies.map(s => s.map))].map(m => `<a href="#/s/${D.strategies.find(s => s.map === m).id}"${S(active)?.map === m ? ' aria-current="page"' : ""}>${esc(m)}</a>`).join("") +
     `<a href="#/squady"${active === "squady" ? ' aria-current="page"' : ""}>Squady</a>` +
     `<a href="#/doktrina"${active === "doktrina" ? ' aria-current="page"' : ""}>Doktrína</a>` +
     `<a href="#/vycvik"${active === "vycvik" ? ' aria-current="page"' : ""}>Výcvik</a>` +
