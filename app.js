@@ -27,6 +27,9 @@ async function login() {
 async function errText(e) { try { return (await e.context.json()).error; } catch { return e.message; } }
 
 async function onAuth(session) {
+  // a queued event can carry a session that an earlier onAuth already signed out (Host refused): treat it as
+  // logged out, else it reads members as anon and "permission denied" replaces the refusal (test_login_gate.py)
+  if (session && !(await sb.auth.getSession()).data.session) session = null;
   // auth-js re-sends SIGNED_IN on every return to the tab: re-render history only when login state flips
   const was = !!state.me;
   if (!session) {
@@ -273,7 +276,8 @@ let authQ = Promise.resolve();
 function authEvent(ev, session) {
   if (!["INITIAL_SESSION", "SIGNED_IN", "SIGNED_OUT"].includes(ev)) return;
   // never await Supabase calls inside the auth callback (supabase-js deadlock), hand off instead
-  setTimeout(() => { authQ = authQ.then(() => onAuth(session)).catch(e => { state.error = e.message || String(e); renderWho(); }); });
+  // a raw database error means nothing to a player (OWASP A10): plain message on the page, detail in the console
+  setTimeout(() => { authQ = authQ.then(() => onAuth(session)).catch(e => { console.error(e); state.error = "Přihlášení se nepovedlo. Zkus to znovu."; renderWho(); }); });
 }
 if (sb) sb.auth.onAuthStateChange(authEvent);
 else setTimeout(() => { renderWho(); renderRoster(); });
