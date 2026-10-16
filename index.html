@@ -4,7 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<meta name="theme-color" content="#171a0c">
+<!-- specs/zamek, OWASP C8: scripts only from this site and the pinned supabase-js on jsDelivr -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://cdn.discordapp.com; font-src 'self'; connect-src 'self' https://gjvefmsnpmjkbvqtmwbz.supabase.co wss://gjvefmsnpmjkbvqtmwbz.supabase.co; object-src 'none'; base-uri 'none'; form-action 'self'">
+<meta name="theme-color" content="#0f1e3b">
 <title>KIN Central Command</title>
 <link rel="icon" href="znacka/kin-ikona.svg" type="image/svg+xml">
 <link rel="icon" href="znacka/favicon-32.png" sizes="32x32" type="image/png">
@@ -27,14 +29,20 @@
 
 :root {
   color-scheme: dark;
-  --ground: oklch(0.21 0.026 118);
-  --panel: oklch(0.24 0.028 118);
-  --panel-2: oklch(0.27 0.03 118);
-  --rule: oklch(0.38 0.022 118);
-  --rule-soft: oklch(0.31 0.02 118);
+  /* Navy & Bullion: the KIN patch on a navy uniform; gold is thread for the brand only (top bar, emblem) */
+  --ground: oklch(0.24 0.059 262);
+  --panel: oklch(0.275 0.065 262);
+  --panel-2: oklch(0.31 0.07 262);
+  --rule: oklch(0.43 0.06 262);
+  --rule-soft: oklch(0.35 0.055 262);
+  --acetate: oklch(0.275 0.065 262 / 0.9);
+  --bar-bg: oklch(0.24 0.059 262 / 0.94);
+  --slot-bg: oklch(0.24 0.059 262 / 0.7);
   --ink: oklch(0.94 0.013 95);
-  --ink-2: oklch(0.81 0.02 100);
-  --ink-3: oklch(0.69 0.022 105);
+  --ink-2: oklch(0.83 0.02 255);
+  --ink-3: oklch(0.71 0.03 255);
+  --gold: oklch(0.80 0.12 85);
+  --gold-thread: oklch(0.80 0.12 85 / 0.55);
   --fr: oklch(0.86 0.095 215);
   --fr-fill: oklch(0.86 0.095 215 / 0.13);
   --ho: oklch(0.74 0.15 24);
@@ -65,11 +73,11 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .narrow { max-width: 920px; }
 
 /* ---- bar ---- */
-.bar { position: sticky; top: 0; z-index: 5; background: oklch(0.21 0.026 118 / 0.94); border-bottom: 1px solid var(--rule); backdrop-filter: blur(6px); }
+.bar { position: sticky; top: 0; z-index: 5; background: var(--bar-bg); border-bottom: 1px solid var(--gold-thread); backdrop-filter: blur(6px); }
 .bar .wrap { display: flex; align-items: center; gap: 24px; min-height: 56px; }
 .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; margin-right: auto; }
 .brand .emblem { display: block; flex: none; }
-.mark { font: 700 15px/1 var(--cond); letter-spacing: .12em; color: var(--fr); border: 1.5px solid var(--fr); background: var(--fr-fill); padding: 6px 7px 5px 9px; }
+.mark { font: 700 15px/1 var(--cond); letter-spacing: .12em; color: var(--ground); background: var(--gold); border: 1.5px solid var(--gold); padding: 6px 7px 5px 9px; }
 .brand span:last-child { font: 600 15px/1 var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); }
 .bar nav { display: flex; gap: 4px; flex-wrap: wrap; }
 .bar nav a { font: 600 15px/1 var(--cond); letter-spacing: .05em; text-transform: uppercase; text-decoration: none; color: var(--ink-2); padding: 9px 10px 8px; }
@@ -92,7 +100,7 @@ main { flex: 1; padding: 28px 0 64px; }
 
 /* ---- shared atoms ---- */
 .tag { display: inline-block; font: 700 13px/1 var(--cond); letter-spacing: .1em; padding: 5px 7px 4px; border: 1px solid; text-transform: uppercase; }
-.tag.draft { color: var(--un); background: var(--un-fill); }
+.tag.draft { color: var(--un); background: var(--un-fill); border-style: dashed; }
 .rid { display: inline-block; font: 700 13px/1 var(--cond); letter-spacing: .04em; color: var(--fr); border: 1px solid oklch(0.86 0.095 215 / 0.5); background: var(--fr-fill); padding: 4px 5px 3px; text-decoration: none; white-space: nowrap; }
 button.rid:hover, a.rid:hover { background: oklch(0.86 0.095 215 / 0.26); }
 button.rid[aria-pressed="true"] { background: var(--fr); color: var(--ground); }
@@ -131,7 +139,7 @@ button.rid[aria-pressed="true"] { background: var(--fr); color: var(--ground); }
 .tracebar b { color: var(--fr); font-family: var(--cond); letter-spacing: .04em; }
 .tracebar .act { font: 600 14px/1 var(--cond); letter-spacing: .06em; text-transform: uppercase; padding: 8px 10px 7px; border: 1px solid var(--rule); text-decoration: none; color: var(--ink); }
 .tracebar .act:hover { border-color: var(--fr); }
-.matrix-wrap { overflow-x: auto; border: 1px solid var(--rule); background: oklch(0.24 0.028 118 / 0.9); }
+.matrix-wrap { overflow-x: auto; border: 1px solid var(--rule); background: var(--acetate); }
 .matrix { width: 100%; min-width: 1120px; border-collapse: collapse; table-layout: fixed; font-size: 16px; line-height: 1.5; }
 .matrix col.ph { width: 240px; }
 .matrix tbody th .pl { white-space: nowrap; }
@@ -143,7 +151,7 @@ button.rid[aria-pressed="true"] { background: var(--fr); color: var(--ground); }
 .matrix thead a:hover b { color: var(--fr); }
 .matrix tbody th { position: sticky; left: 0; z-index: 1; text-align: left; font-weight: 500; vertical-align: top; padding: 14px; background: var(--panel-2); border-right: 1px solid var(--rule); }
 .matrix td { vertical-align: top; padding: 10px 14px 12px; border-left: 1px solid var(--rule-soft); }
-.matrix tr.phase { border-top: 2px dashed oklch(0.69 0.022 105 / 0.55); }
+.matrix tr.phase { border-top: 2px dashed oklch(0.71 0.03 255 / 0.55); }
 .pl { display: inline; font: 700 13px/1 var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin-right: .4em; }
 .matrix tbody th b { display: inline; font: 700 20px/1.05 var(--cond); text-transform: uppercase; letter-spacing: .02em; }
 .matrix tbody th time { display: block; font: 600 14px/1.2 var(--cond); letter-spacing: .04em; color: var(--fr); margin-top: 6px; }
@@ -194,6 +202,8 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .rx .who { grid-column: 3; display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 
 /* ---- home ---- */
+.home-head { display: grid; grid-template-columns: auto 1fr; gap: 6px 28px; align-items: center; }
+.home-head .crest { grid-row: span 2; width: clamp(88px, 8vw + 40px, 150px); height: auto; }
 .home-head h1 { font-size: clamp(44px, 4vw + 20px, 88px); text-transform: uppercase; letter-spacing: .005em; }
 .home-head .lede { margin-top: 14px; }
 .cont { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin-top: 28px; padding: 16px 18px; border: 1px solid var(--fr); background: var(--fr-fill); text-decoration: none; }
@@ -210,7 +220,7 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .sheets a:hover b { color: var(--fr); }
 .sheets .meta { color: var(--ink-2); font: 600 16px/1.2 var(--cond); text-transform: uppercase; letter-spacing: .05em; }
 .doklink { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; font: 600 16px/1 var(--cond); text-transform: uppercase; letter-spacing: .06em; }
-.picker { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); border: 1px solid var(--rule); background: oklch(0.24 0.028 118 / 0.9); }
+.picker { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); border: 1px solid var(--rule); background: var(--acetate); }
 .pg { padding: 16px; border-right: 1px solid var(--rule-soft); border-bottom: 1px solid var(--rule-soft); }
 .pg-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .pg-head b { display: block; font: 700 18px/1.05 var(--cond); text-transform: uppercase; }
@@ -235,7 +245,13 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .transport { font: 700 24px/1.2 var(--cond); letter-spacing: .01em; }
 .unlocks { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin-top: 14px; font-size: 15px; color: var(--ink-2); }
 .unlocks .ref { color: var(--ink); }
-.gnote { margin-top: 12px; font-size: 14px; color: var(--un); }
+.howto summary { cursor: pointer; list-style: none; }
+.howto summary::-webkit-details-marker { display: none; }
+.howto summary h2 { display: inline-flex; align-items: center; gap: 8px; }
+.howto summary .ico { color: var(--ink-3); transform: rotate(90deg); }
+.howto[open] summary .ico { transform: rotate(-90deg); }
+.howto .proc li::before { color: var(--ink-3); }
+.gnote { margin-top: 12px; font-size: 14px; color: var(--ink-2); }
 .steps li { display: grid; grid-template-columns: 200px 1fr; gap: 4px 18px; padding: 14px 0; border-bottom: 1px solid var(--rule-soft); }
 .steps li:first-child { border-top: 1px solid var(--rule); }
 .steps .ph { padding-top: 3px; }
@@ -264,14 +280,14 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .drill .cap .dl { margin-left: auto; font: 600 15px/1 var(--cond); letter-spacing: .06em; text-transform: uppercase; color: var(--fr); }
 
 .item { width: 132px; height: 88px; flex: none; object-fit: contain; padding: 6px; border: 1px solid var(--rule);
-  background: radial-gradient(ellipse at 50% 45%, oklch(0.58 0.02 105) 0%, oklch(0.42 0.022 110) 55%, oklch(0.31 0.022 115) 100%); }
+  background: radial-gradient(ellipse at 50% 45%, oklch(0.54 0.03 255) 0%, oklch(0.39 0.04 258) 55%, oklch(0.27 0.045 262) 100%); }
 .item.sm { width: 66px; height: 44px; padding: 3px; }
 .item.none { display: inline-block; background: repeating-linear-gradient(-45deg, var(--rule-soft) 0 4px, transparent 4px 9px); }
 .shop-sum { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin-bottom: 16px; }
 .shop-sum > span { color: var(--ink-2); font-size: 15px; }
 .shop-sum b { font: 700 28px/1 var(--cond); margin-right: 8px; }
 .shop { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr)); gap: 10px; }
-.tile { display: flex; gap: 16px; align-items: flex-start; padding: 12px; background: oklch(0.24 0.028 118 / 0.88); border: 1px solid var(--rule-soft); }
+.tile { display: flex; gap: 16px; align-items: flex-start; padding: 12px; background: var(--acetate); border: 1px solid var(--rule-soft); }
 .tile.opt { border-style: dashed; }
 .tile .tx { min-width: 0; }
 .tile .nm { display: flex; gap: 10px; align-items: baseline; font: 700 21px/1.15 var(--cond); }
@@ -291,7 +307,7 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .rb-sum { text-align: right; font: 700 24px/1 var(--cond); }
 .rb-sum small { display: block; margin-top: 4px; font: 500 14px/1.2 var(--sans); color: var(--ink-3); }
 .strip { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
-.strip li { display: grid; grid-template-columns: 96px auto; gap: 2px 12px; align-items: center; padding: 6px 14px 6px 6px; background: oklch(0.24 0.028 118 / 0.88); border: 1px solid var(--rule-soft); }
+.strip li { display: grid; grid-template-columns: 96px auto; gap: 2px 12px; align-items: center; padding: 6px 14px 6px 6px; background: var(--acetate); border: 1px solid var(--rule-soft); }
 .strip li.opt { border-style: dashed; }
 .strip .item { grid-row: 1 / 3; width: 96px; height: 64px; padding: 4px; }
 .strip .q { font: 700 20px/1 var(--cond); color: var(--fr); align-self: end; }
@@ -299,7 +315,7 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 
 .vbar { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; margin-top: 18px; }
 .vlbl { align-self: center; margin-right: 6px; font: 700 14px/1 var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); }
-.vbar button { display: grid; gap: 3px; text-align: left; padding: 8px 14px 7px; border: 1px solid var(--rule); background: oklch(0.24 0.028 118 / 0.85); }
+.vbar button { display: grid; gap: 3px; text-align: left; padding: 8px 14px 7px; border: 1px solid var(--rule); background: var(--acetate); }
 .vbar button b { font: 700 18px/1 var(--cond); letter-spacing: .03em; text-transform: uppercase; }
 .vbar button small { font: 500 13px/1.1 var(--sans); color: var(--ink-3); }
 .vbar button:hover { border-color: var(--fr); }
@@ -312,16 +328,16 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .vtw { margin: 12px 0 18px; color: var(--ink-2); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .vtx .bullets li { max-width: 78ch; }
 .sketch { width: 100%; height: auto; display: block; border: 1px solid var(--rule); }
-.sketch .bg { fill: oklch(0.23 0.026 118); }
-.sketch .z-forest { fill: oklch(0.33 0.05 128 / 0.75); }
-.sketch .z-open { fill: oklch(0.38 0.035 100 / 0.45); }
-.sketch .z-built { fill: oklch(0.56 0.015 95 / 0.32); stroke: oklch(0.7 0.015 95 / 0.35); stroke-width: 4; }
-.sketch .z-hill { fill: oklch(0.5 0.03 85 / 0.22); stroke: oklch(0.75 0.03 85 / 0.45); stroke-width: 5; stroke-dasharray: 18 12; }
-.sketch .river { fill: none; stroke: oklch(0.62 0.07 232); stroke-width: 30; stroke-linejoin: round; stroke-linecap: round; }
+.sketch .bg { fill: oklch(0.27 0.055 262); }
+.sketch .z-forest { fill: oklch(0.36 0.06 255 / 0.75); }
+.sketch .z-open { fill: oklch(0.42 0.045 258 / 0.45); }
+.sketch .z-built { fill: oklch(0.58 0.03 255 / 0.32); stroke: oklch(0.74 0.03 255 / 0.35); stroke-width: 4; }
+.sketch .z-hill { fill: oklch(0.52 0.04 255 / 0.22); stroke: oklch(0.76 0.03 255 / 0.45); stroke-width: 5; stroke-dasharray: 18 12; }
+.sketch .river { fill: none; stroke: oklch(0.47 0.06 240); stroke-width: 30; stroke-linejoin: round; stroke-linecap: round; }
 .sketch .cz { fill: none; stroke: var(--ink-3); stroke-width: 5; stroke-dasharray: 26 18; opacity: .7; }
 .sketch .cz.on { fill: var(--fr-fill); stroke: var(--fr); stroke-width: 10; stroke-dasharray: none; opacity: 1; }
 .sketch .czl { font: 700 64px var(--cond); fill: var(--fr); letter-spacing: 4px; text-transform: uppercase; }
-.sketch .tw rect { fill: oklch(0.3 0.02 115); stroke: var(--ink-3); stroke-width: 7; }
+.sketch .tw rect { fill: oklch(0.33 0.06 262); stroke: var(--ink-3); stroke-width: 7; }
 .sketch .tw text { font: 700 60px var(--cond); fill: var(--ink-3); }
 .sketch .tw.on rect { fill: var(--fr); stroke: var(--ground); }
 .sketch .tw.on text { fill: var(--ground); }
@@ -338,7 +354,7 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .sketch .north path { stroke: var(--ink-2); stroke-width: 10; fill: none; }
 
 /* ---- loadout (vendor overview) ---- */
-.loadout { margin-top: 28px; padding: 18px; background: oklch(0.24 0.028 118 / 0.88); border: 1px solid var(--rule-soft); max-width: 1400px; }
+.loadout { margin-top: 28px; padding: 18px; background: var(--acetate); border: 1px solid var(--rule-soft); max-width: 1400px; }
 .lo-head { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; }
 .lo-name { font-size: 30px; }
 .lo-name a { text-decoration: none; }
@@ -346,7 +362,7 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .lo-head .src { font-size: 15px; color: var(--ink-3); margin-top: 2px; }
 .loadout h3 { font: 700 13px/1 var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin: 16px 0 8px; }
 .lo-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
-.slot { position: relative; display: flex; gap: 12px; align-items: center; min-height: 72px; padding: 8px; border: 1px solid var(--rule-soft); background: oklch(0.21 0.026 118 / 0.7); }
+.slot { position: relative; display: flex; gap: 12px; align-items: center; min-height: 72px; padding: 8px; border: 1px solid var(--rule-soft); background: var(--slot-bg); }
 .slot + .slot { margin-top: 6px; }
 .slot.empty { background: repeating-linear-gradient(-45deg, var(--rule-soft) 0 2px, transparent 2px 10px); }
 .slot .sl { position: absolute; top: 6px; left: 8px; font: 700 12px/1 var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
@@ -354,7 +370,7 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .slot .sn { font: 700 19px/1.15 var(--cond); }
 .slot .su { margin-left: auto; font: 600 13px/1 var(--cond); color: var(--un); white-space: nowrap; }
 .slot .ph { font: 600 15px/1 var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin-top: 14px; }
-.slot .pr, .lo-store .pr { font: 700 13px/1 var(--cond); letter-spacing: .02em; color: var(--gr); white-space: nowrap; }
+.slot .pr, .lo-store .pr { font: 700 13px/1 var(--cond); letter-spacing: .02em; color: var(--ink); white-space: nowrap; }
 .slot .pr { position: absolute; top: 6px; right: 8px; }
 .lo-store .pr { margin-left: 8px; }
 .lo-gear { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
@@ -373,7 +389,7 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .lo-sum > span { color: var(--ink-2); font-size: 15px; }
 .lo-sum b { font: 700 26px/1 var(--cond); margin-right: 8px; }
 .cls { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 8px; margin-top: 14px; }
-.cls a { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--rule-soft); background: oklch(0.24 0.028 118 / 0.88); text-decoration: none; }
+.cls a { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--rule-soft); background: var(--acetate); text-decoration: none; }
 .cls a:hover { border-color: var(--fr); }
 .cls b { font: 700 20px/1.1 var(--cond); }
 .cls span { font-size: 15px; color: var(--ink-2); }
@@ -386,7 +402,7 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .ros-head .num { font: 700 22px/1 var(--cond); }
 .ros-head .num small { font-size: 15px; color: var(--ink-3); }
 .ros-head time { color: var(--ink-2); }
-.ros { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); border: 1px solid var(--rule); background: oklch(0.24 0.028 118 / 0.9); }
+.ros { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); border: 1px solid var(--rule); background: var(--acetate); }
 .rg { padding: 14px 16px; border-right: 1px solid var(--rule-soft); border-bottom: 1px solid var(--rule-soft); min-width: 0; }
 .rg .pg-head .num { margin-left: auto; font: 700 18px/1 var(--cond); color: var(--ink-2); }
 .rg li { display: flex; align-items: center; }
@@ -412,7 +428,7 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .evclose summary:hover { border-color: var(--fr); }
 .evclose[open] form { margin-top: 12px; }
 .miss { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: -4px 0 12px; font: 600 15px/1 var(--cond); letter-spacing: .04em; color: var(--ho); }
-.miss.ok { color: var(--gr); }
+.miss.ok { color: var(--fr); }
 .miss .rid { padding: 6px 7px 5px; margin: 2px 0; }
 .miss .more { color: var(--ink-3); }
 .rsvp { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 0 0 10px; }
@@ -428,10 +444,10 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .atts .att { display: flex; align-items: center; gap: 6px; font: 500 16px/1.2 var(--sans); text-transform: none; letter-spacing: 0; color: var(--ink); }
 .absent { opacity: .55; }
 .have { display: inline-flex; align-items: center; gap: 4px; min-height: 24px; margin-left: 8px; font: 600 13px/1 var(--cond); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); cursor: pointer; white-space: nowrap; }
-.have input { width: 16px; height: 16px; accent-color: var(--gr); margin: 0; }
+.have input { width: 16px; height: 16px; accent-color: var(--fr); margin: 0; }
 .lo-gear .slot .have { margin-left: 0; }
 .need { margin-top: 6px; font-weight: 600; color: var(--un); }
-.need.ok { color: var(--gr); }
+.need.ok { color: var(--fr); }
 .need.err { color: var(--ho); }
 .absent .mlink { text-decoration: line-through; }
 .debrief { display: grid; grid-template-columns: max-content 1fr; gap: 8px 18px; max-width: 90ch; }
@@ -458,7 +474,9 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .gate { display: grid; justify-items: center; text-align: center; gap: 16px; max-width: 560px; margin: 0 auto; padding-block: 48px 24px; }
 .gate img { width: min(200px, 60vw); height: auto; }
 .gate .note { margin-top: 0; }
-.act.big { font-size: 17px; padding: 12px 20px 11px; }
+.gate h1 { font-size: clamp(36px, 3vw + 22px, 64px); text-transform: uppercase; letter-spacing: .01em; }
+.act.big { font-size: 17px; padding: 12px 20px 11px; color: var(--ground); background: var(--fr); border-color: var(--fr); }
+.act.big:hover { background: oklch(0.86 0.095 215 / 0.85); }
 
 @media (max-width: 720px) {
   #who .nm { display: none; }
@@ -494,11 +512,11 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 </head>
 <body>
 <!--
-THESIS: The hub is a tactical overlay on a night map table: one synchronization matrix where squads are NATO APP-6 unit symbols and phases are grease-pencil phase lines. It refuses the gamer-HUD dashboard of neon on black.
-OWN-WORLD: dark olive map-board ground with faint contour lines, acetate panels ruled in hairlines, bone chinagraph lettering in Barlow Semi Condensed caps; APP-6 affiliation colors are the only hues: friendly blue for us, hostile red, green team green, unknown yellow for drafts and gaps.
-STORY: a member finds their role, sees what to buy, when to move and what to do, and keeps that card open in battle.
-FIRST VIEWPORT: canvas tab: strategy title and DRAFT tag, intent strip, then the matrix: phase lines down the left, five unit-symbol columns, sync bars across; role codes trace a role through all phases.
-FORM: tactical overlay with APP-6 symbology, grounded #3, seed 25ab8fb5. Raises: running totals against capacity (j-card), stepped 90ms motion with no easing (acetate manual), focus with context kept (transit diagram), hairline density (high-density web), tabular numerals (datamatics).
+THESIS: Central Command is the KIN unit patch's staff room: the plan on a navy table, the clan identity stitched in gold only at the edges. It refuses the gamer-HUD dashboard and the olive map table it replaces.
+OWN-WORLD: deep navy ground and acetate panels ruled in navy hairlines with faint contour lines, bone lettering in Barlow Semi Condensed caps, gold bullion thread only for the emblem, the KIN tab and the top-bar seam; APP-6 hues keep their meanings: friendly blue for us and every control, hostile red, green team green, unknown yellow for drafts and gaps.
+STORY: a member logs in, finds their role, sees what to buy, when to move and what to do, and keeps that card open in battle.
+FIRST VIEWPORT: home: the round emblem beside CENTRAL COMMAND, lede, how-to (folded on phones), strategy list; canvas: strategy title, Draft tag, zone variants, the map sketch.
+FORM: brief-pinned (Kinetic Solutions patch identity, Petr 2026-10-16), no concept roll; structure of the previous build kept (seed 25ab8fb5).
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
 -->
 <header class="bar"><div class="wrap">
@@ -510,1002 +528,6 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 <footer class="foot"><div class="wrap" id="foot"></div></footer>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok" crossorigin="anonymous"></script>
 <script src="config.js"></script>
-<script>
-"use strict";
-// specs/zamek: the content (strategies, squads, doctrine, training list) comes from the database after the
-// Discord login (loadContent); until then the page shows only the login gate
-const D = {};
-// ---------- sestava: login přes Discord (Supabase) ----------
-const BACK = "wrd.back";  // hash to return to after the Discord round trip
-const urlQs = new URLSearchParams(location.search);
-let FRESH = urlQs.has("code");  // only a fresh Discord login carries provider_token worth sending
-// CDN down or blocked -> no login and no content; the gate says so
-const sb = window.supabase ? supabase.createClient(window.KIN_BACKEND.url, window.KIN_BACKEND.key, { auth: { flowType: "pkce" } }) : null;
-// a stored Supabase session means the login check is on its way: the gate shows "checking", not the button
-const hadSession = (() => { try { return Object.keys(localStorage).some(k => /^sb-.*-auth-token$/.test(k)); } catch { return false; } })();
-// never echo the provider's error text from the URL (content spoofing); drop it so a reload is clean
-let state = { me: null, error: urlQs.has("error") ? "Přihlášení přes Discord selhalo." : null, event: null, claims: [], rsvps: [], flash: null, checking: !!sb && (hadSession || FRESH) };
-if (urlQs.has("error")) history.replaceState(null, "", location.pathname + location.hash);
-
-async function login() {
-  if (!sb) return;
-  try { sessionStorage.setItem(BACK, location.hash); } catch { /* storage blocked: lands on home */ }
-  const { error } = await sb.auth.signInWithOAuth({
-    provider: "discord",
-    options: { scopes: "identify guilds.members.read", redirectTo: location.origin + location.pathname },
-  });
-  if (error) { state.error = error.message; renderWho(); }
-}
-
-async function errText(e) { try { return (await e.context.json()).error; } catch { return e.message; } }
-
-async function onAuth(session) {
-  // auth-js re-sends SIGNED_IN on every return to the tab: re-render history only when login state flips
-  const was = !!state.me;
-  if (!session) {
-    // logged out with the content in memory: reload drops it from the page
-    if (D.strategies) { location.reload(); return; }
-    state.me = null; state.checking = false; renderWho(); render();
-    if (chan) { sb.removeChannel(chan); chan = null; }
-    loadEvent();
-    haveSet = null;
-    if (was && (onHistRoute() || onCardRoute())) render();
-    return;
-  }
-  if (FRESH && session.provider_token) {
-    FRESH = false;
-    const { error } = await sb.functions.invoke("member", { body: { provider_token: session.provider_token } });
-    if (error) { state.error = await errText(error); await sb.auth.signOut(); return; }
-    let back = null;
-    try { back = sessionStorage.getItem(BACK); sessionStorage.removeItem(BACK); } catch { /* storage blocked */ }
-    if (back && back !== location.hash) location.hash = back;
-  }
-  const { data, error } = await sb.from("members").select("user_id, discord_id, name, avatar_url, is_commander")
-    .eq("user_id", session.user.id).maybeSingle();
-  if (error) throw error;
-  if (!data) { state.error = "Nejsi ověřený člen KIN. Přihlas se znovu."; await sb.auth.signOut(); return; }
-  state.me = data; state.error = null;
-  if (!was) loadContent().catch(() => { state.error = "Obsah se nenačetl. Zkus stránku načíst znovu."; state.checking = false; renderWho(); render(); });
-  renderWho(); loadEvent(); subscribe();
-  // history pages and loadout cards wait for the login to know what to load / which boxes to tick
-  if (!was) loadUnlocks().catch(() => { haveSet = null; }).then(() => { if (onHistRoute() || onCardRoute()) { const y = scrollY; render(); scrollTo(0, y); } });
-}
-const onCardRoute = () => /^#\/(squad\/|s\/[^/]+\/role\/)/.test(location.hash);
-const onHistRoute = () => HIST.includes(location.hash.replace(/^#\/?/, "").split(/[/?]/)[0]);
-
-function renderWho() {
-  document.getElementById("who").innerHTML = !sb ? '<span class="err">Přihlášení se nenačetlo</span>' : state.me
-    ? `<a class="mlink" href="#/hrac/${encodeURIComponent(state.me.discord_id)}" title="Můj profil"><img src="${esc(state.me.avatar_url)}" alt=""><span class="nm">${esc(state.me.name)}</span></a><button type="button" class="act" data-logout>Odhlásit</button>`
-    : `${state.error && D.strategies ? `<span class="err">${esc(state.error)}</span>` : ""}<button type="button" class="act" data-login>Přihlásit<span class="long"> přes Discord</span></button>`;
-  navToCurrent();
-}
-
-// specs/zamek: the hub content lives in public.content, readable only by verified members
-async function loadContent() {
-  const { data, error } = await sb.from("content").select("data, updated_at").eq("id", "hub").single();
-  if (error) throw error;
-  Object.assign(D, data.data);
-  D.contentAt = data.updated_at;
-  state.checking = false;
-  renderFoot();
-  const y = scrollY; render(); scrollTo(0, y);
-}
-
-const fmtWhen = iso => new Date(iso).toLocaleString("cs-CZ", { weekday: "short", day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
-let chan = null;
-
-let loadSeq = 0;
-async function loadEvent() {
-  if (!state.me) { state.event = null; state.claims = []; state.rsvps = []; renderRoster(); return; }
-  const seq = ++loadSeq;
-  const { data: ev, error } = await sb.from("events").select("id, strategy_id, starts_at, leader:members!events_created_by_fkey(name)").eq("status", "open").maybeSingle();
-  if (error) throw error;
-  let claims = [], rsvps = [];
-  if (ev) {
-    const [cl, rs] = await Promise.all([
-      sb.from("claims").select("slot_key, slot_label, user_id, members(name, avatar_url, discord_id)").eq("event_id", ev.id),
-      sb.from("rsvps").select("user_id, status, members(name, avatar_url, discord_id)").eq("event_id", ev.id),
-    ]);
-    if (cl.error) throw cl.error;
-    if (rs.error) throw rs.error;
-    claims = cl.data; rsvps = rs.data;
-  }
-  // swap the whole state at once, and only for the newest load (a slower old response must not win)
-  if (seq !== loadSeq) return;
-  state.event = ev; state.claims = claims; state.rsvps = rsvps;
-  renderRoster();
-}
-
-async function setRsvp(status) {
-  const { error } = await sb.from("rsvps").upsert(
-    { event_id: state.event.id, user_id: state.me.user_id, status, updated_at: new Date().toISOString() },
-    { onConflict: "event_id,user_id" });
-  state.flash = !error ? null : error.code === "42501" ? "Akce už je uzavřená." : error.message;
-  await loadEvent();
-}
-
-const RSVP = [["yes", "Přijdu"], ["maybe", "Možná"], ["no", "Nemůžu"]];
-function rsvpBar() {
-  const meId = state.me.user_id, claimed = new Set(state.claims.map(c => c.user_id));
-  const member = {}, said = {};
-  for (const r of state.rsvps) { member[r.user_id] = r.members; said[r.user_id] = r.status; }
-  for (const c of state.claims) member[c.user_id] = c.members;
-  // a slot counts as "yes"; saying "no" while holding a slot shows a hint to free it
-  const group = { yes: [], maybe: [], no: [] };
-  // an explicit "no" wins over a forgotten slot, so the Commander's head count is not inflated
-  for (const u of Object.keys(member)) (group[said[u] === "no" ? "no" : claimed.has(u) ? "yes" : said[u]] || []).push(member[u]);
-  const mine = said[meId] || (claimed.has(meId) ? "yes" : null);
-  const hint = said[meId] === "no" && claimed.has(meId) ? "Máš místo v sestavě: uvolni ho, ať ho vezme někdo jiný."
-    : said[meId] === "yes" && !claimed.has(meId) ? "Vyber si místo v sestavě níže." : "";
-  return `<div class="rsvp" role="group" aria-label="Přijdeš?"><span class="rl" aria-hidden="true">Přijdeš?</span>${RSVP.map(([k, l]) => `<button type="button" class="act" data-rsvp="${k}" aria-pressed="${mine === k}">${l}</button>`).join("")}
-    <span class="rc">přijde <b>${group.yes.length}</b> · možná <b>${group.maybe.length}</b> · nemůže <b>${group.no.length}</b></span></div>
-    ${hint ? `<p class="note rsvp-hint">${hint}</p>` : ""}
-    ${Object.keys(member).length ? `<details class="rsvp-who"><summary>Kdo se ozval</summary>${RSVP.map(([k, l]) => group[k].length ? `<p><b>${l}:</b> ${group[k].map(memberLink).join(" ")}</p>` : "").join("")}</details>` : ""}`;
-}
-
-function subscribe() {
-  if (chan) return;
-  // ponytail: any change -> refetch the whole (≤ 45 rows) roster; diffing is not worth it
-  chan = sb.channel("sestava")
-    .on("postgres_changes", { event: "*", schema: "public", table: "claims" }, () => loadEvent())
-    .on("postgres_changes", { event: "*", schema: "public", table: "events" }, () => loadEvent())
-    .on("postgres_changes", { event: "*", schema: "public", table: "rsvps" }, () => loadEvent())
-    .subscribe();
-}
-
-function slotRow(x, c) {
-  const mine = c && c.user_id === state.me.user_id;
-  const who = c ? `<img src="${esc(c.members.avatar_url)}" alt="" loading="lazy"><span class="nm">${esc(c.members.name)}</span>` : '<span class="free">volné</span>';
-  const act = mine ? `data-unclaim="${esc(c.user_id)}" title="Odhlásit se"` : c ? "disabled" : `data-claim="${esc(x.key)}"`;
-  const kick = c && !mine && state.me.is_commander
-    ? `<button type="button" class="kick" data-unclaim="${esc(c.user_id)}" aria-label="Odhlásit ${esc(c.members.name)}">${cross()}</button>` : "";
-  return `<li${mine ? ' class="is-me"' : ""}><button type="button" class="rslot" ${act}><span class="lbl">${x.role ? `<span class="rid">${esc(x.role)}</span>` : ""}${esc(x.label)}</span>${who}</button>${kick}</li>`;
-}
-
-function rosterGroup(g, by) {
-  const n = g.slots.filter(x => by[x.key]).length;
-  return `<div class="rg"><div class="pg-head">${sym(g.symbol, "sm")}<div><b>${esc(g.name)}</b><small>${esc(g.squad)}</small></div><span class="num">${n}/${g.max}</span></div>
-    <ul>${g.slots.map(x => slotRow(x, by[x.key])).join("")}</ul></div>`;
-}
-
-function viewRoster(s) {
-  const head = "<h2>Sestava</h2>";
-  const msg = state.flash ? `<p class="err ros-msg" role="alert">${esc(state.flash)}</p>` : "";
-  if (!sb) return `${head}<p class="note">Sestava se teď nenačetla (knihovna přihlášení není dostupná). Plán níže funguje dál.</p>`;
-  if (!state.me) return `${head}<p class="note">Sestava je jen pro členy KIN. <button type="button" class="act" data-login>Přihlásit přes Discord</button></p>`;
-  const ev = state.event;
-  if (!ev) return `${head}${state.me.is_commander ? newEventForm(s) : '<p class="note">Žádná akce není otevřená. Založí ji Commander.</p>'}${msg}`;
-  const other = S(ev.strategy_id);
-  if (ev.strategy_id !== s.id) return `${head}<p class="note">Otevřená akce (${esc(fmtWhen(ev.starts_at))}) je pro <a href="#/s/${esc(ev.strategy_id)}">${esc(other ? sideLabel(other) : ev.strategy_id)}</a>.</p>`;
-  const by = Object.fromEntries(state.claims.map(c => [c.slot_key, c]));
-  const filled = state.claims.filter(c => s.roster.some(g => g.slots.some(x => x.key === c.slot_key))).length;
-  const total = s.roster.reduce((n, g) => n + g.max, 0);
-  // without builders and logistics there is no FOB and no supplies: show the plan's fill order still open
-  const missing = (s.fill_order || []).filter(id => !by[id]).map(id => roleOf(s, id)).filter(Boolean);
-  // first 6 only: glanceable at a briefing and fewer chips to hit by mistake on a phone (a tap moves your slot)
-  const miss = missing.length
-    ? `<p class="miss">Chybí: ${missing.slice(0, 6).map(r => `<button type="button" class="rid" data-claim="${esc(r.id)}" title="${esc(r.id)} – ${esc(r.name)}">${esc(r.id)}</button>`).join(" ")}${missing.length > 6 ? ` <span class="more">a dalších ${missing.length - 6}</span>` : ""}</p>`
-    : '<p class="miss ok">Všechny role z plánu obsazené.</p>';
-  return `<div class="ros-head">${head}<span class="num">${filled} <small>/ ${total}</small></span><time datetime="${esc(ev.starts_at)}">${esc(fmtWhen(ev.starts_at))}</time>${ev.leader ? `<span class="lead">Vede: <b>${esc(ev.leader.name)}</b></span>` : ""}</div>
-    ${miss}
-    ${rsvpBar()}
-    <div class="ros">${s.roster.map(g => rosterGroup(g, by)).join("")}</div>
-    ${msg}
-    ${state.me.is_commander ? closeEventForm(s) : ""}`;
-}
-
-// realtime and tab-return re-render the block: keep what the Commander is typing into a form
-function renderRoster() {
-  const home = document.getElementById("home-ev");
-  if (home) home.innerHTML = homeEvent();
-  const el = document.getElementById("sestava");
-  if (!el || !cur) return;
-  const keep = [...el.querySelectorAll("form[data-form]")].map(f => [f.dataset.form,
-    [...f.elements].filter(x => x.name).map(x => [x.name, x.type === "checkbox" ? x.checked : x.value])]);
-  const opened = [...el.querySelectorAll("details[open]")].map(d => d.className);
-  keepFocus(() => { el.innerHTML = viewRoster(cur); });
-  for (const c of opened) { const d = el.querySelector(`details.${c}`); if (d) d.open = true; }
-  for (const [name, fields] of keep) {
-    const f = el.querySelector(`form[data-form="${name}"]`);
-    if (!f) continue;
-    for (const [k, v] of fields) { const x = f.elements[k]; if (!x) continue; if (x.type === "checkbox") x.checked = v; else x.value = v; }
-  }
-}
-
-async function claim(key) {
-  const g = cur.roster.find(g => g.slots.some(x => x.key === key)), slot = g.slots.find(x => x.key === key);
-  const { error } = await sb.from("claims").upsert(
-    { event_id: state.event.id, slot_key: key, slot_label: `${g.name} · ${slot.label}`, user_id: state.me.user_id },
-    { onConflict: "event_id,user_id" });
-  await loadEvent();
-  if (error && error.code === "23505") {
-    const c = state.claims.find(c => c.slot_key === key);
-    state.flash = `Slot už obsadil ${c ? c.members.name : "někdo jiný"}.`;
-  } else if (error) state.flash = error.code === "42501" ? "Akce už je uzavřená." : error.message;
-  else {
-    state.flash = null;
-    if (slot.role) { me.set(`${cur.id}/${slot.role}`); renderNav(cur.id); }
-  }
-  renderRoster();
-}
-
-async function unclaim(userId) {
-  const { error } = await sb.from("claims").delete().eq("event_id", state.event.id).eq("user_id", userId);
-  state.flash = !error ? null : error.code === "42501" ? "Akce už je uzavřená." : error.message;
-  await loadEvent();
-}
-
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") loadEvent(); });
-
-function newEventForm(s) {
-  return `<form class="evf" data-form="new"><p class="note">Žádná akce není otevřená.</p>
-    <label>Začátek <input type="datetime-local" name="starts" required></label>
-    <button type="submit" class="act">Založit akci: ${esc(sideLabel(s))}</button></form>`;
-}
-
-function closeEventForm(s) {
-  return `<details class="evclose"><summary>Uzavřít akci a uložit do historie</summary><form class="evf" data-form="close">
-    <label>Umístění <select name="placement" required><option value="">vyber</option><option value="1">1.</option><option value="2">2.</option><option value="3">3.</option></select></label>
-    ${s.variants.length ? `<label>Kontaktní zóna <select name="variant" required>${s.variants.map(v => `<option value="${esc(v.id)}"${v.id === curVariant ? " selected" : ""}>${esc(v.name)}</option>`).join("")}</select></label>` : ""}
-    ${state.claims.length ? `<fieldset class="atts"><legend>Kdo opravdu hrál (odškrtni, kdo nepřišel)</legend>${state.claims.map(c =>
-      `<label class="att"><input type="checkbox" name="att_${esc(c.user_id)}" checked>${esc(c.members.name)}</label>`).join("")}</fieldset>` : ""}
-    <p class="note wide">Debrief uvidí všichni členové v historii, docházku jen ty a dotyčný.</p>
-    <label class="wide">Co fungovalo <textarea name="went_well" maxlength="2000" rows="2"></textarea></label>
-    <label class="wide">Co ne <textarea name="went_wrong" maxlength="2000" rows="2"></textarea></label>
-    <label class="wide">Co příště jinak <textarea name="next_time" maxlength="2000" rows="2"></textarea></label>
-    <button type="submit" class="act">Uzavřít akci</button></form></details>`;
-}
-
-document.addEventListener("submit", async e => {
-  const f = e.target.closest("form[data-form]");
-  if (!f) return;
-  e.preventDefault();
-  const btn = f.querySelector('button[type="submit"]');
-  if (btn.disabled) return;  // double click: the first submit is still saving
-  btn.disabled = true;
-  const v = Object.fromEntries(new FormData(f)), eventId = state.event && state.event.id;
-  // attendance = exactly what the Commander saw and ticked in this form (state.claims may be mid-reload);
-  // written first: if closing fails the event stays open and this upsert can simply run again
-  const att = [...f.querySelectorAll('input[name^="att_"]')].map(x => ({ event_id: eventId, user_id: x.name.slice(4), attended: x.checked }));
-  if (f.dataset.form === "close" && att.length) {
-    const { error: e1 } = await sb.from("attendance").upsert(att, { onConflict: "event_id,user_id" });
-    if (e1) { state.flash = e1.code === "42501" ? "Docházku se nepodařilo uložit, zkus to znovu." : e1.message; btn.disabled = false; renderRoster(); return; }
-  }
-  const { error } = f.dataset.form === "new"
-    ? await sb.from("events").insert({ strategy_id: cur.id, starts_at: new Date(v.starts).toISOString() })
-    : await sb.from("events").update({ status: "closed", placement: Number(v.placement), variant: v.variant || null,
-        went_well: v.went_well || null, went_wrong: v.went_wrong || null, next_time: v.next_time || null }).eq("id", eventId);
-  state.flash = !error ? null : error.code === "23505" ? "Už je otevřená jiná akce." : error.message;
-  btn.disabled = false;
-  await loadEvent();
-});
-
-// supabase-js fires 2-3 session events after the Discord round trip; run onAuth one at a time so the
-// fresh call creates the members row before the next one looks it up (otherwise: "not a member" + logout)
-let authQ = Promise.resolve();
-function authEvent(ev, session) {
-  if (!["INITIAL_SESSION", "SIGNED_IN", "SIGNED_OUT"].includes(ev)) return;
-  // never await Supabase calls inside the auth callback (supabase-js deadlock), hand off instead
-  setTimeout(() => { authQ = authQ.then(() => onAuth(session)).catch(e => { state.error = e.message || String(e); renderWho(); }); });
-}
-if (sb) sb.auth.onAuthStateChange(authEvent);
-else setTimeout(() => { renderWho(); renderRoster(); });
-document.addEventListener("click", e => {
-  if (e.target.closest("[data-login]")) login();
-  else if (e.target.closest("[data-logout]")) sb.auth.signOut();
-});
-const $app = document.getElementById("app");
-const KEY = "wrd.role";
-let cur = null;    // current strategy
-let trace = null;  // traced role id on the canvas
-let curVariant = null;  // control-zone placement shown for the current strategy
-const inV = x => !x.variants || x.variants.includes(curVariant);
-function pickVariant(s, qs) {
-  const ok = id => s.variants.some(v => v.id === id);
-  const fromUrl = new URLSearchParams(qs).get("v");
-  let stored = null;
-  try { stored = localStorage.getItem("wrd.variant." + s.id); } catch { /* storage blocked */ }
-  return [fromUrl, stored].find(ok) || (s.variants[0] && s.variants[0].id) || null;
-}
-
-const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]))
-  .replace(/ -&gt; /g, " → ").replace(/ - /g, " – ");  // content stays ASCII, display gets real arrows and dashes
-const usd = n => "$" + n.toLocaleString("cs-CZ");
-const me = {
-  get() { try { return localStorage.getItem(KEY); } catch { return null; } },
-  set(v) { try { v ? localStorage.setItem(KEY, v) : localStorage.removeItem(KEY); } catch { /* storage blocked: page still works */ } },
-};
-const S = id => D.strategies.find(s => s.id === id);
-const roleOf = (s, id) => s.roles.find(r => r.id === id);
-const groupOf = (s, id) => s.groups.find(g => g.id === id);
-const phaseOf = (s, id) => s.phases.find(p => p.id === id);
-const squadDoc = name => D.squads.find(q => q.name === name) || D.doktrina.squads.find(q => q.name === name);
-const roleHref = (s, r) => `#/s/${s.id}/role/${r.id}`;
-const sideLabel = s => `${s.map} · ${s.color}`;
-const SQ = id => D.squads.find(q => q.id === id);
-const classOf = (q, id) => q.classes.find(c => c.id === id);
-const classById = id => { for (const q of D.squads) { const c = classOf(q, id); if (c) return [q, c]; } return []; };
-const classHref = (q, c) => `#/squad/${q.id}/${c.id}`;
-let kmode = (() => { try { return localStorage.getItem("wrd.kitmode") === "ideal" ? "ideal" : "min"; } catch { return "min"; } })();
-
-// APP-6 friendly unit symbols, squad echelon dot above the frame
-function sym(kind, cls = "") {
-  const icon = {
-    infantry: '<path d="M6 6 L42 30 M42 6 L6 30"/>',
-    engineer: '<path d="M15 14 H33 M15 14 V23 M24 14 V23 M33 14 V23"/>',
-    supply: '<path d="M6 24 H42"/>',
-    recon: '<path d="M6 30 L42 6"/>',
-    armor: '<path d="M16 12 H32 A6 6 0 0 1 32 24 H16 A6 6 0 0 1 16 12 Z"/>',
-    hq: '<path d="M6 30 V42"/>',
-  }[kind] || "";
-  return `<svg class="sym ${cls}" viewBox="0 -6 48 50" aria-hidden="true"><circle class="ech" cx="24" cy="0" r="2.4"/><rect x="6" y="6" width="36" height="24"/>${icon}</svg>`;
-}
-const arrow = () => '<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M1 8 H14 M9 3 L14 8 L9 13"/></svg>';
-const cross = () => '<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3 L13 13 M13 3 L3 13"/></svg>';
-const out = () => '<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3 H13 V10 M13 3 L4 12"/></svg>';
-
-function vById(s, id) { return s.variants.find(v => v.id === id); }
-function vtag(s, x) { return x.variants && curVariant ? `<span class="vtag">jen ${esc(vById(s, curVariant).name)}</span>` : ""; }
-function variantBar(s) {
-  if (!s.variants.length) return "";
-  return `<div class="vbar" role="group" aria-label="Varianta kontaktní zóny"><span class="vlbl">Kontaktní zóna</span>${s.variants.map(v =>
-    `<button type="button" data-variant="${esc(v.id)}" aria-pressed="${v.id === curVariant}"><b>${esc(v.name)}</b><small>${v.towers.length} věže${v.status === "NÁVRH" ? " · návrh" : ""}</small></button>`).join("")}</div>`;
-}
-
-// Situation sketch drawn from map data: meters, +x east, +y south, origin = church
-function sketchSvg(s, vid) {
-  const k = s.sketch, W = 1250, H = 1000, sel = vById(s, vid);
-  const pts = a => a.map(([x, y]) => `${x},${y}`).join(" ");
-  const zones = k.zones.map(z => `<polygon class="z-${z.kind}" points="${pts(z.poly)}"/>`).join("");
-  const circles = s.variants.map(v => `<circle class="cz${v.id === vid ? " on" : ""}" cx="${v.xy[0]}" cy="${v.xy[1]}" r="${v.r}"/>`).join("");
-  const label = `<text class="czl" x="${sel.xy[0]}" y="${sel.xy[1] - sel.r - 26}" text-anchor="middle">${esc(sel.name)}</text>`;
-  const towers = k.towers.map(t => {
-    const on = sel.towers.includes(t.name), n = t.name.replace("Tower ", "");
-    return `<g class="tw${on ? " on" : ""}"><rect x="${t.xy[0] - 34}" y="${t.xy[1] - 34}" width="68" height="68" transform="rotate(45 ${t.xy[0]} ${t.xy[1]})"/><text x="${t.xy[0]}" y="${t.xy[1] + 22}" text-anchor="middle">${n}</text></g>`;
-  }).join("");
-  const t2 = k.towers.find(t => t.name === "Tower 2");
-  const base = t2 ? `<text class="lbl fr" x="${t2.xy[0] + 70}" y="${t2.xy[1] + 105}">hlavní báze</text>` : "";
-  const [cx, cy] = k.church;
-  const church = `<path class="cross" d="M${cx} ${cy - 46} V${cy + 46} M${cx - 30} ${cy - 16} H${cx + 30}"/><text class="lbl" x="${cx + 48}" y="${cy - 22}">kostel</text>`;
-  const arrows = s.approaches.map(a => {
-    const b = a.bearing * Math.PI / 180, dx = Math.sin(b), dy = -Math.cos(b);
-    const rx = Math.min(W / Math.abs(dx || 1e-9), H / Math.abs(dy || 1e-9)) - 120;
-    const x1 = dx * rx, y1 = dy * rx, x2 = dx * (rx - 230), y2 = dy * (rx - 230);
-    const hx = -dy, hy = dx, ax = x2 + dx * 60, ay = y2 + dy * 60;
-    return `<g class="ap ${esc(a.side)}"><line x1="${x1}" y1="${y1}" x2="${x2 + dx * 40}" y2="${y2 + dy * 40}"/><path d="M${x2} ${y2} L${ax + hx * 45} ${ay + hy * 45} L${ax - hx * 45} ${ay - hy * 45} Z"/><text x="${x1}" y="${y1 + (dy > 0 ? 70 : -40)}" text-anchor="${dx > 0.3 ? "end" : dx < -0.3 ? "start" : "middle"}">${esc(a.label)}</text></g>`;
-  }).join("");
-  const scale = `<g class="scale"><line x1="${-W + 80}" y1="${H - 80}" x2="${-W + 580}" y2="${H - 80}"/><text x="${-W + 80}" y="${H - 110}">500 m</text></g>`;
-  const north = `<g class="north"><path d="M${W - 110} ${-H + 190} L${W - 110} ${-H + 70} M${W - 140} ${-H + 110} L${W - 110} ${-H + 70} L${W - 80} ${-H + 110}"/><text x="${W - 110}" y="${-H + 240}" text-anchor="middle">S</text></g>`;
-  return `<svg class="sketch" viewBox="${-W} ${-H} ${2 * W} ${2 * H}" role="img" aria-label="Náčrtek varianty ${esc(sel.name)}">
-    <rect x="${-W}" y="${-H}" width="${2 * W}" height="${2 * H}" class="bg"/>${zones}
-    <polyline class="river" points="${pts(k.river)}"/>${circles}${label}${towers}${church}${base}${arrows}${scale}${north}</svg>`;
-}
-
-function variantPanel(s) {
-  const v = curVariant && vById(s, curVariant);
-  if (!v) return "";
-  return `<section class="vpanel" aria-label="Varianta ${esc(v.name)}">${sketchSvg(s, v.id)}
-    <div class="vtx"><div class="t-row"><h2 class="vh">Varianta ${esc(v.name)}</h2>${v.status === "NÁVRH" ? '<span class="tag draft" title="Návrh od Clauda, Commander ho zatím neschválil">Návrh</span>' : ""}</div>
-      <p class="vsum">${esc(v.summary)}</p>
-      <p class="vtw">Věže v zóně: ${v.towers.map(t => `<span class="ref">${esc(t.replace("Tower ", "T"))}</span>`).join(" ")}</p>
-      ${v.changes.length ? `<h2>${v.id === s.variants[0].id ? "Na co myslet" : "Co je jinak než v Default"}</h2><ul class="bullets">${v.changes.map(c => `<li>${esc(c)}</li>`).join("")}</ul>` : ""}
-      <p class="note">Náčrtek z dat metaforge, řeka přibližně. Kruhy ostatních variant čárkovaně.</p></div></section>`;
-}
-
-function chip(s, id, label = id) { return `<button type="button" class="rid" data-trace="${esc(id)}" aria-pressed="false" title="Zvýraznit ${esc(id)} ve všech fázích">${esc(label)}</button>`; }
-// AS1-V AS1-M1 AS1-M2 -> AS1-V M1 M2: same squad prefix written once
-function chips(s, ids) {
-  const pre = ids.length > 1 && new Set(ids.map(id => id.split("-")[0])).size === 1 && ids.every(id => id.includes("-")) ? ids[0].split("-")[0] + "-" : "";
-  return ids.map((id, i) => chip(s, id, i && pre ? id.slice(pre.length) : id)).join("");
-}
-function roleLink(s, r) { return `<a class="rid" href="${roleHref(s, r)}">${esc(r.id)}</a>`; }
-function refChip(s, ref) {
-  if (ref === "*") return '<span class="ref">všichni</span>';
-  const r = roleOf(s, ref); if (r) return roleLink(s, r);
-  const g = groupOf(s, ref); if (g) return `<a class="ref" href="#/s/${s.id}/squad/${g.id}">${esc(g.name)}</a>`;
-  return `<span class="ref">${esc(ref)}</span>`;
-}
-function unlockText(u) { return `${esc(u.track)} ${u.level}`; }
-
-// ---------- views ----------
-// open event + my status on the home page (kept current by renderRoster after every roster load)
-function homeEvent() {
-  if (!sb || !state.me) return "";
-  const ev = state.event;
-  if (!ev) return '<p class="note home-ev">Teď není otevřená žádná akce.</p>';
-  const mine = state.claims.find(c => c.user_id === state.me.user_id);
-  const said = (state.rsvps || []).find(r => r.user_id === state.me.user_id);
-  const status = mine ? `Máš místo: ${esc(mine.slot_label)}` : said ? `Tvoje odpověď: ${esc((RSVP.find(x => x[0] === said.status) || [, said.status])[1])}` : "Zatím bez odpovědi a bez místa: otevři sestavu";
-  return `<a class="cont evc" href="#/s/${esc(ev.strategy_id)}"><span class="big">Akce</span><span>${esc(fmtWhen(ev.starts_at))} · ${esc(sideOf(ev.strategy_id))}<small>${status}</small></span></a>`;
-}
-
-function viewHome() {
-  const mine = me.get();
-  let cont = "";
-  if (mine) {
-    const [sid, rid] = mine.split("/"), s = S(sid), r = s && roleOf(s, rid);
-    if (r) cont = `<a class="cont" href="${roleHref(s, r)}"><span class="big">${esc(r.id)}</span><span>Pokračovat na tvou kartu<small>${esc(r.name)} · ${esc(sideLabel(s))}</small></span></a>`;
-  }
-  const sheets = D.strategies.map(s => `<li><a href="#/s/${s.id}"><b>${esc(s.map)}</b><span class="meta">${esc(s.color)} · ${esc(s.faction)} · ${esc(s.stage)}</span>${s.status === "DRAFT" ? '<span class="tag draft">Draft</span>' : ""}<span class="meta">${arrow()}</span></a></li>`).join("");
-  const pickers = D.strategies.map(s => `
-    <section class="block" aria-labelledby="pick-${s.id}">
-      <h2 id="pick-${s.id}">Kdo jsi? ${esc(sideLabel(s))}</h2>
-      <div class="picker">${s.groups.map(g => `
-        <div class="pg"><div class="pg-head">${sym(g.symbol, "sm")}<div><b>${esc(g.name)}</b><small>${esc(g.squad)}</small></div></div>
-          <ul>${s.roles.filter(r => r.group === g.id).map(r => `<li><button type="button" data-pick="${s.id}/${esc(r.id)}" class="${mine === `${s.id}/${r.id}` ? "is-me" : ""}"><span class="rid">${esc(r.id)}</span><span>${esc(r.name)}</span></button></li>`).join("")}</ul>
-        </div>`).join("")}
-      </div>
-    </section>`).join("");
-  return `
-    <div class="home-head"><h1>Central Command</h1>
-      <p class="lede">Strategie Kinetic Solutions. Vyber si svou roli a uvidíš, co koupit, čím jedeš a co děláš v každé fázi. Na briefingu jedeme podle plátna.</p>
-    </div>
-    ${cont}
-    <div id="home-ev">${homeEvent()}</div>
-    <section class="block start" aria-labelledby="h-start"><h2 id="h-start">Jak to tu funguje</h2><ol class="proc">
-      <li><span><b>Přihlas se přes Discord</b> (vpravo nahoře). Pustí tě to dál, jen když jsi na serveru Kinetic Solutions.</span></li>
-      <li><span><b>Před akcí</b> otevři plán mapy, dej <b>Přijdu</b> a zaber si místo v <b>Sestavě</b>. Co v plánu chybí, vidíš hned nahoře.</span></li>
-      <li><span><b>Karta tvé role</b>: co koupit, čím jedeš, co děláš v každé fázi. Nech si ji otevřenou na mobilu nebo druhém monitoru.</span></li>
-      <li><span><a href="#/squady">Squady</a>: celá výbava tvé sub-classy, minimum po wipu i ideál. Zaškrtni, co máš odemčené. Kolik nás co umí, je v <a href="#/pokryti">Pokrytí</a>.</span></li>
-      <li><span><a href="#/vycvik">Výcvik</a> a <a href="#/doktrina">Doktrína</a>: jak klan hraje na všech mapách.</span></li>
-      <li><span><a href="#/historie">Historie</a>: odehrané akce, sestavy a debrief po sezónách.</span></li>
-    </ol></section>
-    <section class="block" aria-labelledby="h-str"><h2 id="h-str">Strategie</h2><ul class="sheets">${sheets}</ul>
-      <a class="doklink" href="#/doktrina">Doktrína: platí pro všechny mapy ${arrow()}</a></section>
-    ${pickers}`;
-}
-
-function stratHead(s, tab) {
-  const tabs = [["platno", "Plátno"], ["situace", "Situace"], ["vetve", "Větve a spouštěče"]];
-  return `
-    <header class="strat-head"><div><div class="t-row"><h1>${esc(s.map)} <span>· ${esc(s.color)}</span></h1>${s.status === "DRAFT" ? '<span class="tag draft" title="Strategie zatím není vyhlášená za platnou">Draft</span>' : ""}</div><p>${esc(s.faction)} · ${esc(s.stage)}</p></div></header>
-    ${variantBar(s)}
-    <nav class="tabs" aria-label="Strategie">${tabs.map(([k, l]) => `<a href="#/s/${s.id}${k === "platno" ? "" : "/" + k}"${k === tab ? ' aria-current="page"' : ""}>${l}</a>`).join("")}</nav>`;
-}
-
-function cellEntries(s, gid, pid) {
-  const list = [];
-  for (const r of s.roles.filter(r => r.group === gid))
-    for (const st of r.steps.filter(st => st.phase === pid && inV(st))) {
-      const same = list.find(e => e.text === st.text);
-      same ? same.roles.push(r.id) : list.push({ text: st.text, roles: [r.id], vs: !!st.variants });
-    }
-  return list;
-}
-
-function viewCanvas(s) {
-  const head = `<tr><th scope="col">Fáze</th>${s.groups.map(g => `<th scope="col"><a href="#/s/${s.id}/squad/${g.id}">${sym(g.symbol)}<span><b>${esc(g.name)}</b><small>${esc(g.squad)}</small></span></a><ul class="roster">${s.roles.filter(r => r.group === g.id).map(r => `<li><b>${esc(r.id)}</b>${esc(r.short)}</li>`).join("")}</ul></th>`).join("")}</tr>`;
-  const rows = s.phases.map(p => {
-    const quiet = s.groups.every(g => !cellEntries(s, g.id, p.id).length);
-    const cells = quiet ? `<td colspan="${s.groups.length}" class="quiet">${esc(p.text)}</td>` : s.groups.map(g => {
-      const es = cellEntries(s, g.id, p.id);
-      if (!es.length) return '<td class="empty"></td>';
-      return `<td>${es.map(e => `<div class="entry" data-roles="${esc(e.roles.join(" "))}"><span class="chips">${chips(s, e.roles)}${vtag(s, { variants: e.vs })}</span>${esc(e.text)}</div>`).join("")}</td>`;
-    }).join("");
-    const sync = p.sync ? `<tr class="sync"><td colspan="${s.groups.length + 1}"><span class="synctag">SYNC</span>${esc(p.sync)}</td></tr>` : "";
-    return `<tr class="phase"><th scope="row"><span class="pl">PL ${esc(p.id)}</span><b>${esc(p.name)}</b>${p.time ? `<time>${esc(p.time)}</time>` : ""}${p.text && !quiet ? `<p>${esc(p.text)}</p>` : ""}</th>${cells}</tr>${sync}`;
-  }).join("");
-  return `
-    ${variantPanel(s)}
-    <section class="intent"><h2>Záměr</h2><ul class="bullets">${s.intent.map(i => `<li>${esc(i)}</li>`).join("")}</ul></section>
-    <section class="sestava" id="sestava" aria-live="polite">${viewRoster(s)}</section>
-    <div class="tracebar" id="tracebar" aria-live="polite"></div>
-    <div class="matrix-wrap"><table class="matrix" id="matrix"><colgroup><col class="ph">${s.groups.map(() => "<col>").join("")}</colgroup><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
-}
-
-function budgetBlock(s, gid, own = null) {
-  const b = s.budget[gid]; if (!b) return "";
-  const left = b.available - b.used, g = groupOf(s, gid);
-  return `<div class="budget"><div class="budget-top"><b>${esc(g.name)}</b><span class="num">${b.used.toLocaleString("cs-CZ")} <small>/ ${b.available.toLocaleString("cs-CZ")} supplies</small></span></div>
-    <p class="left${left < 0 ? " over" : ""}">${left < 0 ? `chybí ${(-left).toLocaleString("cs-CZ")}` : `zbývá ${left.toLocaleString("cs-CZ")} na zdi`}</p>
-    <ul>${b.items.map(i => `<li${i.role === own ? ' class="own"' : ""}><span>${i.qty}× ${esc(i.item)} <span class="rid">${esc(i.role)}</span></span><span>${i.supplies.toLocaleString("cs-CZ")}</span></li>`).join("")}</ul></div>`;
-}
-
-function viewSituace(s) {
-  return `
-    ${variantPanel(s)}
-    <div class="cols block">
-      <section><h2>Kdo kde je</h2><table class="data"><thead><tr><th>Kdo</th><th>Kde</th><th>Poznámka</th></tr></thead><tbody>
-        ${s.situation.map(x => `<tr><td><span class="side ${esc(x.side)}"></span><b>${esc(x.who)}</b></td><td>${esc(x.where)}</td><td>${esc(x.note)}</td></tr>`).join("")}</tbody></table></section>
-      <section><h2>Místa</h2><dl class="places">${s.places.filter(inV).map(p => `<dt>${esc(p.name)}</dt><dd>${esc(p.text)}</dd>`).join("")}</dl></section>
-    </div>
-    <div class="cols block">
-      <section><h2>Palebné sektory mortarů</h2>${s.sectors.filter(inV).map(x => `<div class="sector"><b>${esc(x.keyword)}</b><span>${esc(x.area)}</span><small>${esc(x.aim)}</small></div>`).join("")}
-        <p class="note">Postup palby je v <a href="#/doktrina">doktríně</a>.</p></section>
-      <section><h2>Rozpočet supplies</h2>${Object.keys(s.budget).map(gid => budgetBlock(s, gid)).join("")}
-        <p class="note">FOB po položení obsahuje ${s.fob_default_supplies.toLocaleString("cs-CZ")} Build Supplies. Ceny staveb: ${esc(D.snapshot)}.</p></section>
-    </div>
-    <div class="cols block">
-      <section><h2>Pořadí obsazování rolí</h2><p class="note" style="margin:0 0 12px">Když přijde méně lidí, poslední se škrtají první.</p>
-        <ol class="order">${s.fill_order.map(id => `<li>${roleLink(s, roleOf(s, id))}</li>`).join("")}</ol></section>
-      <section><h2>Interaktivní mapy</h2><p class="links">${s.links.map(l => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.name)} ${out()}</a>`).join("")}</p></section>
-    </div>`;
-}
-
-function rxList(s, items, withWho = true) {
-  return items.map(x => `<div class="rx"><div class="when">${esc(x.when)}</div><div class="arrow">${arrow()}</div><div class="then">${esc(x.then)}</div>${withWho && x.roles ? `<div class="who">${x.roles.map(ref => refChip(s, ref)).join("")}</div>` : ""}</div>`).join("");
-}
-
-function viewVetve(s) {
-  return `
-    <section class="block narrow"><h2>Spouštěče: stane se kdykoli, reaguj hned</h2>${rxList(s, s.triggers.filter(inV))}</section>
-    <section class="block narrow"><h2>Větve: když se situace vyvine</h2>${rxList(s, s.branches.filter(inV))}</section>`;
-}
-
-function viewStrategy(s, tab) {
-  const body = tab === "situace" ? viewSituace(s) : tab === "vetve" ? viewVetve(s) : viewCanvas(s);
-  return stratHead(s, tab) + body;
-}
-
-function kitCell(price, qty) { return price == null ? '<span class="dash">-</span>' : qty === "?" ? `${usd(price)} <span class="unk">× ?</span>` : usd(price * qty); }
-
-function itemIcon(src, cls = "") {
-  return src ? `<img class="item ${cls}" src="${esc(src)}" alt="" loading="lazy">` : `<span class="item none ${cls}" aria-hidden="true"></span>`;
-}
-function priceLine(price, qty) {
-  if (price == null) return "";
-  if (qty === "?") return `${usd(price)} / ks, počet <span class="unk">?</span>`;
-  return qty > 1 ? `${usd(price)} / ks · celkem ${usd(price * qty)}` : usd(price);
-}
-function shopList(s, r) {
-  if (!r.gear.length) return `<p class="note" style="margin-top:0">${r.class ? "Nic navíc." : "Nic předepsaného."}</p>`;
-  const k = r.extras_kit, part = k.partial ? ' <span class="unk">+ ?</span>' : "";
-  const um = k.unlocks_min.map(u => `<span class="ref">${unlockText(u)}</span>`).join("");
-  const ui = k.unlocks_ideal.map(u => `<span class="ref">${unlockText(u)}</span>`).join("");
-  const tiles = r.gear.map(g => {
-    const opt = !g.item, name = g.item || g.ideal, unlock = opt ? g.ideal_unlock : g.unlock;
-    const alt = g.item && g.ideal && g.ideal !== g.item
-      ? `<div class="alt">${itemIcon(g.ideal_icon, "sm")}<span>Ideál: <b>${esc(g.ideal)}</b> · ${usd(g.ideal_price)}${g.ideal_unlock ? ` · odemknout ${unlockText(g.ideal_unlock)}` : ""}</span></div>` : "";
-    return `<li class="tile${opt ? " opt" : ""}">${itemIcon(opt ? g.ideal_icon : g.icon)}<div class="tx">
-      <div class="nm"><span class="qty">${g.qty === "?" ? '<span class="unk">?</span>' : g.qty + "×"}</span><span>${esc(name)}</span>${haveBox({ name, unlock })}</div>
-      <div class="pr">${opt ? "Volitelně, když máš odemčeno · " : ""}${priceLine(opt ? g.ideal_price : g.price, g.qty)}${unlock ? ` · odemknout <b>${unlockText(unlock)}</b>` : ""}</div>
-      ${g.note ? `<div class="nt">${esc(g.note)}</div>` : ""}${alt}</div></li>`;
-  }).join("");
-  return `<div class="shop-sum"><span>${r.class ? "Navíc za život" : "Celkem za život"}</span><b>${usd(k.min)}${part}</b>${k.ideal !== k.min ? `<span>ideál</span><b>${usd(k.ideal)}${part}</b>` : ""}${um ? `<span>odemkni</span>${um}` : ""}</div>
-    <ul class="shop">${tiles}</ul>${ui && ui !== um ? `<div class="unlocks">Pro ideál: ${ui}</div>` : ""}`;
-}
-
-function roleBlock(s, r) {
-  const part = r.kit.partial ? ' <span class="unk">+ ?</span>' : "";
-  const strip = r.gear.map(g => `<li${g.item ? "" : ' class="opt"'}>${itemIcon(g.item ? g.icon : g.ideal_icon)}<span class="q">${g.qty === "?" ? "?" : g.qty + "×"}</span><span class="n">${esc(g.item || g.ideal)}${g.item ? "" : " (ideál)"}</span></li>`).join("");
-  return `<article class="rb"><header><a class="rid big" href="${roleHref(s, r)}">${esc(r.id)}</a>
-    <div class="rb-t"><a class="rn" href="${roleHref(s, r)}">${esc(r.name)}</a><p>${esc(r.transport)}</p>${r.class ? (([cq, cc]) => `<p><a class="ref" href="${classHref(cq, cc)}">${esc(cc.name)}</a></p>`)(classById(r.class)) : ""}</div>
-    <div class="rb-sum">${usd(r.kit.min)}${part}${r.kit.ideal !== r.kit.min ? `<small>ideál ${usd(r.kit.ideal)}</small>` : ""}</div></header>
-    ${strip ? `<ul class="strip">${strip}</ul>` : `<p class="note">${r.class ? "Jen sestava sub-classy." : "Nic předepsaného."}</p>`}</article>`;
-}
-
-function viewRole(s, r) {
-  const g = groupOf(s, r.group), mine = me.get() === `${s.id}/${r.id}`;
-  const sib = s.roles.filter(x => x.group === r.group), i = sib.indexOf(r);
-  const prev = sib[i - 1], next = sib[i + 1];
-  const builds = r.builds.length ? `<section class="block"><h2>Stavba báze (tvoje položky tučně)</h2>${budgetBlock(s, r.group, r.id)}</section>` : "";
-  return `
-    <div class="narrow"><p class="crumb"><a href="#/s/${s.id}">${esc(sideLabel(s))}</a> / <a href="#/s/${s.id}/squad/${g.id}">${esc(g.name)}</a> / ${esc(r.id)}</p>
-    <header class="role-head"><span class="code">${esc(r.id)}</span>
-      <div class="grow"><h1>${esc(r.name)}</h1><p>${esc(r.squad)} · ${esc(g.name)}</p></div>
-      <button type="button" class="me-btn" data-me="${s.id}/${esc(r.id)}" aria-pressed="${mine}">${mine ? "Tvoje role" : "To jsem já"}</button></header>
-    ${variantBar(s)}
-    <section class="block"><h2>Doprava</h2><p class="transport">${esc(r.transport)}</p></section>
-    ${(() => { const [cq, cc] = classById(r.class), part = r.kit.partial ? ' <span class="unk">+ ?</span>' : "";
-      return `<section class="block"><h2>Nákup na spawnu</h2>${cc ? `<div class="shop-sum"><span>Celkem za život</span><b>${usd(r.kit.min)}${part}</b><span>ideál</span><b>${usd(r.kit.ideal)}${part}</b></div>
-        <p class="note" style="margin:0 0 4px">Sestava <a href="${classHref(cq, cc)}">${esc(cc.name)}</a> (platí na všech mapách) + co role potřebuje na téhle mapě.</p>
-        ${modeBar()}${classCard(cq, cc, kmode)}<h2 class="block">Navíc pro tuto roli</h2>` : ""}${shopList(s, r)}<p class="gnote">${esc(s.gear_note)}</p></section>`; })()}
-    <section class="block"><h2>Kroky</h2><ol class="steps">
-      ${r.steps.filter(inV).map(st => { const p = phaseOf(s, st.phase); return `<li><div class="ph"><span class="pl">PL ${esc(p.id)}</span><b>${esc(p.name)}</b>${vtag(s, st)}</div><p>${esc(st.text)}</p></li>`; }).join("")}
-      ${r.after ? `<li class="after"><div class="ph"><b>Trvale</b></div><p>${esc(r.after)}</p></li>` : ""}</ol></section>
-    ${r.reactions.filter(inV).length ? `<section class="block"><h2>Když se stane</h2>${rxList(s, r.reactions.filter(inV), false)}</section>` : ""}
-    ${r.dont.length ? `<section class="block"><h2>Nedělej</h2><ul class="dont">${r.dont.map(d => `<li>${cross()}<span>${esc(d)}</span></li>`).join("")}</ul></section>` : ""}
-    ${builds}
-    <section class="block"><h2>Platí pro všechny</h2><ul class="bullets">${s.rules_all.map(x => `<li>${esc(x)}</li>`).join("")}</ul></section>
-    <nav class="pager" aria-label="Role ve skupině">${prev ? `<a href="${roleHref(s, prev)}">${esc(prev.id)} · ${esc(prev.name)}</a>` : "<span></span>"}${next ? `<a href="${roleHref(s, next)}">${esc(next.id)} · ${esc(next.name)}</a>` : "<span></span>"}</nav></div>`;
-}
-
-function viewSquad(s, g) {
-  const doc = squadDoc(g.squad), roles = s.roles.filter(r => r.group === g.id);
-  const phases = s.phases.map(p => ({ p, es: cellEntries(s, g.id, p.id) })).filter(x => x.es.length);
-  return `
-    <p class="crumb"><a href="#/s/${s.id}">${esc(sideLabel(s))}</a> / ${esc(g.name)}</p>
-    <header class="unit-head">${sym(g.symbol, "lg")}<div><h1>${esc(g.name)}</h1><p>Squad ${esc(g.squad)}</p></div></header>
-    ${variantBar(s)}
-    ${doc ? `<p class="goal">${esc(doc.goal)}</p><ul class="bullets block" style="margin-top:16px">${doc.points.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
-    <section class="block"><h2>Role a nákup</h2>${roles.map(r => roleBlock(s, r)).join("")}</section>
-    <section class="block"><h2>Opening</h2><ol class="steps">${phases.map(({ p, es }) => `<li><div class="ph"><span class="pl">PL ${esc(p.id)}</span><b>${esc(p.name)}</b></div><div>${es.map(e => `<p style="margin-bottom:6px"><span class="chips">${e.roles.map(id => roleLink(s, roleOf(s, id))).join(" ")}</span> ${esc(e.text)}</p>`).join("")}</div></li>`).join("")}</ol></section>
-    ${s.budget[g.id] ? `<section class="block narrow"><h2>Rozpočet supplies</h2>${budgetBlock(s, g.id)}</section>` : ""}`;
-}
-
-function viewDoktrina() {
-  const k = D.doktrina;
-  return `
-    <div class="narrow">
-    <header class="unit-head"><div><h1>Doktrína</h1><p>Platí pro všechny mapy a barvy</p></div></header>
-    <section class="block"><h2>Principy</h2><ol class="proc">${k.principles.map(x => `<li><span>${esc(x)}</span></li>`).join("")}</ol></section>
-    <section class="block"><h2>Komunikace</h2><table class="data"><thead><tr><th>Kanál</th><th>Kdo</th><th>K čemu</th></tr></thead><tbody>
-      ${k.comms.map(c => `<tr><td><b>${esc(c.channel)}</b></td><td>${esc(c.who)}</td><td>${esc(c.purpose)}</td></tr>`).join("")}</tbody></table></section>
-    <section class="block"><h2>Commander</h2><ul class="bullets">${k.commander.map(x => `<li>${esc(x)}</li>`).join("")}</ul></section>
-    <section class="block"><h2>Squady</h2>${D.squads.map(q => `<div class="sq"><h3>${sym(q.symbol, "sm")}<a href="#/squad/${q.id}">${esc(q.name)}</a></h3><p>${esc(q.goal)}</p></div>`).join("")}${k.squads.map(q => `<div class="sq"><h3>${sym(q.symbol, "sm")}${esc(q.name)}</h3><p>${esc(q.goal)}</p><ul class="bullets">${q.points.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`).join("")}</section>
-    <section class="block"><h2>Palba mortarů na vyžádání</h2><ol class="proc">${k.mortar_procedure.map(x => `<li><span>${esc(x)}</span></li>`).join("")}</ol><p class="note">${esc(k.mortar_note)}</p></section>
-    <section class="block"><h2>Protokoly: když se stane, reaguj</h2>${k.protocols.map(x => `<div class="rx"><div class="when">${esc(x.when)}</div><div class="arrow">${arrow()}</div><div class="then">${esc(x.then)}</div><div class="who"><span class="ref">${esc(x.who)}</span></div></div>`).join("")}</section>
-    </div>`;
-}
-
-// ---------- squads + loadouts ----------
-const SLOT_LABEL = { slot1: "[1]", slot2: "[2]", slot3: "[3]", helmet: "Helmet", armor: "Armor", vest: "Tac-Vest", backpack: "Backpack", traversal: "Traversal" };
-
-// gear entry as it looks in the given mode, or null when absent there
-function inMode(g, mode) {
-  if (mode === "min") return g.item ? { name: g.item, icon: g.icon, qty: g.qty, cost: g.cost, unlock: g.unlock } : null;
-  const qty = g.ideal_qty ?? g.qty;
-  return qty ? { name: g.ideal || g.item, icon: g.ideal_icon, qty, cost: g.ideal_cost, unlock: g.ideal_unlock } : null;
-}
-// ---- "co mám odemčeno": per member and season; a wipe starts a new season with an empty list ----
-const currentSeason = () => seasonOf(new Date().toISOString());
-let haveSet = null;      // items I ticked in haveSeason; null = logged out / not loaded
-let haveSeason = null, haveErr = null;
-async function loadUnlocks() {
-  const s = currentSeason(), uid = state.me && state.me.user_id;
-  if (!sb || !uid || !s) { haveSet = null; return; }
-  const { data, error } = await sb.from("unlocks").select("item").eq("user_id", uid).eq("season", s.id);
-  if (error) throw error;
-  if (!state.me || state.me.user_id !== uid) return;  // logged out while loading
-  haveSet = new Set(data.map(r => r.item)); haveSeason = s.id;
-}
-// a re-render replaces the focused control: put keyboard focus back on its twin
-function keepFocus(fn) {
-  const a = document.activeElement, k = a && ["data-unlock", "data-kitmode", "data-rsvp", "data-me"].find(x => a.hasAttribute(x));
-  const sel = k && `[${k}="${CSS.escape(a.getAttribute(k))}"]`, i = sel ? [...document.querySelectorAll(sel)].indexOf(a) : -1;
-  fn();
-  if (sel) document.querySelectorAll(sel)[i]?.focus({ preventScroll: true });
-}
-const rerenderKeep = () => keepFocus(() => { const y = scrollY; render(); scrollTo(0, y); });
-async function setUnlock(item, has) {
-  if (currentSeason().id !== haveSeason) {  // the page stayed open over a season start (wipe)
-    await loadUnlocks(); haveErr = "Začala nová sezóna, seznam je prázdný. Zaškrtni znovu, co už máš."; rerenderKeep(); return;
-  }
-  const { error } = has
-    ? await sb.from("unlocks").insert({ user_id: state.me.user_id, season: haveSeason, item })
-    : await sb.from("unlocks").delete().eq("user_id", state.me.user_id).eq("season", haveSeason).eq("item", item);
-  if (error && error.code !== "23505") throw error;  // 23505 = already ticked in another tab
-  if (has) haveSet.add(item); else haveSet.delete(item);
-  haveErr = null;
-  rerenderKeep();
-}
-const haveBox = e => e.unlock && haveSet
-  ? `<label class="have" title="Mám odemčeno (${esc(currentSeason().name)})"><input type="checkbox" data-unlock="${esc(e.name)}"${haveSet.has(e.name) ? " checked" : ""}>mám</label>` : "";
-
-function slotCell(c, key, mode) {
-  const g = c.gear.find(x => x.slot === key), e = g && inMode(g, mode);
-  return `<div class="slot${e ? "" : " empty"}"><span class="sl">${SLOT_LABEL[key]}</span>${e ? `${itemIcon(e.icon)}<span class="sn">${esc(e.name)}</span>${e.unlock ? `<span class="su">${unlockText(e.unlock)}</span>` : ""}${haveBox(e)}${e.cost != null ? `<span class="pr">${usd(e.cost)}</span>` : ""}` : key === "slot2" ? '<span class="ph">Sidearm</span>' : ""}</div>`;
-}
-function modeBar() {
-  return `<div class="vbar" role="group" aria-label="Varianta výbavy">${[["min", "Minimum", "hned po wipu"], ["ideal", "Ideál", "až máš odemčeno"]].map(([id, l, s]) =>
-    `<button type="button" data-kitmode="${id}" aria-pressed="${kmode === id}"><b>${l}</b><small>${s}</small></button>`).join("")}</div>`;
-}
-function classCard(q, c, mode) {
-  const k = c.kit, inm = c.gear.map(g => inMode(g, mode));
-  const store = c.gear.map((g, i) => g.slot === "storage" && inm[i]).filter(Boolean);
-  const names = new Set(inm.filter(Boolean).map(e => e.name));
-  const quick = c.quick.filter(n => names.has(n));
-  const unlocks = (mode === "min" ? k.unlocks_min : k.unlocks_ideal).map(u => `<span class="ref">${unlockText(u)}</span>`).join("");
-  const target = mode === "min" ? ["MINIMA", "MINIMUM"] : ["IDEÁLU", "IDEÁL"];
-  const need = haveSet && [...new Set(inm.filter(e => e && e.unlock).map(e => e.name))].filter(n => !haveSet.has(n));
-  const needLine = (haveErr && haveSet ? `<p class="need err">${esc(haveErr)}</p>` : "") + (!need ? "" : need.length
-    ? `<p class="need">Do ${target[0]} ti chybí: ${need.map(esc).join(", ")}</p>`
-    : `<p class="need ok">Na ${target[1]} máš všechno odemčené.</p>`);
-  return `<article class="loadout" id="${esc(c.id)}">
-    <header class="lo-head"><div><h2 class="lo-name"><a href="${classHref(q, c)}">${esc(c.name)}</a></h2><p>${esc(c.job)}</p><p class="src">${c.screenshot ? "Ideál podle screenshotu ze hry (Season 1, 1. 10.)" : "Bez screenshotu - návrh z herních dat"}</p>${needLine}</div>${c.status === "NAVRH" ? '<span class="tag draft" title="Návrh, Commander ho zatím nevyhlásil">Návrh</span>' : ""}</header>
-    <div class="lo-grid">
-      <div><h3>Equipment</h3>${["slot1", "slot2", "slot3"].map(s => slotCell(c, s, mode)).join("")}
-        <h3>Gear</h3><div class="lo-gear">${["helmet", "armor", "vest"].map(s => slotCell(c, s, mode)).join("")}</div></div>
-      <div><h3>Storage</h3><div class="lo-gear">${["backpack", "traversal"].map(s => slotCell(c, s, mode)).join("")}</div>
-        <h3>V batohu</h3>${store.length ? `<ul class="lo-store">${store.map(e => `<li>${itemIcon(e.icon, "sm")}<span class="q">${e.qty}${e.cost != null ? `<span class="pr">${usd(e.cost)}</span>` : ""}</span><span class="n">${esc(e.name)}${haveBox(e)}</span></li>`).join("")}</ul>` : '<p class="note">Nic.</p>'}
-        ${quick.length ? `<h3>Rychlé sloty</h3><ol class="lo-quick">${quick.map((n, i) => `<li><span class="kb">${(i + 4) % 10}</span>${esc(n)}</li>`).join("")}</ol>` : ""}</div>
-    </div>
-    <footer class="lo-sum"><span>Za život</span><b>${usd(mode === "min" ? k.min : k.ideal)}</b><span>váha bez munice a supplies</span><b>${(mode === "min" ? k.weight_min : k.weight_ideal).toLocaleString("cs-CZ")} kg</b>${unlocks ? `<span>odemkni</span>${unlocks}` : ""}</footer></article>`;
-}
-function viewSquads() {
-  return `<header class="unit-head"><div><h1>Squady</h1><p>Sestavy platí pro všechny mapy</p></div></header>
-    <p class="note">Přihlášený člen si u předmětů zaškrtne, co má odemčené. Kolik nás co má: <a class="act" href="#/pokryti">Pokrytí rolí</a></p>
-    ${D.squads.map(q => `<section class="block"><h2><a href="#/squad/${q.id}">${esc(q.name)}</a></h2><p class="goal">${esc(q.goal)}</p>
-      <ul class="cls">${q.classes.map(c => `<li><a href="${classHref(q, c)}"><b>${esc(c.name)}</b><span>${usd(c.kit.min)} · ideál ${usd(c.kit.ideal)}</span></a></li>`).join("")}</ul></section>`).join("")}`;
-}
-function viewSquadPage(q) {
-  return `<p class="crumb"><a href="#/squady">Squady</a> / ${esc(q.name)}</p>
-    <header class="unit-head">${sym(q.symbol, "lg")}<div><h1>${esc(q.name)}</h1><p>${q.classes.length} sub-class · platí pro všechny mapy</p></div></header>
-    <p class="goal">${esc(q.goal)}</p><ul class="bullets block" style="margin-top:16px">${q.points.map(x => `<li>${esc(x)}</li>`).join("")}</ul>
-    ${modeBar()}${q.classes.map(c => classCard(q, c, kmode)).join("")}`;
-}
-function viewClass(q, c) {
-  const uses = D.strategies.flatMap(s => s.roles.filter(r => r.class === c.id).map(r => roleLink(s, r)));
-  return `<p class="crumb"><a href="#/squady">Squady</a> / <a href="#/squad/${q.id}">${esc(q.name)}</a> / ${esc(c.name)}</p>
-    ${modeBar()}${classCard(q, c, kmode)}
-    ${uses.length ? `<section class="block"><h2>Role v plánech</h2><p class="chips">${uses.join(" ")}</p></section>` : ""}`;
-}
-
-// ---------- canvas trace ----------
-function applyTrace() {
-  const m = document.getElementById("matrix"), bar = document.getElementById("tracebar");
-  if (!m || !bar) return;
-  m.classList.toggle("tracing", !!trace);
-  m.querySelectorAll(".entry").forEach(e => e.classList.toggle("hit", !!trace && e.dataset.roles.split(" ").includes(trace)));
-  m.querySelectorAll("button.rid").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.trace === trace)));
-  const r = trace && roleOf(cur, trace);
-  bar.innerHTML = r
-    ? `<span>Sleduješ <b>${esc(r.id)}</b> · ${esc(r.name)}</span><a class="act" href="${roleHref(cur, r)}">Otevřít kartu</a><button type="button" class="act" data-untrace>Zrušit</button>`
-    : "Klikni na kód role (třeba A1) a zvýrazní se její cesta všemi fázemi.";
-}
-
-// ---------- vycvik (karty kresli ../vycvik/build.py do docs/vycvik/) ----------
-function viewVycvik() {
-  return `<header class="unit-head"><div><h1>Výcvik</h1><p>Pěchotní taktika pro všechny mapy</p></div></header>
-    ${D.vycvik.map(l => `<section class="block"><h2>${esc(l.name)}</h2><p class="lede">${esc(l.intro)}</p>
-      <ol class="drill">${l.cards.map(c => `<li><a class="pic" href="${esc(c.file)}" target="_blank" rel="noopener"><img src="${esc(c.file)}" width="2400" height="1500" loading="lazy" alt="${esc(c.title)}: ${esc(c.sub)}"></a>
-        <div class="cap"><b>${esc(c.title)}</b><span>${esc(c.sub)}</span><a class="dl" href="${esc(c.file)}" download>PNG pro Discord</a></div></li>`).join("")}</ol></section>`).join("")}`;
-}
-
-// ---------- historie (uzavřené akce, hráči; jen pro přihlášené členy, data chrání RLS) ----------
-const HIST = ["historie", "akce", "hrac", "pokryti"];
-const plural = (n, one, few, many) => `${n} ${n === 1 ? one : n >= 2 && n <= 4 ? few : many}`;
-// local calendar date (like fmtWhen), so a 00:30 event on the start day lands in the new season
-const seasonOf = iso => { const d = new Date(iso).toLocaleDateString("sv-SE"); let s = null; for (const x of D.seasons) if (x.start <= d) s = x; return s; };
-const seasonName = s => s ? s.name : "Před sezónami";
-const place = n => n ? `${n}.` : "-";
-const sideOf = id => { const s = S(id); return s ? sideLabel(s) : id; };
-const variantName = (sid, vid) => { const s = S(sid), v = s && vById(s, vid); return v ? v.name : (vid || "-"); };
-const memberLink = m => `<a class="mlink" href="#/hrac/${encodeURIComponent(m.discord_id)}"><img src="${esc(m.avatar_url)}" alt="" loading="lazy">${esc(m.name)}</a>`;
-
-// newest season first, each with its rows in the order given
-function bySeason(rows, iso) {
-  const out = [];
-  for (const r of rows) {
-    const s = seasonOf(iso(r)), last = out[out.length - 1];
-    if (last && last.s === s) last.rows.push(r); else out.push({ s, rows: [r] });
-  }
-  return out;
-}
-
-function histShell(inner) { return `<div id="hist">${inner}</div>`; }
-function histGate() {
-  if (!sb) return '<p class="note">Stránka se teď nenačetla (knihovna přihlášení není dostupná).</p>';
-  return `<p class="note">Tahle stránka je jen pro členy KIN. <button type="button" class="act" data-login>Přihlásit přes Discord</button></p>`;
-}
-
-async function loadHist(p) {
-  const want = location.hash, el = () => location.hash === want && document.getElementById("hist");
-  try {
-    let html;
-    if (p[0] === "pokryti") {
-      const s = currentSeason();
-      // one row per active member with their items nested: removed members drop out and the
-      // 1000-row response cap applies to members, not to the ~50 x members unlock rows
-      const { data, error } = s ? await sb.from("members").select("user_id, name, avatar_url, discord_id, unlocks!inner(item)")
-        .eq("active", true).eq("unlocks.season", s.id) : { data: [] };
-      if (error) throw error;
-      html = viewCoverage(s, data);
-    } else if (p[0] === "historie") {
-      const { data, error } = await sb.from("events").select("id, strategy_id, starts_at, variant, placement, claims(count)")
-        .eq("status", "closed").order("starts_at", { ascending: false });
-      if (error) throw error;
-      html = viewHistory(data);
-    } else if (p[0] === "akce") {
-      const { data: ev, error } = await sb.from("events").select("id, strategy_id, starts_at, status, variant, placement, note, went_well, went_wrong, next_time").eq("id", Number(p[1])).maybeSingle();
-      if (error) throw error;
-      const [cl, at] = ev ? await Promise.all([
-        sb.from("claims").select("slot_label, user_id, members(name, avatar_url, discord_id)").eq("event_id", ev.id),
-        sb.from("attendance").select("user_id, attended").eq("event_id", ev.id),  // RLS: Commander all, member own row
-      ]) : [{ data: [] }, { data: [] }];
-      if (cl.error) throw cl.error;
-      if (at.error) throw at.error;
-      html = ev ? viewEvent(ev, cl.data, new Set(at.data.filter(a => !a.attended).map(a => a.user_id))) : '<p class="note">Akce neexistuje.</p>';
-    } else {
-      const { data: m, error } = await sb.from("members").select("user_id, discord_id, name, avatar_url, active").eq("discord_id", p[1]).maybeSingle();
-      if (error) throw error;
-      const season = currentSeason();
-      const [cl, at, un] = m ? await Promise.all([
-        sb.from("claims").select("slot_label, events!inner(id, strategy_id, starts_at, status)").eq("user_id", m.user_id).eq("events.status", "closed"),
-        sb.from("attendance").select("event_id, attended").eq("user_id", m.user_id),  // visible to the Commander and the player only
-        season ? sb.from("unlocks").select("item").eq("user_id", m.user_id).eq("season", season.id) : { data: [] },
-      ]) : [{ data: [] }, { data: [] }, { data: [] }];
-      if (cl.error) throw cl.error;
-      if (at.error) throw at.error;
-      if (un.error) throw un.error;
-      // no attendance record = played (older events, or the viewer may not see it)
-      const absent = new Set(at.data.filter(a => !a.attended).map(a => a.event_id));
-      html = m ? viewPlayer(m, cl.data.filter(r => !absent.has(r.events.id)), season, new Set(un.data.map(u => u.item))) : '<p class="note">Hráč nenalezen.</p>';
-    }
-    const t = el(); if (t) t.innerHTML = html;
-  } catch (e) {
-    const t = el(); if (t) t.innerHTML = `<p class="err">Nepodařilo se načíst: ${esc(e.message || e)}</p>`;
-  }
-}
-
-// items a sub-class needs unlocked to be played in the given mode (MINIMUM / IDEAL)
-const unlockNeeds = (c, mode) => [...new Set(c.gear.map(g => inMode(g, mode)).filter(e => e && e.unlock).map(e => e.name))];
-
-// coverage: who has which unlock this season, and how many can play each sub-class at MINIMUM / IDEAL
-function viewCoverage(season, members) {
-  const head = `<p class="crumb"><a href="#/squady">Squady</a> / Pokrytí</p>
-    <header class="unit-head"><div><h1>Pokrytí rolí</h1><p>${esc(season ? season.name : "Žádná sezóna")} · podle toho, co si členové zaškrtli u sestav</p></div></header>`;
-  // item names come from members' rows: a null-prototype map, so "constructor" or "__proto__" cannot break it
-  const byItem = Object.create(null), users = [];
-  for (const m of members) {
-    const have = new Set(m.unlocks.map(u => u.item));
-    users.push(have);
-    for (const n of have) (byItem[n] = byItem[n] || []).push(m);
-  }
-  const ready = list => users.filter(have => list.every(n => have.has(n))).length;
-  const items = [];
-  for (const q of D.squads) for (const c of q.classes) for (const mode of ["min", "ideal"]) for (const n of unlockNeeds(c, mode)) if (!items.includes(n)) items.push(n);
-  // vehicles and other extras the plans add to roles (MH-6, Lakota, Ural, Verba) need unlocks too
-  for (const s of D.strategies) for (const r of s.roles) for (const g of r.gear) {
-    if (g.item && g.unlock && !items.includes(g.item)) items.push(g.item);
-    if (g.ideal && g.ideal_unlock && !items.includes(g.ideal)) items.push(g.ideal);
-  }
-  return `${head}
-    <p class="note">Členů, kteří něco zaškrtli: <b>${users.length}</b>. Kdo nic nezaškrtl, v počtech chybí.</p>
-    <section class="block"><h2>Sub-classy</h2><table class="data cov"><thead><tr><th>Sub-class</th><th class="num">Mají MINIMUM</th><th class="num">Mají IDEÁL</th></tr></thead><tbody>
-    ${D.squads.map(q => q.classes.map(c => `<tr><td><a href="${classHref(q, c)}">${esc(q.name)} · ${esc(c.name)}</a></td><td class="num"><b>${ready(unlockNeeds(c, "min"))}</b></td><td class="num">${ready(unlockNeeds(c, "ideal"))}</td></tr>`).join("")).join("")}
-    </tbody></table></section>
-    <section class="block"><h2>Předměty, které se musí odemknout</h2><table class="data cov"><thead><tr><th>Předmět</th><th class="num">Kolik</th><th>Kdo</th></tr></thead><tbody>
-    ${items.map(n => { const ms = byItem[n] || []; return `<tr><td>${esc(n)}</td><td class="num"><b>${ms.length}</b></td><td>${ms.map(memberLink).join(" ")}</td></tr>`; }).join("")}
-    </tbody></table></section>`;
-}
-
-function viewHistory(evs) {
-  const head = `<header class="unit-head"><div><h1>Historie</h1><p>Uzavřené akce po sezónách</p></div></header>`;
-  if (!evs.length) return `${head}<p class="note">Zatím žádná uzavřená akce. Commander ji uzavře v bloku Sestava po zápase.</p>`;
-  return head + bySeason(evs, e => e.starts_at).map(({ s, rows }) => `<section class="block"><h2>${esc(seasonName(s))}</h2>
-    <table class="data hist"><thead><tr><th>Datum</th><th>Mapa</th><th>Zóna</th><th class="num">Umístění</th><th class="num">Zapsáno</th></tr></thead><tbody>
-    ${rows.map(e => `<tr><td><a href="#/akce/${e.id}">${esc(fmtWhen(e.starts_at))}</a></td><td>${esc(sideOf(e.strategy_id))}</td><td>${esc(variantName(e.strategy_id, e.variant))}</td><td class="num"><b>${place(e.placement)}</b></td><td class="num">${e.claims[0] ? e.claims[0].count : 0}</td></tr>`).join("")}
-    </tbody></table></section>`).join("");
-}
-
-function viewEvent(ev, claims, absent = new Set()) {
-  // slot_label was stored at sign-up ("Skupina · Role"), so renamed roles keep their old name here
-  const groups = {};
-  for (const c of claims) { const [g, ...rest] = c.slot_label.split(" · "); (groups[g] = groups[g] || []).push({ role: rest.join(" · ") || g, m: c.members, away: absent.has(c.user_id) }); }
-  const played = claims.length - claims.filter(c => absent.has(c.user_id)).length;
-  const debrief = [["Co fungovalo", ev.went_well], ["Co ne", ev.went_wrong], ["Co příště jinak", ev.next_time]].filter(([, t]) => t);
-  return `<p class="crumb"><a href="#/historie">Historie</a> / ${esc(fmtWhen(ev.starts_at))}</p>
-    <header class="unit-head"><div><h1>${esc(sideOf(ev.strategy_id))}</h1><p>${esc(fmtWhen(ev.starts_at))} · ${esc(seasonName(seasonOf(ev.starts_at)))}${ev.status === "open" ? " · probíhá" : ""}</p></div></header>
-    <p class="lede">Umístění <b>${place(ev.placement)}</b> · zóna ${esc(variantName(ev.strategy_id, ev.variant))} · ${played === claims.length ? plural(played, "člověk", "lidé", "lidí") : `hrálo ${played} z ${claims.length} zapsaných`}</p>
-    ${debrief.length ? `<section class="block"><h2>Debrief</h2><dl class="debrief">${debrief.map(([h, t]) => `<dt>${h}</dt><dd class="evnote">${esc(t)}</dd>`).join("")}</dl></section>` : ""}
-    ${ev.note ? `<section class="block"><h2>Poznámka Commandera</h2><p class="evnote">${esc(ev.note)}</p></section>` : ""}
-    <section class="block"><h2>Sestava</h2>${claims.length ? `<div class="ros">${Object.entries(groups).map(([g, xs]) => `<div class="rg"><div class="pg-head"><div><b>${esc(g)}</b></div><span class="num">${xs.length}</span></div>
-      <ul>${xs.map(x => `<li class="hrow${x.away ? " absent" : ""}"><span class="lbl">${esc(x.role)}</span>${memberLink(x.m)}${x.away ? '<span class="ref">neúčast</span>' : ""}</li>`).join("")}</ul></div>`).join("")}</div>` : '<p class="note">Nikdo se nezapsal.</p>'}</section>`;
-}
-
-// profile: which sub-classes the player can field this season (from what they ticked on loadout cards)
-function unlockSection(m, season, have) {
-  if (!season || !m.active) return "";
-  const own = state.me && state.me.user_id === m.user_id;
-  if (!have.size) return `<section class="block"><h2>Odemčeno · ${esc(season.name)}</h2><p class="note">Zatím nic nezaškrtnuto.${own ? ' Zaškrtni, co máš odemčené, na stránkách <a href="#/squady">Squadů</a>.' : ""}</p></section>`;
-  const rows = D.squads.flatMap(q => q.classes.map(c => ({ q, c, min: unlockNeeds(c, "min").every(n => have.has(n)), ideal: unlockNeeds(c, "ideal").every(n => have.has(n)) })));
-  // MINIMUM and IDEAL kits share no unlock items: either one means the player can field the sub-class
-  const ready = rows.filter(x => x.min || x.ideal);
-  return `<section class="block"><h2>Odemčeno · ${esc(season.name)}</h2>
-    <p class="lede">Může hrát <b>${ready.length}</b> z ${rows.length} sub-class · MINIMUM ${rows.filter(x => x.min).length} · IDEÁL ${rows.filter(x => x.ideal).length}</p>
-    ${ready.length ? `<ul class="cls">${ready.map(x => `<li><a href="${classHref(x.q, x.c)}"><b>${esc(x.c.name)}</b><span>${esc(x.q.name)} · ${x.ideal ? "IDEÁL" : "MINIMUM"}</span></a></li>`).join("")}</ul>` : ""}</section>`;
-}
-
-function viewPlayer(m, rows, season, have) {
-  const stats = list => {
-    const roles = {};
-    for (const r of list) { const role = r.slot_label; roles[role] = (roles[role] || 0) + 1; }
-    const top = Object.entries(roles).sort((a, b) => b[1] - a[1]).slice(0, 5);
-    const last = list.reduce((a, r) => !a || r.events.starts_at > a ? r.events.starts_at : a, null);
-    return `<p class="lede"><b>${plural(list.length, "akce", "akce", "akcí")}</b>${last ? ` · naposledy ${esc(fmtWhen(last))}` : ""}</p>
-      ${top.length ? `<ul class="bullets">${top.map(([role, n]) => `<li>${esc(role)} <span class="ref">${n}×</span></li>`).join("")}</ul>` : ""}`;
-  };
-  const sorted = [...rows].sort((a, b) => b.events.starts_at.localeCompare(a.events.starts_at));
-  return `<p class="crumb"><a href="#/historie">Historie</a> / ${esc(m.name)}</p>
-    <header class="unit-head"><img class="pavatar" src="${esc(m.avatar_url)}" alt=""><div><h1>${esc(m.name)}</h1><p>Člen KIN</p></div></header>
-    <section class="block"><h2>Celkem</h2>${stats(rows)}</section>
-    ${unlockSection(m, season, have)}
-    ${bySeason(sorted, r => r.events.starts_at).map(({ s, rows: xs }) => `<section class="block"><h2>${esc(seasonName(s))}</h2>${stats(xs)}
-      <p class="note">${xs.map(r => `<a href="#/akce/${r.events.id}">${esc(fmtWhen(r.events.starts_at))}</a>`).join(" · ")}</p></section>`).join("")}`;
-}
-
-// ---------- shell ----------
-function renderNav(active) {
-  const mine = me.get(), [msid, mrid] = (mine || "/").split("/"), ms = S(msid), mr = ms && roleOf(ms, mrid);
-  document.getElementById("nav").innerHTML =
-    D.strategies.map(s => `<a href="#/s/${s.id}"${active === s.id ? ' aria-current="page"' : ""}>${esc(sideLabel(s))}</a>`).join("") +
-    `<a href="#/squady"${active === "squady" ? ' aria-current="page"' : ""}>Squady</a>` +
-    `<a href="#/doktrina"${active === "doktrina" ? ' aria-current="page"' : ""}>Doktrína</a>` +
-    `<a href="#/vycvik"${active === "vycvik" ? ' aria-current="page"' : ""}>Výcvik</a>` +
-    `<a href="#/historie"${active === "historie" ? ' aria-current="page"' : ""}>Historie</a>` +
-    (mr ? `<a class="mine" href="${roleHref(ms, mr)}">Moje role<b>${esc(mr.id)}</b></a>` : "");
-  navToCurrent();
-}
-// phones scroll the nav sideways: keep the current page's link in view (again after #who changes width)
-const navToCurrent = () => document.querySelector("#nav [aria-current]")?.scrollIntoView({ block: "nearest", inline: "nearest" });
-
-function viewGate() {
-  const wait = !sb ? "Přihlášení se nenačetlo. Vypni blokování skriptů pro tuhle stránku a načti ji znovu."
-    : state.checking ? "Ověřuji přihlášení…" : null;
-  return `<section class="gate">
-    <img src="znacka/kin-emblem.svg" alt="Emblém Kinetic Solutions" width="200" height="200">
-    <h1>Central Command</h1>
-    <p class="lede">Plány, role a výcvik klanu Kinetic Solutions. Jen pro členy: přihlas se přes Discord, dovnitř tě to pustí od role Rekrut.</p>
-    ${state.error ? `<p class="err">${esc(state.error)}</p>` : ""}
-    ${wait ? `<p class="note">${esc(wait)}</p>` : '<button type="button" class="act big" data-login>Přihlásit přes Discord</button>'}
-  </section>`;
-}
-
-function render() {
-  if (!D.strategies) {
-    $app.innerHTML = viewGate();
-    document.title = "KIN Central Command";
-    document.getElementById("nav").innerHTML = "";
-    return;
-  }
-  const [h, qs = ""] = location.hash.replace(/^#/, "").split("?");
-  if (!h) {
-    const [sid, rid] = (me.get() || "/").split("/"), s = S(sid);
-    if (s && roleOf(s, rid)) { location.replace(`#/s/${sid}/role/${rid}`); return; }
-  }
-  const p = h.split("/").filter(Boolean);
-  let html, active = null, title = "KIN Central Command";
-  cur = null; trace = null;
-  if (p[0] === "s" && S(p[1])) {
-    const s = S(p[1]); cur = s; active = s.id; curVariant = pickVariant(s, qs);
-    const r = p[2] === "role" && roleOf(s, p[3]), g = p[2] === "squad" && groupOf(s, p[3]);
-    if (r) { html = viewRole(s, r); title = `${r.id} ${r.name} · KIN`; }
-    else if (g) { html = viewSquad(s, g); title = `${g.name} · KIN`; }
-    else { html = viewStrategy(s, ["situace", "vetve"].includes(p[2]) ? p[2] : "platno"); title = `${sideLabel(s)} · KIN`; }
-  } else if (p[0] === "squady") { html = viewSquads(); active = "squady"; title = "Squady · KIN"; }
-  else if (p[0] === "squad" && SQ(p[1])) {
-    const q = SQ(p[1]), c = classOf(q, p[2]); active = "squady";
-    if (c) { html = viewClass(q, c); title = `${c.name} · KIN`; } else { html = viewSquadPage(q); title = `${q.name} · KIN`; }
-  } else if (p[0] === "doktrina") { html = viewDoktrina(); active = "doktrina"; title = "Doktrína · KIN"; }
-  else if (p[0] === "vycvik") { html = viewVycvik(); active = "vycvik"; title = "Výcvik · KIN"; }
-  else if (HIST.includes(p[0])) {
-    active = p[0] === "pokryti" ? "squady" : "historie"; title = p[0] === "pokryti" ? "Pokrytí · KIN" : "Historie · KIN";
-    html = histShell(sb && state.me ? '<p class="note">Načítám…</p>' : histGate());
-    if (sb && state.me) setTimeout(() => loadHist(p));
-  }
-  else html = viewHome();
-  $app.innerHTML = html;
-  document.title = title;
-  renderNav(active);
-  applyTrace();
-  window.scrollTo(0, 0);
-}
-
-$app.addEventListener("click", e => {
-  const t = e.target.closest("[data-trace],[data-untrace],[data-pick],[data-me],[data-variant],[data-kitmode],[data-claim],[data-unclaim],[data-rsvp],[data-unlock]");
-  if (!t) return;
-  if (t.dataset.rsvp) { setRsvp(t.dataset.rsvp); return; }
-  if (t.dataset.unlock !== undefined) {
-    t.disabled = true;  // no second toggle while saving; render() builds a fresh box from haveSet
-    setUnlock(t.dataset.unlock, t.checked).catch(err => { haveErr = `Neuloženo: ${err.message || err}`; rerenderKeep(); });
-    return;
-  }
-  if (t.dataset.claim) { claim(t.dataset.claim); return; }
-  if (t.dataset.unclaim) { unclaim(t.dataset.unclaim); return; }
-  if (t.dataset.variant) {
-    try { localStorage.setItem("wrd.variant." + cur.id, t.dataset.variant); } catch { /* storage blocked: URL still carries it */ }
-    const y = window.scrollY; location.hash = location.hash.split("?")[0] + "?v=" + t.dataset.variant;
-    requestAnimationFrame(() => window.scrollTo(0, y));
-  }
-  else if (t.dataset.trace) { trace = trace === t.dataset.trace ? null : t.dataset.trace; applyTrace(); }
-  else if ("untrace" in t.dataset) { trace = null; applyTrace(); }
-  else if (t.dataset.pick) { me.set(t.dataset.pick); const [sid, rid] = t.dataset.pick.split("/"); location.hash = `#/s/${sid}/role/${rid}`; }
-  else if (t.dataset.me) { me.set(me.get() === t.dataset.me ? null : t.dataset.me); rerenderKeep(); }
-  else if (t.dataset.kitmode) {
-    kmode = t.dataset.kitmode;
-    try { localStorage.setItem("wrd.kitmode", kmode); } catch { /* storage blocked: mode lasts until reload */ }
-    rerenderKeep();
-  }
-});
-addEventListener("hashchange", render);
-function renderFoot() {
-  document.getElementById("foot").textContent = D.snapshot
-    ? `Ceny a unlocky: ${D.snapshot} · build ${D.built}${D.contentAt ? ` · obsah z databáze ${fmtWhen(D.contentAt)}` : ""} · Strategie označená Draft zatím není vyhlášená za platnou. · Ikony předmětů: WARDOGS © Bulkhead, přes metaforge.app`
-    : "Kinetic Solutions · CZ/SK klan ve WARDOGS";
-}
-renderFoot();
-render();
-</script>
+<script src="app.js"></script>
 </body>
 </html>
