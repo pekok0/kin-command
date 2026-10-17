@@ -641,20 +641,48 @@ function viewSquad(s, g) {
     ${s.budget[g.id] ? `<section class="block narrow"><h2>Rozpočet supplies</h2>${budgetBlock(s, g.id)}</section>` : ""}`;
 }
 
-function viewDoktrina() {
-  const k = D.doktrina;
+// specs/doktrina: two tabs with the same skeleton (Jádro, Principy, Velení a komunikace, Squady a role, Postupy, Protokoly, Výbava)
+const bullets = xs => `<ul class="bullets">${xs.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`;
+const procList = xs => `<ol class="proc">${xs.map(x => `<li><span>${esc(x)}</span></li>`).join("")}</ol>`;
+const docRx = xs => xs.map(x => `<div class="rx"><div class="when">${esc(x.when)}</div><div class="arrow">${arrow()}</div><div class="then">${esc(x.then)}</div><div class="who"><span class="ref">${esc(x.who)}</span></div></div>`).join("");
+const sqDoc = q => `<div class="sq"><h3>${sym(q.symbol, "sm")}${esc(q.name)}</h3><p>${esc(q.goal)}</p>${bullets(q.points)}</div>`;
+
+function viewDefence(k) {
+  return `
+    <section class="block"><h2>Jádro</h2><p>${esc(k.defence.tagline)}</p></section>
+    <section class="block"><h2>Principy</h2>${procList(k.principles)}</section>
+    <section class="block"><h2>Velení a komunikace</h2>${bullets(k.commander)}<table class="data"><thead><tr><th>Kanál</th><th>Kdo</th><th>K čemu</th></tr></thead><tbody>
+      ${k.comms.map(c => `<tr><td><b>${esc(c.channel)}</b></td><td>${esc(c.who)}</td><td>${esc(c.purpose)}</td></tr>`).join("")}</tbody></table></section>
+    <section class="block"><h2>Squady a role</h2>${D.squads.map(q => `<div class="sq"><h3>${sym(q.symbol, "sm")}<a href="#/squad/${q.id}">${esc(q.name)}</a></h3><p>${esc(q.goal)}</p></div>`).join("")}${k.squads.map(sqDoc).join("")}</section>
+    <section class="block"><h2>Postupy: palba mortarů na vyžádání</h2>${procList(k.mortar_procedure)}<p class="note">${esc(k.mortar_note)}</p></section>
+    <section class="block"><h2>Protokoly: když se stane, reaguj</h2>${docRx(k.protocols)}</section>
+    <section class="block"><h2>Výbava</h2><p>${esc(k.defence.kit)}</p></section>`;
+}
+
+function viewSwarm(k) {
+  const s = k.swarm;
+  return `
+    <section class="block" id="swarm"><div class="t-row"><h2>Jádro</h2><span class="tag draft" title="Jádro je Commanderovo, podrobnosti navrhl štáb a potvrdí Commander">Návrh</span></div><p>${esc(s.tagline)}</p>${bullets(s.points)}</section>
+    <section class="block"><h2>Principy</h2>${procList(s.principles)}</section>
+    <section class="block"><h2>Velení a komunikace</h2>${bullets(s.command)}</section>
+    <section class="block"><h2>Squady a role</h2>${s.role.map(sqDoc).join("")}</section>
+    <section class="block"><h2>Postupy</h2>${s.procedure.map(x => `<div class="sq"><h3>${esc(x.title)}</h3>${procList(x.steps)}</div>`).join("")}</section>
+    <section class="block"><h2>Protokoly: když se stane, reaguj</h2>${docRx(s.protocol)}</section>
+    <section class="block"><h2>Výbava podle odemčení (Season 2)</h2>${bullets(s.kit)}</section>
+    <section class="block"><h2>Podle počtu lidí</h2><table class="data"><thead><tr>${s.sizes.cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>
+      ${s.sizes.rows.map(r => `<tr>${r.map((c, i) => i ? `<td>${esc(c)}</td>` : `<td><b>${esc(c)}</b></td>`).join("")}</tr>`).join("")}</tbody></table></section>`;
+}
+
+function viewDoktrina(tab) {
+  const k = D.doktrina, swarm = tab === "swarm";
+  const tabs = [["", k.defence.title], ["/swarm", k.swarm.title]];
   return `
     <div class="narrow">
-    <header class="unit-head"><div><h1>Doktrína</h1><p>Platí pro všechny mapy a barvy</p></div></header>
-    <section class="block"><h2>Principy</h2><ol class="proc">${k.principles.map(x => `<li><span>${esc(x)}</span></li>`).join("")}</ol></section>
-    <section class="block"><h2>Komunikace</h2><table class="data"><thead><tr><th>Kanál</th><th>Kdo</th><th>K čemu</th></tr></thead><tbody>
-      ${k.comms.map(c => `<tr><td><b>${esc(c.channel)}</b></td><td>${esc(c.who)}</td><td>${esc(c.purpose)}</td></tr>`).join("")}</tbody></table></section>
-    <section class="block"><h2>Commander</h2><ul class="bullets">${k.commander.map(x => `<li>${esc(x)}</li>`).join("")}</ul></section>
-    <section class="block"><h2>Squady</h2>${D.squads.map(q => `<div class="sq"><h3>${sym(q.symbol, "sm")}<a href="#/squad/${q.id}">${esc(q.name)}</a></h3><p>${esc(q.goal)}</p></div>`).join("")}${k.squads.map(q => `<div class="sq"><h3>${sym(q.symbol, "sm")}${esc(q.name)}</h3><p>${esc(q.goal)}</p><ul class="bullets">${q.points.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`).join("")}</section>
-    <section class="block"><h2>Palba mortarů na vyžádání</h2><ol class="proc">${k.mortar_procedure.map(x => `<li><span>${esc(x)}</span></li>`).join("")}</ol><p class="note">${esc(k.mortar_note)}</p></section>
-    <section class="block"><h2>Protokoly: když se stane, reaguj</h2>${k.protocols.map(x => `<div class="rx"><div class="when">${esc(x.when)}</div><div class="arrow">${arrow()}</div><div class="then">${esc(x.then)}</div><div class="who"><span class="ref">${esc(x.who)}</span></div></div>`).join("")}</section>
-    <section class="block" id="swarm"><h2>${esc(k.swarm.title)}</h2><p>${esc(k.swarm.summary)}</p><ul class="bullets">${k.swarm.points.map(x => `<li>${esc(x)}</li>`).join("")}</ul></section>
-    <section class="block"><h2>Swarm: výbava podle odemčení (Season 2)</h2><ul class="bullets">${k.swarm.kit.map(x => `<li>${esc(x)}</li>`).join("")}</ul></section>
+    <header class="unit-head"><div><h1>Doktrína</h1><p>Platí pro všechny mapy a barvy. Kterou hrajeme, rozhodne Commander před zápasem.</p></div></header>
+    <section class="block"><h2>Dvě doktríny</h2><table class="data"><thead><tr><th></th><th>${esc(k.defence.title)}</th><th>${esc(k.swarm.title)}</th></tr></thead><tbody>
+      ${k.compare.map(r => `<tr><td><b>${esc(r.aspect)}</b></td><td>${esc(r.defence)}</td><td>${esc(r.swarm)}</td></tr>`).join("")}</tbody></table></section>
+    <nav class="tabs" aria-label="Doktrína">${tabs.map(([path, label], i) => `<a href="#/doktrina${path}"${(i === 1) === swarm ? ' aria-current="page"' : ""}>${esc(label)}</a>`).join("")}</nav>
+    ${swarm ? viewSwarm(k) : viewDefence(k)}
     </div>`;
 }
 
@@ -999,7 +1027,7 @@ function render() {
   else if (p[0] === "squad" && SQ(p[1])) {
     const q = SQ(p[1]), c = classOf(q, p[2]); active = "squady";
     if (c) { html = viewClass(q, c); title = `${c.name} · KIN`; } else { html = viewSquadPage(q); title = `${q.name} · KIN`; }
-  } else if (p[0] === "doktrina") { html = viewDoktrina(); active = "doktrina"; title = "Doktrína · KIN"; }
+  } else if (p[0] === "doktrina") { html = viewDoktrina(p[1]); active = "doktrina"; title = (p[1] === "swarm" ? "SWARM" : "Doktrína") + " · KIN"; }
   else if (p[0] === "vycvik") { html = viewVycvik(); active = "vycvik"; title = "Výcvik · KIN"; }
   else if (HIST.includes(p[0])) {
     active = p[0] === "pokryti" ? "squady" : "historie"; title = p[0] === "pokryti" ? "Pokrytí · KIN" : "Historie · KIN";
