@@ -481,6 +481,10 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 @media (max-width: 720px) {
   #who .nm { display: none; }
   body { font-size: 17px; }
+  /* canvas: the sticky phase column took 240 of 356 px, leaving 116 px for the steps (Viktor UAT #007) */
+  .matrix col.ph { width: 104px; }
+  .matrix tbody th { padding: 10px 8px; }
+  .matrix tbody th b { display: block; font-size: 15px; overflow-wrap: anywhere; }
   main { padding-top: 20px; }
   .bar .wrap { gap: 10px; min-height: 52px; }
   .brand span:last-child { display: none; }

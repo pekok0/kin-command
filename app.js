@@ -991,8 +991,13 @@ $app.addEventListener("click", e => {
     setUnlock(t.dataset.unlock, t.checked).catch(err => { haveErr = `Neuloženo: ${err.message || err}`; rerenderKeep(); });
     return;
   }
-  if (t.dataset.claim) { claim(t.dataset.claim); return; }
-  if (t.dataset.unclaim) { unclaim(t.dataset.unclaim); return; }
+  if (t.dataset.claim || t.dataset.unclaim) {
+    // the roster re-renders: put focus back on my slot, else on the same row, not on <body> (Viktor UAT #006)
+    const i = [...document.querySelectorAll(".ros li")].indexOf(t.closest("li"));
+    (t.dataset.claim ? claim(t.dataset.claim) : unclaim(t.dataset.unclaim)).then(() =>
+      (document.querySelector(".ros li.is-me .rslot") || document.querySelectorAll(".ros li .rslot")[i])?.focus({ preventScroll: true }));
+    return;
+  }
   if (t.dataset.variant) {
     try { localStorage.setItem("wrd.variant." + cur.id, t.dataset.variant); } catch { /* storage blocked: URL still carries it */ }
     const y = window.scrollY; location.hash = location.hash.split("?")[0] + "?v=" + t.dataset.variant;
