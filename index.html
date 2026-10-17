@@ -489,6 +489,9 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
   .brand { margin-right: 0; }
   .bar nav { flex: 1; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   .bar nav::-webkit-scrollbar { display: none; }
+  /* fading right edge says "more links this way"; ponytail: always on, also when scrolled to the end */
+  .bar nav { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+             mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
   .bar nav a { white-space: nowrap; }
   #who .long { display: none; }
   .intent { grid-template-columns: 1fr; gap: 8px; }

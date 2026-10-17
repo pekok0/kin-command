@@ -906,13 +906,15 @@ function viewPlayer(m, rows, season, have) {
 // ---------- shell ----------
 function renderNav(active) {
   const mine = me.get(), [msid, mrid] = (mine || "/").split("/"), ms = S(msid), mr = ms && roleOf(ms, mrid);
+  // "Moje role" first and current on my own card: a phone shows ~136 px of the sideways nav (Viktor UAT #005)
+  const onMine = mr && location.hash === roleHref(ms, mr);
   document.getElementById("nav").innerHTML =
-    [...new Set(D.strategies.map(s => s.map))].map(m => `<a href="#/s/${D.strategies.find(s => s.map === m).id}"${S(active)?.map === m ? ' aria-current="page"' : ""}>${esc(m)}</a>`).join("") +
+    (mr ? `<a class="mine" href="${roleHref(ms, mr)}"${onMine ? ' aria-current="page"' : ""}>Moje role<b>${esc(mr.id)}</b></a>` : "") +
+    [...new Set(D.strategies.map(s => s.map))].map(m => `<a href="#/s/${D.strategies.find(s => s.map === m).id}"${!onMine && S(active)?.map === m ? ' aria-current="page"' : ""}>${esc(m)}</a>`).join("") +
     `<a href="#/squady"${active === "squady" ? ' aria-current="page"' : ""}>Squady</a>` +
     `<a href="#/doktrina"${active === "doktrina" ? ' aria-current="page"' : ""}>Doktrína</a>` +
     `<a href="#/vycvik"${active === "vycvik" ? ' aria-current="page"' : ""}>Výcvik</a>` +
-    `<a href="#/historie"${active === "historie" ? ' aria-current="page"' : ""}>Historie</a>` +
-    (mr ? `<a class="mine" href="${roleHref(ms, mr)}">Moje role<b>${esc(mr.id)}</b></a>` : "");
+    `<a href="#/historie"${active === "historie" ? ' aria-current="page"' : ""}>Historie</a>`;
   navToCurrent();
 }
 // phones scroll the nav sideways: keep the current page's link in view (again after #who changes width)
