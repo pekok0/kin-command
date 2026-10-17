@@ -84,7 +84,9 @@ async function loadContent() {
   const y = scrollY; render(); scrollTo(0, y);
 }
 
-const fmtWhen = iso => new Date(iso).toLocaleString("cs-CZ", { weekday: "short", day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
+// the year only when it is not this year (an old or mistyped event must not read as current, Viktor UAT #013)
+const fmtWhen = iso => { const d = new Date(iso), y = d.getFullYear() !== new Date().getFullYear();
+  return d.toLocaleString("cs-CZ", { weekday: "short", day: "numeric", month: "numeric", ...(y && { year: "numeric" }), hour: "2-digit", minute: "2-digit" }); };
 let chan = null;
 
 let loadSeq = 0;
@@ -242,7 +244,7 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
 
 function newEventForm(s) {
   return `<form class="evf" data-form="new"><p class="note">Žádná akce není otevřená.</p>
-    <label>Začátek <input type="datetime-local" name="starts" required></label>
+    <label>Začátek <input type="datetime-local" name="starts" required min="${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}T00:00"></label>
     <button type="submit" class="act">Založit akci: ${esc(sideLabel(s))}</button></form>`;
 }
 
@@ -795,7 +797,10 @@ async function loadHist(p) {
       if (error) throw error;
       html = viewHistory(data);
     } else if (p[0] === "akce") {
-      const { data: ev, error } = await sb.from("events").select("id, strategy_id, starts_at, status, variant, placement, note, went_well, went_wrong, next_time").eq("id", Number(p[1])).maybeSingle();
+      const id = Number(p[1]);  // #/akce/abc: not an id, so "Akce neexistuje" instead of a database error (Viktor UAT #011)
+      const { data: ev, error } = Number.isSafeInteger(id) && id > 0
+        ? await sb.from("events").select("id, strategy_id, starts_at, status, variant, placement, note, went_well, went_wrong, next_time").eq("id", id).maybeSingle()
+        : { data: null, error: null };
       if (error) throw error;
       const [cl, at] = ev ? await Promise.all([
         sb.from("claims").select("slot_label, user_id, members(name, avatar_url, discord_id)").eq("event_id", ev.id),
@@ -822,7 +827,8 @@ async function loadHist(p) {
     }
     const t = el(); if (t) t.innerHTML = html;
   } catch (e) {
-    const t = el(); if (t) t.innerHTML = `<p class="err">Nepodařilo se načíst: ${esc(e.message || e)}</p>`;
+    console.error(e);  // a raw database error means nothing to a player (OWASP A10, like the login gate)
+    const t = el(); if (t) t.innerHTML = '<p class="err">Nepodařilo se načíst. Zkus stránku načíst znovu.</p>';
   }
 }
 
