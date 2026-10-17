@@ -88,24 +88,33 @@ const fmtWhen = iso => new Date(iso).toLocaleString("cs-CZ", { weekday: "short",
 let chan = null;
 
 let loadSeq = 0;
+const LOAD_ERR = "Sestavu se nepodařilo načíst, zkus to znovu.";
 async function loadEvent() {
   if (!state.me) { state.event = null; state.claims = []; state.rsvps = []; renderRoster(); return; }
   const seq = ++loadSeq;
-  const { data: ev, error } = await sb.from("events").select("id, strategy_id, starts_at, leader:members!events_created_by_fkey(name)").eq("status", "open").maybeSingle();
-  if (error) throw error;
-  let claims = [], rsvps = [];
-  if (ev) {
-    const [cl, rs] = await Promise.all([
-      sb.from("claims").select("slot_key, slot_label, user_id, members(name, avatar_url, discord_id)").eq("event_id", ev.id),
-      sb.from("rsvps").select("user_id, status, members(name, avatar_url, discord_id)").eq("event_id", ev.id),
-    ]);
-    if (cl.error) throw cl.error;
-    if (rs.error) throw rs.error;
-    claims = cl.data; rsvps = rs.data;
+  try {
+    const { data: ev, error } = await sb.from("events").select("id, strategy_id, starts_at, leader:members!events_created_by_fkey(name)").eq("status", "open").maybeSingle();
+    if (error) throw error;
+    let claims = [], rsvps = [];
+    if (ev) {
+      const [cl, rs] = await Promise.all([
+        sb.from("claims").select("slot_key, slot_label, user_id, members(name, avatar_url, discord_id)").eq("event_id", ev.id),
+        sb.from("rsvps").select("user_id, status, members(name, avatar_url, discord_id)").eq("event_id", ev.id),
+      ]);
+      if (cl.error) throw cl.error;
+      if (rs.error) throw rs.error;
+      claims = cl.data; rsvps = rs.data;
+    }
+    // swap the whole state at once, and only for the newest load (a slower old response must not win)
+    if (seq !== loadSeq) return;
+    state.event = ev; state.claims = claims; state.rsvps = rsvps; state.evErr = false;
+    if (state.flash === LOAD_ERR) state.flash = null;  // connection is back: drop only our own outage message
+  } catch (e) {
+    // keep the last known roster: an empty "no event open" would lie and offer a second event (Viktor UAT #003)
+    if (seq !== loadSeq) return;
+    console.error(e);
+    state.evErr = true; state.flash = LOAD_ERR;
   }
-  // swap the whole state at once, and only for the newest load (a slower old response must not win)
-  if (seq !== loadSeq) return;
-  state.event = ev; state.claims = claims; state.rsvps = rsvps;
   renderRoster();
 }
 
@@ -167,7 +176,8 @@ function viewRoster(s) {
   if (!sb) return `${head}<p class="note">Sestava se teď nenačetla (knihovna přihlášení není dostupná). Plán níže funguje dál.</p>`;
   if (!state.me) return `${head}<p class="note">Sestava je jen pro členy KIN. <button type="button" class="act" data-login>Přihlásit přes Discord</button></p>`;
   const ev = state.event;
-  if (!ev) return `${head}${state.me.is_commander ? newEventForm(s) : '<p class="note">Žádná akce není otevřená. Založí ji Commander.</p>'}${msg}`;
+  if (!ev) return state.evErr ? `${head}${msg}`
+    : `${head}${state.me.is_commander ? newEventForm(s) : '<p class="note">Žádná akce není otevřená. Založí ji Commander.</p>'}${msg}`;
   const other = S(ev.strategy_id);
   if (ev.strategy_id !== s.id) return `${head}<p class="note">Otevřená akce (${esc(fmtWhen(ev.starts_at))}) je pro <a href="#/s/${esc(ev.strategy_id)}">${esc(other ? sideLabel(other) : ev.strategy_id)}</a>.</p>`;
   const by = Object.fromEntries(state.claims.map(c => [c.slot_key, c]));
@@ -180,10 +190,10 @@ function viewRoster(s) {
     ? `<p class="miss">Chybí: ${missing.slice(0, 6).map(r => `<button type="button" class="rid" data-claim="${esc(r.id)}" title="${esc(r.id)} – ${esc(r.name)}">${esc(r.id)}</button>`).join(" ")}${missing.length > 6 ? ` <span class="more">a dalších ${missing.length - 6}</span>` : ""}</p>`
     : '<p class="miss ok">Všechny role z plánu obsazené.</p>';
   return `<div class="ros-head">${head}<span class="num">${filled} <small>/ ${total}</small></span><time datetime="${esc(ev.starts_at)}">${esc(fmtWhen(ev.starts_at))}</time>${ev.leader ? `<span class="lead">Vede: <b>${esc(ev.leader.name)}</b></span>` : ""}</div>
+    ${msg}
     ${miss}
     ${rsvpBar()}
     <div class="ros">${s.roster.map(g => rosterGroup(g, by)).join("")}</div>
-    ${msg}
     ${state.me.is_commander ? closeEventForm(s) : ""}`;
 }
 
@@ -216,7 +226,7 @@ async function claim(key) {
     state.flash = `Slot už obsadil ${c ? c.members.name : "někdo jiný"}.`;
   } else if (error) state.flash = error.code === "42501" ? "Akce už je uzavřená." : error.message;
   else {
-    state.flash = null;
+    if (!state.evErr) state.flash = null;  // saved, but the reload failed: keep the outage message
     if (slot.role) { me.set(`${cur.id}/${slot.role}`); renderNav(cur.id); }
   }
   renderRoster();
@@ -407,7 +417,7 @@ function unlockText(u) { return `${esc(u.track)} ${u.level}`; }
 function homeEvent() {
   if (!sb || !state.me) return "";
   const ev = state.event;
-  if (!ev) return '<p class="note home-ev">Teď není otevřená žádná akce.</p>';
+  if (!ev) return state.evErr ? `<p class="err home-ev">${LOAD_ERR}</p>` : '<p class="note home-ev">Teď není otevřená žádná akce.</p>';
   const mine = state.claims.find(c => c.user_id === state.me.user_id);
   const said = (state.rsvps || []).find(r => r.user_id === state.me.user_id);
   const status = mine ? `Máš místo: ${esc(mine.slot_label)}` : said ? `Tvoje odpověď: ${esc((RSVP.find(x => x[0] === said.status) || [, said.status])[1])}` : "Zatím bez odpovědi a bez místa: otevři sestavu";
