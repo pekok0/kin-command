@@ -1027,8 +1027,10 @@ $app.addEventListener("click", e => {
   }
   if (t.dataset.variant) {
     try { localStorage.setItem("wrd.variant." + cur.map, t.dataset.variant); } catch { /* storage blocked: URL still carries it */ }
-    const y = window.scrollY; location.hash = location.hash.split("?")[0] + "?v=" + t.dataset.variant;
-    requestAnimationFrame(() => window.scrollTo(0, y));
+    // replace, not push: Back leaves the page instead of stepping through zones (Viktor #023)
+    const y = window.scrollY;
+    history.replaceState(history.state, "", location.hash.split("?")[0] + "?v=" + t.dataset.variant);
+    render(); window.scrollTo(0, y);
   }
   else if (t.dataset.trace) { trace = trace === t.dataset.trace ? null : t.dataset.trace; applyTrace(); }
   else if ("untrace" in t.dataset) { trace = null; applyTrace(); }
@@ -1040,7 +1042,15 @@ $app.addEventListener("click", e => {
     rerenderKeep();
   }
 });
-addEventListener("hashchange", () => { haveErr = null; render(); });  // an unlock error belongs to the page it happened on (Viktor #026)
+// Back/Forward return to where the reader was: the scroll position lives in the history entry (Viktor #023)
+let saveY;
+addEventListener("scroll", () => { clearTimeout(saveY); saveY = setTimeout(() => history.replaceState({ y: scrollY }, ""), 150); }, { passive: true });
+addEventListener("hashchange", () => {
+  haveErr = null;  // an unlock error belongs to the page it happened on (Viktor #026)
+  render();
+  const y = history.state && history.state.y;
+  if (y) window.scrollTo(0, y);
+});
 function renderFoot() {
   document.getElementById("foot").textContent = D.snapshot
     ? `Ceny a unlocky: ${D.snapshot} · build ${D.built}${D.contentAt ? ` · obsah z databáze ${fmtWhen(D.contentAt)}` : ""} · Strategie označená Draft zatím není vyhlášená za platnou. · Ikony předmětů: WARDOGS © Bulkhead, přes metaforge.app`
