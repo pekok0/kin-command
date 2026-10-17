@@ -509,7 +509,7 @@ function viewCanvas(s) {
   return `
     ${variantPanel(s)}
     <section class="intent"><h2>Záměr</h2><ul class="bullets">${s.intent.map(i => `<li>${esc(i)}</li>`).join("")}</ul></section>
-    <section class="sestava" id="sestava" aria-live="polite">${viewRoster(s)}</section>
+    <section class="sestava" id="sestava">${viewRoster(s)}</section>
     <div class="tracebar" id="tracebar" aria-live="polite"></div>
     <div class="matrix-wrap"><table class="matrix" id="matrix"><colgroup><col class="ph">${s.groups.map(() => "<col>").join("")}</colgroup><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
 }
@@ -738,10 +738,10 @@ function viewSquadPage(q) {
     ${modeBar()}${q.classes.map(c => classCard(q, c, kmode)).join("")}`;
 }
 function viewClass(q, c) {
-  const uses = D.strategies.flatMap(s => s.roles.filter(r => r.class === c.id).map(r => roleLink(s, r)));
+  const uses = D.strategies.map(s => [s, s.roles.filter(r => r.class === c.id)]).filter(([, rs]) => rs.length);
   return `<p class="crumb"><a href="#/squady">Squady</a> / <a href="#/squad/${q.id}">${esc(q.name)}</a> / ${esc(c.name)}</p>
     ${modeBar()}${classCard(q, c, kmode)}
-    ${uses.length ? `<section class="block"><h2>Role v plánech</h2><p class="chips">${uses.join(" ")}</p></section>` : ""}`;
+    ${uses.length ? `<section class="block"><h2>Role v plánech</h2><ul class="uses">${uses.map(([s, rs]) => `<li>${esc(sideLabel(s))}: ${rs.map(r => roleLink(s, r)).join(" ")}</li>`).join("")}</ul></section>` : ""}`;
 }
 
 // ---------- canvas trace ----------
