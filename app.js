@@ -463,12 +463,12 @@ function viewHome() {
     </details>`).join("");
   return `
     <div class="home-head"><img class="crest" src="znacka/kin-emblem.svg" alt="Emblém Kinetic Solutions" width="150" height="150"><h1>Central Command</h1>
-      <p class="lede">Strategie Kinetic Solutions. Vyber si svou roli a uvidíš, co koupit, čím jedeš a co děláš v každé fázi. Na briefingu jedeme podle plátna.</p>
+      <p class="lede">Strategie Kinetic Solutions. Vyber si svou roli a uvidíš, co máš dělat v každé fázi. Na briefingu jedeme podle plátna.</p>
     </div>
     ${cont}
     <div id="home-ev">${homeEvent()}</div>
     <details class="block start howto"${matchMedia("(max-width: 720px)").matches ? "" : " open"}><summary><h2 id="h-start">Jak to tu funguje${arrow()}</h2></summary><ol class="proc">
-      <li><span><b>Přihlas se přes Discord</b> (vpravo nahoře). Pustí tě to dál, jen když jsi na serveru Kinetic Solutions.</span></li>
+      <li><span><b>Přihlas se přes Discord</b> (vpravo nahoře). Pustí tě to dál od role Rekrut na serveru Kinetic Solutions.</span></li>
       <li><span><b>Před akcí</b> otevři plán mapy, dej <b>Přijdu</b> a zaber si místo v <b>Sestavě</b>. Co v plánu chybí, vidíš hned nahoře.</span></li>
       <li><span><b>Karta tvé role</b>: co koupit, čím jedeš, co děláš v každé fázi. Nech si ji otevřenou na mobilu nebo druhém monitoru.</span></li>
       <li><span><a href="#/squady">Squady</a>: celá výbava tvé sub-classy, minimum po wipu i ideál. Zaškrtni, co máš odemčené. Kolik nás co umí, je v <a href="#/pokryti">Pokrytí</a>.</span></li>
