@@ -192,7 +192,7 @@ function viewRoster(s) {
   if (!ev) return state.evErr ? `${head}${msg}`
     : `${head}${state.me.is_commander ? newEventForm(s) : '<p class="note">Žádná akce není otevřená. Založí ji Commander.</p>'}${msg}`;
   const other = S(ev.strategy_id);
-  if (ev.strategy_id !== s.id) return `${head}<p class="note">Otevřená akce (${esc(fmtWhen(ev.starts_at))}) je pro <a href="#/s/${esc(ev.strategy_id)}">${esc(other ? sideLabel(other) : ev.strategy_id)}</a>.</p>`;
+  if (ev.strategy_id !== s.id) return `${head}<p class="note">Otevřená akce (${esc(fmtWhen(ev.starts_at))}) je pro <a href="#/s/${esc(ev.strategy_id)}">${esc(other ? sideLabel(other) : ev.strategy_id)}</a>.</p>${msg}`;
   const by = Object.fromEntries(state.claims.map(c => [c.slot_key, c]));
   const filled = state.claims.filter(c => s.roster.some(g => g.slots.some(x => x.key === c.slot_key))).length;
   const total = s.roster.reduce((n, g) => n + g.max, 0);
