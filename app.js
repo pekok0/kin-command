@@ -14,17 +14,28 @@ const hadSession = (() => { try { return Object.keys(localStorage).some(k => /^s
 let state = { me: null, error: urlQs.has("error") ? "Přihlášení přes Discord selhalo." : null, event: null, claims: [], rsvps: [], flash: null, checking: !!sb && (hadSession || FRESH) };
 if (urlQs.has("error")) history.replaceState(null, "", location.pathname + location.hash);
 
+const LOGIN_ERR = "Přihlášení se nepovedlo. Zkus to znovu.";
+
 async function login() {
   if (!sb) return;
   try { sessionStorage.setItem(BACK, location.hash); } catch { /* storage blocked: lands on home */ }
-  const { error } = await sb.auth.signInWithOAuth({
-    provider: "discord",
-    options: { scopes: "identify guilds.members.read", redirectTo: location.origin + location.pathname },
-  });
-  if (error) { state.error = error.message; renderWho(); }
+  try {  // auth-js throws on failure rather than returning an error
+    const { error } = await sb.auth.signInWithOAuth({
+      provider: "discord",
+      options: { scopes: "identify guilds.members.read", redirectTo: location.origin + location.pathname },
+    });
+    if (error) throw error;
+  } catch (e) { console.error(e); state.error = LOGIN_ERR; renderWho(); render(); }
 }
 
-async function errText(e) { try { return (await e.context.json()).error; } catch { return e.message; } }
+// refusal text from our own `member` function; anything else (network, relay, runtime) = the plain sentence
+async function errText(e) {
+  console.error(e);
+  try { const m = (await e.context.json()).error; if (typeof m === "string" && m) return m; } catch { /* not our JSON */ }
+  return LOGIN_ERR;
+}
+// a failed write shows one plain sentence; the raw database error goes to the console only
+const saveErr = e => { console.error(e); return "Nepodařilo se uložit, zkus to znovu."; };
 
 async function onAuth(session) {
   // a queued event can carry a session that an earlier onAuth already signed out (Host refused): treat it as
@@ -124,7 +135,7 @@ async function setRsvp(status) {
   const { error } = await sb.from("rsvps").upsert(
     { event_id: state.event.id, user_id: state.me.user_id, status, updated_at: new Date().toISOString() },
     { onConflict: "event_id,user_id" });
-  state.flash = !error ? null : error.code === "42501" ? "Akce už je uzavřená." : error.message;
+  state.flash = !error ? null : error.code === "42501" ? "Akce už je uzavřená." : saveErr(error);
   await loadEvent();
 }
 
@@ -226,7 +237,7 @@ async function claim(key) {
   if (error && error.code === "23505") {
     const c = state.claims.find(c => c.slot_key === key);
     state.flash = `Slot už obsadil ${c ? c.members.name : "někdo jiný"}.`;
-  } else if (error) state.flash = error.code === "42501" ? "Akce už je uzavřená." : error.message;
+  } else if (error) state.flash = error.code === "42501" ? "Akce už je uzavřená." : saveErr(error);
   else {
     if (!state.evErr) state.flash = null;  // saved, but the reload failed: keep the outage message
     if (slot.role) { me.set(`${cur.id}/${slot.role}`); renderNav(cur.id); }
@@ -236,7 +247,7 @@ async function claim(key) {
 
 async function unclaim(userId) {
   const { error } = await sb.from("claims").delete().eq("event_id", state.event.id).eq("user_id", userId);
-  state.flash = !error ? null : error.code === "42501" ? "Akce už je uzavřená." : error.message;
+  state.flash = !error ? null : error.code === "42501" ? "Akce už je uzavřená." : saveErr(error);
   await loadEvent();
 }
 
@@ -274,13 +285,13 @@ document.addEventListener("submit", async e => {
   const att = [...f.querySelectorAll('input[name^="att_"]')].map(x => ({ event_id: eventId, user_id: x.name.slice(4), attended: x.checked }));
   if (f.dataset.form === "close" && att.length) {
     const { error: e1 } = await sb.from("attendance").upsert(att, { onConflict: "event_id,user_id" });
-    if (e1) { state.flash = e1.code === "42501" ? "Docházku se nepodařilo uložit, zkus to znovu." : e1.message; btn.disabled = false; renderRoster(); return; }
+    if (e1) { state.flash = e1.code === "42501" ? "Docházku se nepodařilo uložit, zkus to znovu." : saveErr(e1); btn.disabled = false; renderRoster(); return; }
   }
   const { error } = f.dataset.form === "new"
     ? await sb.from("events").insert({ strategy_id: cur.id, starts_at: new Date(v.starts).toISOString() })
     : await sb.from("events").update({ status: "closed", placement: Number(v.placement), variant: v.variant || null,
         went_well: v.went_well || null, went_wrong: v.went_wrong || null, next_time: v.next_time || null }).eq("id", eventId);
-  state.flash = !error ? null : error.code === "23505" ? "Už je otevřená jiná akce." : error.message;
+  state.flash = !error ? null : error.code === "23505" ? "Už je otevřená jiná akce." : saveErr(error);
   btn.disabled = false;
   await loadEvent();
 });
@@ -292,7 +303,7 @@ function authEvent(ev, session) {
   if (!["INITIAL_SESSION", "SIGNED_IN", "SIGNED_OUT"].includes(ev)) return;
   // never await Supabase calls inside the auth callback (supabase-js deadlock), hand off instead
   // a raw database error means nothing to a player (OWASP A10): plain message on the page, detail in the console
-  setTimeout(() => { authQ = authQ.then(() => onAuth(session)).catch(e => { console.error(e); state.error = "Přihlášení se nepovedlo. Zkus to znovu."; state.checking = false; renderWho(); render(); }); });
+  setTimeout(() => { authQ = authQ.then(() => onAuth(session)).catch(e => { console.error(e); state.error = LOGIN_ERR; state.checking = false; renderWho(); render(); }); });
 }
 if (sb) sb.auth.onAuthStateChange(authEvent);
 else setTimeout(() => { renderWho(); renderRoster(); });
@@ -310,7 +321,8 @@ function pickVariant(s, qs) {
   const ok = id => s.variants.some(v => v.id === id);
   const fromUrl = new URLSearchParams(qs).get("v");
   let stored = null;
-  try { stored = localStorage.getItem("wrd.variant." + s.id); } catch { /* storage blocked */ }
+  // keyed by map: the zone belongs to the map and match, not the side
+  try { stored = localStorage.getItem("wrd.variant." + s.map); } catch { /* storage blocked */ }
   return [fromUrl, stored].find(ok) || (s.variants[0] && s.variants[0].id) || null;
 }
 
@@ -409,7 +421,8 @@ function roleLink(s, r) { return `<a class="rid" href="${roleHref(s, r)}">${esc(
 function refChip(s, ref) {
   if (ref === "*") return '<span class="ref">všichni</span>';
   const r = roleOf(s, ref); if (r) return roleLink(s, r);
-  const g = groupOf(s, ref); if (g) return `<a class="ref" href="#/s/${s.id}/squad/${g.id}">${esc(g.name)}</a>`;
+  const gs = s.groups.filter(g => g.id === ref || g.squad === ref);  // a squad name ("Assault") = all its groups
+  if (gs.length) return gs.map(g => `<a class="ref" href="#/s/${s.id}/squad/${g.id}">${esc(g.name)}</a>`).join(" ");
   return `<span class="ref">${esc(ref)}</span>`;
 }
 function unlockText(u) { return `${esc(u.track)} ${u.level}`; }
@@ -467,7 +480,7 @@ function stratHead(s, tab) {
   return `
     <header class="strat-head"><div><div class="t-row"><h1>${esc(s.map)} <span>· ${esc(s.color)}</span></h1>${s.status === "DRAFT" ? '<span class="tag draft" title="Strategie zatím není vyhlášená za platnou">Draft</span>' : ""}</div><p>${esc(s.faction)} · ${esc(s.stage)}</p></div></header>
     ${variantBar(s)}
-    <nav class="tabs" aria-label="Strana">${D.strategies.filter(x => x.map === s.map).map(x => `<a href="#/s/${x.id}${tab === "platno" ? "" : "/" + tab}"${x.id === s.id ? ' aria-current="page"' : ""}>${esc(x.color)}</a>`).join("")}</nav>
+    <nav class="tabs" aria-label="Strana">${D.strategies.filter(x => x.map === s.map).map(x => `<a href="#/s/${x.id}${tab === "platno" ? "" : "/" + tab}${curVariant ? "?v=" + esc(curVariant) : ""}"${x.id === s.id ? ' aria-current="page"' : ""}>${esc(x.color)}</a>`).join("")}</nav>
     <nav class="tabs" aria-label="Strategie">${tabs.map(([k, l]) => `<a href="#/s/${s.id}${k === "platno" ? "" : "/" + k}"${k === tab ? ' aria-current="page"' : ""}>${l}</a>`).join("")}</nav>`;
 }
 
@@ -994,7 +1007,7 @@ $app.addEventListener("click", e => {
   if (t.dataset.rsvp) { setRsvp(t.dataset.rsvp); return; }
   if (t.dataset.unlock !== undefined) {
     t.disabled = true;  // no second toggle while saving; render() builds a fresh box from haveSet
-    setUnlock(t.dataset.unlock, t.checked).catch(err => { haveErr = `Neuloženo: ${err.message || err}`; rerenderKeep(); });
+    setUnlock(t.dataset.unlock, t.checked).catch(err => { haveErr = saveErr(err); rerenderKeep(); });
     return;
   }
   if (t.dataset.claim || t.dataset.unclaim) {
@@ -1005,7 +1018,7 @@ $app.addEventListener("click", e => {
     return;
   }
   if (t.dataset.variant) {
-    try { localStorage.setItem("wrd.variant." + cur.id, t.dataset.variant); } catch { /* storage blocked: URL still carries it */ }
+    try { localStorage.setItem("wrd.variant." + cur.map, t.dataset.variant); } catch { /* storage blocked: URL still carries it */ }
     const y = window.scrollY; location.hash = location.hash.split("?")[0] + "?v=" + t.dataset.variant;
     requestAnimationFrame(() => window.scrollTo(0, y));
   }
