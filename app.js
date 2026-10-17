@@ -715,7 +715,7 @@ function classCard(q, c, mode) {
     ? `<p class="need">Do ${target[0]} ti chybí: ${need.map(esc).join(", ")}</p>`
     : `<p class="need ok">Na ${target[1]} máš všechno odemčené.</p>`);
   return `<article class="loadout" id="${esc(c.id)}">
-    <header class="lo-head"><div><h2 class="lo-name"><a href="${classHref(q, c)}">${esc(c.name)}</a></h2><p>${esc(c.job)}</p><p class="src">${c.screenshot ? "Ideál podle screenshotu ze hry (Season 1, 1. 10.)" : "Bez screenshotu - návrh z herních dat"}</p>${needLine}</div>${c.status === "NAVRH" ? '<span class="tag draft" title="Návrh, Commander ho zatím nevyhlásil">Návrh</span>' : ""}</header>
+    <header class="lo-head"><div><h2 class="lo-name"><a href="${classHref(q, c)}">${esc(c.name)}</a></h2><p>${esc(c.job)}</p><p class="src">${c.screenshot ? "Ideál podle screenshotu ze hry (Season 1, 1. 10.)" : esc("Bez screenshotu - návrh z herních dat")}</p>${needLine}</div>${c.status === "NAVRH" ? '<span class="tag draft" title="Návrh, Commander ho zatím nevyhlásil">Návrh</span>' : ""}</header>
     <div class="lo-grid">
       <div><h3>Equipment</h3>${["slot1", "slot2", "slot3"].map(s => slotCell(c, s, mode)).join("")}
         <h3>Gear</h3><div class="lo-gear">${["helmet", "armor", "vest"].map(s => slotCell(c, s, mode)).join("")}</div></div>
