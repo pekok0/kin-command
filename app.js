@@ -229,7 +229,8 @@ function renderRoster() {
 }
 
 async function claim(key) {
-  const g = cur.roster.find(g => g.slots.some(x => x.key === key)), slot = g.slots.find(x => x.key === key);
+  const s = cur;  // the page may change while saving (render() sets cur = null off strategy pages, Viktor #029)
+  const g = s.roster.find(g => g.slots.some(x => x.key === key)), slot = g.slots.find(x => x.key === key);
   const { error } = await sb.from("claims").upsert(
     { event_id: state.event.id, slot_key: key, slot_label: `${g.name} · ${slot.label}`, user_id: state.me.user_id },
     { onConflict: "event_id,user_id" });
@@ -240,7 +241,7 @@ async function claim(key) {
   } else if (error) state.flash = error.code === "42501" ? "Akce už je uzavřená." : saveErr(error);
   else {
     if (!state.evErr) state.flash = null;  // saved, but the reload failed: keep the outage message
-    if (slot.role) { me.set(`${cur.id}/${slot.role}`); renderNav(cur.id); }
+    if (slot.role) { me.set(`${s.id}/${slot.role}`); if (cur === s) renderNav(s.id); }
   }
   renderRoster();
 }
@@ -303,7 +304,8 @@ function authEvent(ev, session) {
   if (!["INITIAL_SESSION", "SIGNED_IN", "SIGNED_OUT"].includes(ev)) return;
   // never await Supabase calls inside the auth callback (supabase-js deadlock), hand off instead
   // a raw database error means nothing to a player (OWASP A10): plain message on the page, detail in the console
-  setTimeout(() => { authQ = authQ.then(() => onAuth(session)).catch(e => { console.error(e); state.error = LOGIN_ERR; state.checking = false; renderWho(); render(); }); });
+  // already logged in: a failed re-check on tab return (sleepy phone network) must not re-render the page (Viktor #022)
+  setTimeout(() => { authQ = authQ.then(() => onAuth(session)).catch(e => { console.error(e); if (state.me) return; state.error = LOGIN_ERR; state.checking = false; renderWho(); render(); }); });
 }
 if (sb) sb.auth.onAuthStateChange(authEvent);
 else setTimeout(() => { renderWho(); renderRoster(); });
@@ -762,7 +764,7 @@ const wv = (png, w) => png.replace(/\.png$/, `-${w}.webp`);  // smaller copies f
 function viewVycvik() {
   return `<header class="unit-head"><div><h1>Výcvik</h1><p>Pěchotní taktika pro všechny mapy</p></div></header>
     ${D.vycvik.map(l => `<section class="block"><h2>${esc(l.name)}</h2><p class="lede">${esc(l.intro)}</p>
-      <ol class="drill">${l.cards.map(c => `<li><a class="pic" href="${esc(c.file)}" target="_blank" rel="noopener"><img src="${esc(wv(c.file, 1600))}" srcset="${esc(wv(c.file, 800))} 800w, ${esc(wv(c.file, 1600))} 1600w, ${esc(c.file)} 2400w" sizes="(min-width: 1360px) 1280px, 100vw" width="2400" height="1500" loading="lazy" alt="${esc(c.title)}: ${esc(c.sub)}"></a>
+      <ol class="drill">${l.cards.map(c => `<li><a class="pic" href="${esc(c.file)}" target="_blank" rel="noopener"><img src="${esc(wv(c.file, 1600))}" srcset="${esc(wv(c.file, 800))} 800w, ${esc(wv(c.file, 1600))} 1600w, ${esc(wv(c.file, 2400))} 2400w" sizes="(min-width: 1360px) 1280px, 100vw" width="2400" height="1500" loading="lazy" alt="${esc(c.title)}: ${esc(c.sub)}"></a>
         <div class="cap"><b>${esc(c.title)}</b><span>${esc(c.sub)}</span><a class="dl" href="${esc(c.file)}" download>PNG pro Discord</a></div></li>`).join("")}</ol></section>`).join("")}`;
 }
 
@@ -948,7 +950,12 @@ function renderNav(active) {
   navToCurrent();
 }
 // phones scroll the nav sideways: keep the current page's link in view (again after #who changes width)
-const navToCurrent = () => document.querySelector("#nav [aria-current]")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+// "Moje role" is first: keep it in view and scroll only when the current link is fully hidden (Viktor #024)
+const navToCurrent = () => {
+  const n = document.getElementById("nav"), a = n.querySelector("[aria-current]");
+  if (n.querySelector("a.mine")) n.scrollLeft = 0;
+  if (a && a.getBoundingClientRect().left >= n.getBoundingClientRect().right) a.scrollIntoView({ block: "nearest", inline: "nearest" });
+};
 
 function viewGate() {
   const wait = !sb ? "Přihlášení se nenačetlo. Vypni blokování skriptů pro tuhle stránku a načti ji znovu."
@@ -1033,7 +1040,7 @@ $app.addEventListener("click", e => {
     rerenderKeep();
   }
 });
-addEventListener("hashchange", render);
+addEventListener("hashchange", () => { haveErr = null; render(); });  // an unlock error belongs to the page it happened on (Viktor #026)
 function renderFoot() {
   document.getElementById("foot").textContent = D.snapshot
     ? `Ceny a unlocky: ${D.snapshot} · build ${D.built}${D.contentAt ? ` · obsah z databáze ${fmtWhen(D.contentAt)}` : ""} · Strategie označená Draft zatím není vyhlášená za platnou. · Ikony předmětů: WARDOGS © Bulkhead, přes metaforge.app`

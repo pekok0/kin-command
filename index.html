@@ -104,7 +104,7 @@ main { flex: 1; padding: 28px 0 64px; }
 .rid { display: inline-block; font: 700 13px/1 var(--cond); letter-spacing: .04em; color: var(--fr); border: 1px solid oklch(0.86 0.095 215 / 0.5); background: var(--fr-fill); padding: 5px 5px 4px; min-width: 24px; text-align: center; text-decoration: none; white-space: nowrap; }
 button.rid:hover, a.rid:hover { background: oklch(0.86 0.095 215 / 0.26); }
 button.rid[aria-pressed="true"] { background: var(--fr); color: var(--ground); }
-.ref { display: inline-block; font: 600 13px/1 var(--cond); letter-spacing: .04em; color: var(--ink-2); border: 1px solid var(--rule); padding: 4px 5px 3px; text-decoration: none; }
+.ref { display: inline-block; font: 600 13px/1 var(--cond); letter-spacing: .04em; color: var(--ink-2); border: 1px solid var(--rule); padding: 5px 5px 4px; text-decoration: none; }
 .unk { color: var(--un); }
 .crumb { font: 600 14px/1.4 var(--cond); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 18px; }
 .crumb a { color: var(--ink-2); }
@@ -417,7 +417,7 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .rg li.is-me .rslot { background: var(--fr-fill); box-shadow: inset 0 0 0 1px var(--fr); }
 .kick { padding: 8px; color: var(--ink-3); }
 .kick:hover { color: var(--ho); }
-.ros-msg { margin-top: 12px; }
+.ros-msg { position: sticky; top: 60px; z-index: 4; margin-top: 12px; padding: 8px 10px; background: var(--ground); border: 1px solid var(--ho); }  /* sticky: errors from slots low in the grid and the close form stay on screen */
 .evf { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
 .evf .note { width: 100%; margin: 0; }
 .evf label { display: grid; gap: 6px; font: 600 13px/1 var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
