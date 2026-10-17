@@ -653,6 +653,8 @@ function viewDoktrina() {
     <section class="block"><h2>Squady</h2>${D.squads.map(q => `<div class="sq"><h3>${sym(q.symbol, "sm")}<a href="#/squad/${q.id}">${esc(q.name)}</a></h3><p>${esc(q.goal)}</p></div>`).join("")}${k.squads.map(q => `<div class="sq"><h3>${sym(q.symbol, "sm")}${esc(q.name)}</h3><p>${esc(q.goal)}</p><ul class="bullets">${q.points.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`).join("")}</section>
     <section class="block"><h2>Palba mortarů na vyžádání</h2><ol class="proc">${k.mortar_procedure.map(x => `<li><span>${esc(x)}</span></li>`).join("")}</ol><p class="note">${esc(k.mortar_note)}</p></section>
     <section class="block"><h2>Protokoly: když se stane, reaguj</h2>${k.protocols.map(x => `<div class="rx"><div class="when">${esc(x.when)}</div><div class="arrow">${arrow()}</div><div class="then">${esc(x.then)}</div><div class="who"><span class="ref">${esc(x.who)}</span></div></div>`).join("")}</section>
+    <section class="block" id="swarm"><h2>${esc(k.swarm.title)}</h2><p>${esc(k.swarm.summary)}</p><ul class="bullets">${k.swarm.points.map(x => `<li>${esc(x)}</li>`).join("")}</ul></section>
+    <section class="block"><h2>Swarm: výbava podle odemčení (Season 2)</h2><ul class="bullets">${k.swarm.kit.map(x => `<li>${esc(x)}</li>`).join("")}</ul></section>
     </div>`;
 }
 
