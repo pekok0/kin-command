@@ -325,6 +325,9 @@ function pickVariant(s, qs) {
   let stored = null;
   // keyed by map: the zone belongs to the map and match, not the side
   try { stored = localStorage.getItem("wrd.variant." + s.map); } catch { /* storage blocked */ }
+  if (ok(fromUrl) && fromUrl !== stored) {  // a shared link with ?v= lasts past the first click (Viktor #025)
+    try { localStorage.setItem("wrd.variant." + s.map, fromUrl); } catch { /* storage blocked: the tabs carry ?v= */ }
+  }
   return [fromUrl, stored].find(ok) || (s.variants[0] && s.variants[0].id) || null;
 }
 
@@ -483,7 +486,7 @@ function stratHead(s, tab) {
     <header class="strat-head"><div><div class="t-row"><h1>${esc(s.map)} <span>· ${esc(s.color)}</span></h1>${s.status === "DRAFT" ? '<span class="tag draft" title="Strategie zatím není vyhlášená za platnou">Draft</span>' : ""}</div><p>${esc(s.faction)} · ${esc(s.stage)}</p></div></header>
     ${variantBar(s)}
     <nav class="tabs" aria-label="Strana">${D.strategies.filter(x => x.map === s.map).map(x => `<a href="#/s/${x.id}${tab === "platno" ? "" : "/" + tab}${curVariant ? "?v=" + esc(curVariant) : ""}"${x.id === s.id ? ' aria-current="page"' : ""}>${esc(x.color)}</a>`).join("")}</nav>
-    <nav class="tabs" aria-label="Strategie">${tabs.map(([k, l]) => `<a href="#/s/${s.id}${k === "platno" ? "" : "/" + k}"${k === tab ? ' aria-current="page"' : ""}>${l}</a>`).join("")}</nav>`;
+    <nav class="tabs" aria-label="Strategie">${tabs.map(([k, l]) => `<a href="#/s/${s.id}${k === "platno" ? "" : "/" + k}${curVariant ? "?v=" + esc(curVariant) : ""}"${k === tab ? ' aria-current="page"' : ""}>${l}</a>`).join("")}</nav>`;
 }
 
 function cellEntries(s, gid, pid) {
@@ -705,7 +708,7 @@ function modeBar() {
   return `<div class="vbar" role="group" aria-label="Varianta výbavy">${[["min", "Minimum", "hned po wipu"], ["ideal", "Ideál", "až máš odemčeno"]].map(([id, l, s]) =>
     `<button type="button" data-kitmode="${id}" aria-pressed="${kmode === id}"><b>${l}</b><small>${s}</small></button>`).join("")}</div>`;
 }
-function classCard(q, c, mode) {
+function classCard(q, c, mode, h = "h2") {
   const k = c.kit, inm = c.gear.map(g => inMode(g, mode));
   const store = c.gear.map((g, i) => g.slot === "storage" && inm[i]).filter(Boolean);
   const names = new Set(inm.filter(Boolean).map(e => e.name));
@@ -717,7 +720,7 @@ function classCard(q, c, mode) {
     ? `<p class="need">Do ${target[0]} ti chybí: ${need.map(esc).join(", ")}</p>`
     : `<p class="need ok">Na ${target[1]} máš všechno odemčené.</p>`);
   return `<article class="loadout" id="${esc(c.id)}">
-    <header class="lo-head"><div><h2 class="lo-name"><a href="${classHref(q, c)}">${esc(c.name)}</a></h2><p>${esc(c.job)}</p><p class="src">${c.screenshot ? "Ideál podle screenshotu ze hry (Season 1, 1. 10.)" : esc("Bez screenshotu - návrh z herních dat")}</p>${needLine}</div>${c.status === "NAVRH" ? '<span class="tag draft" title="Návrh, Commander ho zatím nevyhlásil">Návrh</span>' : ""}</header>
+    <header class="lo-head"><div><${h} class="lo-name"><a href="${classHref(q, c)}">${esc(c.name)}</a></${h}><p>${esc(c.job)}</p><p class="src">${c.screenshot ? "Ideál podle screenshotu ze hry (Season 1, 1. 10.)" : esc("Bez screenshotu - návrh z herních dat")}</p>${needLine}</div>${c.status === "NAVRH" ? '<span class="tag draft" title="Návrh, Commander ho zatím nevyhlásil">Návrh</span>' : ""}</header>
     <div class="lo-grid">
       <div><h3>Equipment</h3>${["slot1", "slot2", "slot3"].map(s => slotCell(c, s, mode)).join("")}
         <h3>Gear</h3><div class="lo-gear">${["helmet", "armor", "vest"].map(s => slotCell(c, s, mode)).join("")}</div></div>
@@ -742,7 +745,7 @@ function viewSquadPage(q) {
 function viewClass(q, c) {
   const uses = D.strategies.map(s => [s, s.roles.filter(r => r.class === c.id)]).filter(([, rs]) => rs.length);
   return `<p class="crumb"><a href="#/squady">Squady</a> / <a href="#/squad/${q.id}">${esc(q.name)}</a> / ${esc(c.name)}</p>
-    ${modeBar()}${classCard(q, c, kmode)}
+    ${modeBar()}${classCard(q, c, kmode, "h1")}
     ${uses.length ? `<section class="block"><h2>Role v plánech</h2><ul class="uses">${uses.map(([s, rs]) => `<li>${esc(sideLabel(s))}: ${rs.map(r => roleLink(s, r)).join(" ")}</li>`).join("")}</ul></section>` : ""}`;
 }
 
@@ -1015,7 +1018,9 @@ $app.addEventListener("click", e => {
   if (t.dataset.rsvp) { setRsvp(t.dataset.rsvp); return; }
   if (t.dataset.unlock !== undefined) {
     t.disabled = true;  // no second toggle while saving; render() builds a fresh box from haveSet
-    setUnlock(t.dataset.unlock, t.checked).catch(err => { haveErr = saveErr(err); rerenderKeep(); });
+    const item = t.dataset.unlock;  // disabled box loses focus before keepFocus sees it: put it back (Viktor #027)
+    setUnlock(item, t.checked).catch(err => { haveErr = saveErr(err); rerenderKeep(); })
+      .finally(() => document.querySelector(`[data-unlock="${CSS.escape(item)}"]`)?.focus({ preventScroll: true }));
     return;
   }
   if (t.dataset.claim || t.dataset.unclaim) {
@@ -1031,6 +1036,7 @@ $app.addEventListener("click", e => {
     const y = window.scrollY;
     history.replaceState(history.state, "", location.hash.split("?")[0] + "?v=" + t.dataset.variant);
     render(); window.scrollTo(0, y);
+    document.querySelector(`[data-variant="${CSS.escape(t.dataset.variant)}"]`)?.focus({ preventScroll: true });
   }
   else if (t.dataset.trace) { trace = trace === t.dataset.trace ? null : t.dataset.trace; applyTrace(); }
   else if ("untrace" in t.dataset) { trace = null; applyTrace(); }
