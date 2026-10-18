@@ -960,7 +960,7 @@ function viewCoverage(season, members) {
     <section class="block"><h2>Sub-classy</h2><table class="data cov"><thead><tr><th>Sub-class</th><th class="num">Mají MINIMUM</th><th class="num">Mají IDEÁL</th></tr></thead><tbody>
     ${D.squads.map(q => q.classes.map(c => `<tr><td><a href="${classHref(q, c)}">${esc(q.name)} · ${esc(c.name)}</a></td><td class="num"><b>${ready(unlockNeeds(c, "min"))}</b></td><td class="num">${ready(unlockNeeds(c, "ideal"))}</td></tr>`).join("")).join("")}
     </tbody></table></section>
-    <section class="block"><h2>Předměty, které se musí odemknout</h2><table class="data cov"><thead><tr><th>Předmět</th><th class="num">Kolik</th><th>Kdo</th></tr></thead><tbody>
+    <section class="block"><h2>Kdo má odemčeno</h2><p class="note">Předměty, které se musí ve hře odemknout, a kdo z nás je už má (podle zaškrtnutí „mám“).</p><table class="data cov"><thead><tr><th>Předmět</th><th class="num">Mají</th><th>Kdo</th></tr></thead><tbody>
     ${items.map(n => { const ms = byItem[n] || []; return `<tr><td>${esc(n)}</td><td class="num"><b>${ms.length}</b></td><td>${ms.map(memberLink).join(" ")}</td></tr>`; }).join("")}
     </tbody></table></section>`;
 }
