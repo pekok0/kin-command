@@ -233,12 +233,19 @@ function renderRoster() {
     [...f.elements].filter(x => x.name).map(x => [x.name, x.type === "checkbox" ? x.checked : x.value])]);
   const opened = [...el.querySelectorAll("details[open]")].map(d => d.className);
   keepFocus(() => { el.innerHTML = viewRoster(plan); });
+  const pb = document.getElementById("plan-body");
+  if (pb && pb.dataset.swarm !== String(+swarmEv())) {
+    pb.dataset.swarm = String(+swarmEv());
+    pb.innerHTML = swarmEv() ? SWARM_BOX : planMatrix;
+    applyTrace();
+  }
   for (const c of opened) { const d = el.querySelector(`details.${c}`); if (d) d.open = true; }
   for (const [name, fields] of keep) {
     const f = el.querySelector(`form[data-form="${name}"]`);
     if (!f) continue;
     for (const [k, v] of fields) { const x = f.elements[k]; if (!x) continue; if (x.type === "checkbox") x.checked = v; else x.value = v; }
   }
+  el.querySelectorAll('select[name="doctrine"]').forEach(swarmHint);
 }
 
 async function claim(key) {
@@ -280,7 +287,8 @@ function newEventForm(s) {
   // the SWARM canvas belongs to no map: ask which map and side the event is for (kept for history)
   const pick = s.swarm
     ? `<label>Mapa a strana <select name="strategy" required>${D.strategies.map(x => `<option value="${esc(x.id)}">${esc(sideLabel(x))}</option>`).join("")}</select></label>`
-    : '<label>Doktrína <select name="doctrine"><option value="defence">Top defence (plán mapy)</option><option value="swarm">Top attack (SWARM)</option></select></label>';
+    : '<label>Doktrína <select name="doctrine"><option value="defence">Top defence (plán mapy)</option><option value="swarm">Top attack (SWARM)</option></select></label>'
+      + '<p class="note wide swarm-hint" hidden>Top attack nemá plán pro jednotlivé mapy. Opening níže patří k Top defence, po založení tě to přepne na plátno SWARM.</p>';
   return `<form class="evf" data-form="new"><p class="note">Žádná akce není otevřená.</p>
     <label>Začátek <input type="datetime-local" name="starts" required min="${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}T00:00"></label>
     ${pick}
@@ -313,6 +321,9 @@ async function cancelEvent(btn) {
   state.flash = error ? saveErr(error) : !data.length ? "Akci se nepodařilo zrušit: už není otevřená, nebo nemáš práva Commandera." : null;
   await loadEvent();
 }
+
+function swarmHint(sel) { const h = sel.form && sel.form.querySelector(".swarm-hint"); if (h) h.hidden = sel.value !== "swarm"; }
+document.addEventListener("change", e => { if (e.target.name === "doctrine") swarmHint(e.target); });
 
 document.addEventListener("submit", async e => {
   const f = e.target.closest("form[data-form]");
@@ -364,6 +375,10 @@ let cur = null;    // current strategy
 // the roster this page signs people up to: the map plan (Top defence) or the SWARM canvas (specs/akce-swarm)
 let plan = null;
 const swarmPlan = () => ({ id: "swarm", swarm: true, roster: D.doktrina.swarm.roster, fill_order: [], variants: [] });
+// an open SWARM event: the map's Top defence opening does not apply (Petr 2026-10-18), the canvas does
+const swarmEv = () => !!(state.me && state.event && state.event.doctrine === "swarm");
+const SWARM_BOX = '<section class="block swarm-plan"><h2>Dnes Top attack (SWARM)</h2><p>Opening Top defence na této mapě dnes neplatí. Sestava, nákup a postupy jsou na <a href="#/doktrina/swarm">plátně SWARM</a>. Kontaktní zóny nahoře platí dál.</p></section>';
+let planMatrix = "";  // the map's Top defence plan, kept to swap back when the SWARM event ends
 const forPlan = (ev, s) => s.swarm ? ev.doctrine === "swarm" : ev.doctrine !== "swarm" && ev.strategy_id === s.id;
 let trace = null;  // traced role id on the canvas
 let curVariant = null;  // control-zone placement shown for the current strategy
@@ -561,12 +576,13 @@ function viewCanvas(s) {
     const sync = p.sync ? `<tr class="sync"><td colspan="${s.groups.length + 1}"><span class="synctag">SYNC</span>${esc(p.sync)}</td></tr>` : "";
     return `<tr class="phase"><th scope="row"><span class="pl">PL ${esc(p.id)}</span><b>${esc(p.name)}</b>${p.time ? `<time>${esc(p.time)}</time>` : ""}${p.text && !quiet ? `<p>${esc(p.text)}</p>` : ""}</th>${cells}</tr>${sync}`;
   }).join("");
+  planMatrix = `<div class="tracebar" id="tracebar" aria-live="polite"></div>
+    <div class="matrix-wrap"><table class="matrix" id="matrix"><colgroup><col class="ph">${s.groups.map(() => "<col>").join("")}</colgroup><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
   return `
     ${variantPanel(s)}
     <section class="intent"><h2>Záměr</h2><ul class="bullets">${s.intent.map(i => `<li>${esc(i)}</li>`).join("")}</ul></section>
     <section class="sestava" id="sestava">${viewRoster(s)}</section>
-    <div class="tracebar" id="tracebar" aria-live="polite"></div>
-    <div class="matrix-wrap"><table class="matrix" id="matrix"><colgroup><col class="ph">${s.groups.map(() => "<col>").join("")}</colgroup><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
+    <div id="plan-body" data-swarm="${+swarmEv()}">${swarmEv() ? SWARM_BOX : planMatrix}</div>`;
 }
 
 function budgetBlock(s, gid, own = null) {
