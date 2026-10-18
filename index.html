@@ -412,9 +412,9 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .rslot[disabled] { cursor: default; }
 .rslot .lbl { flex: 1 1 9em; min-width: 7em; color: var(--ink-2); }
 .rslot .lbl .rid { margin-right: 8px; }
-.rslot .nm { font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 11em; }
-.rslot.n .lbl { flex: 0 0 2em; min-width: 0; }  /* SWARM: numbered slot, the nick gets the room (Petr 2026-10-18) */
-.rslot.n .nm { flex: 1; max-width: none; white-space: normal; overflow-wrap: anywhere; }
+.rslot .nm { font-weight: 600; color: var(--ink); overflow-wrap: anywhere; max-width: 11em; }  /* long nicks wrap, never cut (Petr 2026-10-18) */
+.ros.swarm .rslot .lbl { flex: 0 0 auto; min-width: 2em; }  /* SWARM labels are "1" or "Střelec": the nick gets the room */
+.ros.swarm .rslot .nm { flex: 1; max-width: none; }
 .rslot .free { font: 600 13px/1 var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); border: 1px dashed var(--rule); padding: 5px 7px 4px; }
 .rg li.is-me .rslot { background: var(--fr-fill); box-shadow: inset 0 0 0 1px var(--fr); }
 .kick { padding: 8px; color: var(--ink-3); }
