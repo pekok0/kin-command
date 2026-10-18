@@ -423,10 +423,13 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .evf label { display: grid; gap: 6px; font: 600 13px/1 var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
 .evf label.wide { flex: 1 1 28ch; }
 .evf input, .evf select, .evf textarea { font: 500 16px/1.3 var(--sans); color: var(--ink); background: var(--panel-2); border: 1px solid var(--rule); padding: 7px 8px; }
-.evclose { margin-top: 14px; }
-.evclose summary { display: inline-block; cursor: pointer; font: 600 14px/1 var(--cond); letter-spacing: .06em; text-transform: uppercase; padding: 8px 10px 7px; border: 1px solid var(--rule); }
+.evclose { margin: 0 0 8px; }
+.evcancel { margin: 0 0 12px; }
+.evclose summary, .evcancel summary { display: inline-block; cursor: pointer; font: 600 14px/1 var(--cond); letter-spacing: .06em; text-transform: uppercase; padding: 8px 10px 7px; border: 1px solid var(--rule); }
 .evclose summary:hover { border-color: var(--fr); }
+.evcancel summary:hover { border-color: var(--ho); }
 .evclose[open] form { margin-top: 12px; }
+.evcancel[open] .note { margin: 10px 0 8px; }
 .miss { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: -4px 0 12px; font: 600 15px/1 var(--cond); letter-spacing: .04em; color: var(--ho); }
 .miss.ok { color: var(--fr); }
 .miss .rid { padding: 6px 7px 5px; margin: 2px 0; }

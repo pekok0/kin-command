@@ -192,7 +192,8 @@ function viewRoster(s) {
   if (!ev) return state.evErr ? `${head}${msg}`
     : `${head}${state.me.is_commander ? newEventForm(s) : '<p class="note">Žádná akce není otevřená. Založí ji Commander.</p>'}${msg}`;
   const other = S(ev.strategy_id);
-  if (ev.strategy_id !== s.id) return `${head}<p class="note">Otevřená akce (${esc(fmtWhen(ev.starts_at))}) je pro <a href="#/s/${esc(ev.strategy_id)}">${esc(other ? sideLabel(other) : ev.strategy_id)}</a>.</p>${msg}`;
+  const cancel = state.me.is_commander ? cancelEventForm() : "";
+  if (ev.strategy_id !== s.id) return `${head}<p class="note">Otevřená akce (${esc(fmtWhen(ev.starts_at))}) je pro <a href="#/s/${esc(ev.strategy_id)}">${esc(other ? sideLabel(other) : ev.strategy_id)}</a>.</p>${msg}${cancel}`;
   const by = Object.fromEntries(state.claims.map(c => [c.slot_key, c]));
   const filled = state.claims.filter(c => s.roster.some(g => g.slots.some(x => x.key === c.slot_key))).length;
   const total = s.roster.reduce((n, g) => n + g.max, 0);
@@ -204,10 +205,11 @@ function viewRoster(s) {
     : '<p class="miss ok">Všechny role z plánu obsazené.</p>';
   return `<div class="ros-head">${head}<span class="num">${filled} <small>/ ${total}</small></span><time datetime="${esc(ev.starts_at)}">${esc(fmtWhen(ev.starts_at))}</time>${ev.leader ? `<span class="lead">Vede: <b>${esc(ev.leader.name)}</b></span>` : ""}</div>
     ${msg}
+    ${state.me.is_commander ? closeEventForm(s) : ""}
+    ${cancel}
     ${miss}
     ${rsvpBar()}
-    <div class="ros">${s.roster.map(g => rosterGroup(g, by)).join("")}</div>
-    ${state.me.is_commander ? closeEventForm(s) : ""}`;
+    <div class="ros">${s.roster.map(g => rosterGroup(g, by)).join("")}</div>`;
 }
 
 // realtime and tab-return re-render the block: keep what the Commander is typing into a form
@@ -271,6 +273,20 @@ function closeEventForm(s) {
     <label class="wide">Co ne <textarea name="went_wrong" maxlength="2000" rows="2"></textarea></label>
     <label class="wide">Co příště jinak <textarea name="next_time" maxlength="2000" rows="2"></textarea></label>
     <button type="submit" class="act">Uzavřít akci</button></form></details>`;
+}
+
+// a test or mistyped event: gone from the roster, never in history (008); <details> is the "are you sure" step
+function cancelEventForm() {
+  return `<details class="evcancel"><summary>Zrušit akci</summary><p class="note">Akce zmizí i se sestavou a do historie se neuloží. Pro odehranou akci použij „Uzavřít akci“.</p>
+    <button type="button" class="act" data-cancel>Zrušit akci</button></details>`;
+}
+
+async function cancelEvent(btn) {
+  btn.disabled = true;
+  // RLS that matches no row (no longer open, Commander rights lapsed) is not an error: count the rows
+  const { data, error } = await sb.from("events").update({ status: "cancelled" }).eq("id", state.event.id).select("id");
+  state.flash = error ? saveErr(error) : !data.length ? "Akci se nepodařilo zrušit: už není otevřená, nebo nemáš práva Commandera." : null;
+  await loadEvent();
 }
 
 document.addEventListener("submit", async e => {
@@ -848,7 +864,7 @@ async function loadHist(p) {
     } else if (p[0] === "akce") {
       const id = Number(p[1]);  // #/akce/abc: not an id, so "Akce neexistuje" instead of a database error (Viktor UAT #011)
       const { data: ev, error } = Number.isSafeInteger(id) && id > 0
-        ? await sb.from("events").select("id, strategy_id, starts_at, status, variant, placement, note, went_well, went_wrong, next_time").eq("id", id).maybeSingle()
+        ? await sb.from("events").select("id, strategy_id, starts_at, status, variant, placement, note, went_well, went_wrong, next_time").eq("id", id).neq("status", "cancelled").maybeSingle()
         : { data: null, error: null };
       if (error) throw error;
       const [cl, at] = ev ? await Promise.all([
@@ -1043,9 +1059,10 @@ function render() {
 }
 
 $app.addEventListener("click", e => {
-  const t = e.target.closest("[data-trace],[data-untrace],[data-pick],[data-me],[data-variant],[data-kitmode],[data-claim],[data-unclaim],[data-rsvp],[data-unlock]");
+  const t = e.target.closest("[data-trace],[data-untrace],[data-pick],[data-me],[data-variant],[data-kitmode],[data-claim],[data-unclaim],[data-rsvp],[data-unlock],[data-cancel]");
   if (!t) return;
   if (t.dataset.rsvp) { setRsvp(t.dataset.rsvp); return; }
+  if (t.dataset.cancel !== undefined) { cancelEvent(t); return; }
   if (t.dataset.unlock !== undefined) {
     t.disabled = true;  // no second toggle while saving; render() builds a fresh box from haveSet
     const item = t.dataset.unlock;  // disabled box loses focus before keepFocus sees it: put it back (Viktor #027)
