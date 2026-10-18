@@ -106,7 +106,7 @@ async function loadEvent() {
   if (!state.me) { state.event = null; state.claims = []; state.rsvps = []; renderRoster(); return; }
   const seq = ++loadSeq;
   try {
-    const { data: ev, error } = await sb.from("events").select("id, strategy_id, starts_at, leader:members!events_created_by_fkey(name)").eq("status", "open").maybeSingle();
+    const { data: ev, error } = await sb.from("events").select("id, strategy_id, doctrine, starts_at, leader:members!events_created_by_fkey(name)").eq("status", "open").maybeSingle();
     if (error) throw error;
     let claims = [], rsvps = [];
     if (ev) {
@@ -193,17 +193,20 @@ function viewRoster(s) {
     : `${head}${state.me.is_commander ? newEventForm(s) : '<p class="note">Žádná akce není otevřená. Založí ji Commander.</p>'}${msg}`;
   const other = S(ev.strategy_id);
   const cancel = state.me.is_commander ? cancelEventForm() : "";
-  if (ev.strategy_id !== s.id) return `${head}<p class="note">Otevřená akce (${esc(fmtWhen(ev.starts_at))}) je pro <a href="#/s/${esc(ev.strategy_id)}">${esc(other ? sideLabel(other) : ev.strategy_id)}</a>.</p>${msg}${cancel}`;
+  if (!forPlan(ev, s)) return `${head}<p class="note">Otevřená akce (${esc(fmtWhen(ev.starts_at))}) ${ev.doctrine === "swarm"
+    ? 'je Top attack: sestava je na <a href="#/doktrina/swarm">plátně SWARM</a>'
+    : `je pro <a href="#/s/${esc(ev.strategy_id)}">${esc(other ? sideLabel(other) : ev.strategy_id)}</a>`}.</p>${msg}${cancel}`;
   const by = Object.fromEntries(state.claims.map(c => [c.slot_key, c]));
   const filled = state.claims.filter(c => s.roster.some(g => g.slots.some(x => x.key === c.slot_key))).length;
   const total = s.roster.reduce((n, g) => n + g.max, 0);
   // without builders and logistics there is no FOB and no supplies: show the plan's fill order still open
   const missing = (s.fill_order || []).filter(id => !by[id]).map(id => roleOf(s, id)).filter(Boolean);
   // first 6 only: glanceable at a briefing and fewer chips to hit by mistake on a phone (a tap moves your slot)
-  const miss = missing.length
+  const miss = s.swarm ? slBar(filled)
+    : missing.length
     ? `<p class="miss">Chybí: ${missing.slice(0, 6).map(r => `<button type="button" class="rid" data-claim="${esc(r.id)}" title="${esc(r.id)} – ${esc(r.name)}">${esc(r.id)}</button>`).join(" ")}${missing.length > 6 ? ` <span class="more">a dalších ${missing.length - 6}</span>` : ""}</p>`
     : '<p class="miss ok">Všechny role z plánu obsazené.</p>';
-  return `<div class="ros-head">${head}<span class="num">${filled} <small>/ ${total}</small></span><time datetime="${esc(ev.starts_at)}">${esc(fmtWhen(ev.starts_at))}</time>${ev.leader ? `<span class="lead">Vede: <b>${esc(ev.leader.name)}</b></span>` : ""}</div>
+  return `<div class="ros-head">${head}<span class="num">${filled} <small>/ ${total}</small></span><time datetime="${esc(ev.starts_at)}">${esc(fmtWhen(ev.starts_at))}</time>${s.swarm ? `<span class="lead">Top attack (SWARM) · ${esc(sideOf(ev.strategy_id))}</span>` : ""}${ev.leader ? `<span class="lead">Vede: <b>${esc(ev.leader.name)}</b></span>` : ""}</div>
     ${msg}
     ${state.me.is_commander ? closeEventForm(s) : ""}
     ${cancel}
@@ -217,11 +220,11 @@ function renderRoster() {
   const home = document.getElementById("home-ev");
   if (home) home.innerHTML = homeEvent();
   const el = document.getElementById("sestava");
-  if (!el || !cur) return;
+  if (!el || !plan) return;
   const keep = [...el.querySelectorAll("form[data-form]")].map(f => [f.dataset.form,
     [...f.elements].filter(x => x.name).map(x => [x.name, x.type === "checkbox" ? x.checked : x.value])]);
   const opened = [...el.querySelectorAll("details[open]")].map(d => d.className);
-  keepFocus(() => { el.innerHTML = viewRoster(cur); });
+  keepFocus(() => { el.innerHTML = viewRoster(plan); });
   for (const c of opened) { const d = el.querySelector(`details.${c}`); if (d) d.open = true; }
   for (const [name, fields] of keep) {
     const f = el.querySelector(`form[data-form="${name}"]`);
@@ -231,7 +234,7 @@ function renderRoster() {
 }
 
 async function claim(key) {
-  const s = cur;  // the page may change while saving (render() sets cur = null off strategy pages, Viktor #029)
+  const s = plan;  // the page may change while saving (render() resets plan off roster pages, Viktor #029)
   const g = s.roster.find(g => g.slots.some(x => x.key === key)), slot = g.slots.find(x => x.key === key);
   const { error } = await sb.from("claims").upsert(
     { event_id: state.event.id, slot_key: key, slot_label: `${g.name} · ${slot.label}`, user_id: state.me.user_id },
@@ -243,7 +246,7 @@ async function claim(key) {
   } else if (error) state.flash = error.code === "42501" ? "Akce už je uzavřená." : saveErr(error);
   else {
     if (!state.evErr) state.flash = null;  // saved, but the reload failed: keep the outage message
-    if (slot.role) { me.set(`${s.id}/${slot.role}`); if (cur === s) renderNav(s.id); }
+    if (slot.role) { me.set(`${s.id}/${slot.role}`); if (plan === s) renderNav(s.id); }
   }
   renderRoster();
 }
@@ -256,10 +259,23 @@ async function unclaim(userId) {
 
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") loadEvent(); });
 
+// SWARM: Petr 2026-10-18 "1 squad leader na 5 lidi", every SL leads the whole swarm
+function slBar(n) {
+  const sl = new Set(plan.roster.find(g => g.id === "SL").slots.map(x => x.key));  // roster keys, not a prefix (OWASP L1)
+  const need = Math.ceil(n / 5), have = state.claims.filter(c => sl.has(c.slot_key)).length;
+  return n ? `<p class="miss${have >= need ? " ok" : ""}">Je vás ${n}: potřeba ${need} SL, máte ${have}.</p>`
+    : '<p class="miss">Zatím nikdo. Na každých 5 lidí je potřeba 1 Squad leader.</p>';
+}
+
 function newEventForm(s) {
+  // the SWARM canvas belongs to no map: ask which map and side the event is for (kept for history)
+  const pick = s.swarm
+    ? `<label>Mapa a strana <select name="strategy" required>${D.strategies.map(x => `<option value="${esc(x.id)}">${esc(sideLabel(x))}</option>`).join("")}</select></label>`
+    : '<label>Doktrína <select name="doctrine"><option value="defence">Top defence (plán mapy)</option><option value="swarm">Top attack (SWARM)</option></select></label>';
   return `<form class="evf" data-form="new"><p class="note">Žádná akce není otevřená.</p>
     <label>Začátek <input type="datetime-local" name="starts" required min="${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}T00:00"></label>
-    <button type="submit" class="act">Založit akci: ${esc(sideLabel(s))}</button></form>`;
+    ${pick}
+    <button type="submit" class="act">Založit akci: ${s.swarm ? "Top attack (SWARM)" : esc(sideLabel(s))}</button></form>`;
 }
 
 function closeEventForm(s) {
@@ -296,6 +312,7 @@ document.addEventListener("submit", async e => {
   const btn = f.querySelector('button[type="submit"]');
   if (btn.disabled) return;  // double click: the first submit is still saving
   btn.disabled = true;
+  const s = plan;  // before any await: leaving the page mid-save resets plan (OWASP L2)
   const v = Object.fromEntries(new FormData(f)), eventId = state.event && state.event.id;
   // attendance = exactly what the Commander saw and ticked in this form (state.claims may be mid-reload);
   // written first: if closing fails the event stays open and this upsert can simply run again
@@ -304,12 +321,15 @@ document.addEventListener("submit", async e => {
     const { error: e1 } = await sb.from("attendance").upsert(att, { onConflict: "event_id,user_id" });
     if (e1) { state.flash = e1.code === "42501" ? "Docházku se nepodařilo uložit, zkus to znovu." : saveErr(e1); btn.disabled = false; renderRoster(); return; }
   }
+  const doctrine = s.swarm ? "swarm" : v.doctrine || "defence";
   const { error } = f.dataset.form === "new"
-    ? await sb.from("events").insert({ strategy_id: cur.id, starts_at: new Date(v.starts).toISOString() })
+    ? await sb.from("events").insert({ strategy_id: v.strategy || s.id, doctrine, starts_at: new Date(v.starts).toISOString() })
     : await sb.from("events").update({ status: "closed", placement: Number(v.placement), variant: v.variant || null,
         went_well: v.went_well || null, went_wrong: v.went_wrong || null, next_time: v.next_time || null }).eq("id", eventId);
   state.flash = !error ? null : error.code === "23505" ? "Už je otevřená jiná akce." : saveErr(error);
   btn.disabled = false;
+  // a SWARM event founded on a map page: its roster lives on the SWARM canvas, go there
+  if (!error && f.dataset.form === "new" && doctrine === "swarm" && !s.swarm) location.hash = "#/doktrina/swarm";
   await loadEvent();
 });
 
@@ -332,6 +352,10 @@ document.addEventListener("click", e => {
 const $app = document.getElementById("app");
 const KEY = "wrd.role";
 let cur = null;    // current strategy
+// the roster this page signs people up to: the map plan (Top defence) or the SWARM canvas (specs/akce-swarm)
+let plan = null;
+const swarmPlan = () => ({ id: "swarm", swarm: true, roster: D.doktrina.swarm.roster, fill_order: [], variants: [] });
+const forPlan = (ev, s) => s.swarm ? ev.doctrine === "swarm" : ev.doctrine !== "swarm" && ev.strategy_id === s.id;
 let trace = null;  // traced role id on the canvas
 let curVariant = null;  // control-zone placement shown for the current strategy
 const inV = x => !x.variants || x.variants.includes(curVariant);
@@ -457,7 +481,8 @@ function homeEvent() {
   const mine = state.claims.find(c => c.user_id === state.me.user_id);
   const said = (state.rsvps || []).find(r => r.user_id === state.me.user_id);
   const status = mine ? `Máš místo: ${esc(mine.slot_label)}` : said ? `Tvoje odpověď: ${esc((RSVP.find(x => x[0] === said.status) || [, said.status])[1])}` : "Zatím bez odpovědi a bez místa: otevři sestavu";
-  return `<a class="cont evc" href="#/s/${esc(ev.strategy_id)}"><span class="big">Akce</span><span>${esc(fmtWhen(ev.starts_at))} · ${esc(sideOf(ev.strategy_id))}<small>${status}</small></span></a>`;
+  const swarm = ev.doctrine === "swarm";
+  return `<a class="cont evc" href="${swarm ? "#/doktrina/swarm" : `#/s/${esc(ev.strategy_id)}`}"><span class="big">Akce</span><span>${esc(fmtWhen(ev.starts_at))} · ${esc(sideOf(ev.strategy_id))}${swarm ? " · Top attack" : ""}<small>${status}</small></span></a>`;
 }
 
 function viewHome() {
@@ -675,13 +700,15 @@ function viewDefence(k) {
     <section class="block"><h2>Výbava</h2><p>${esc(k.defence.kit)}</p></section>`;
 }
 
+// the SWARM canvas (Petr 2026-10-18): one big squad -- sign up, see who does what, read what to buy
 function viewSwarm(k) {
   const s = k.swarm;
   return `
+    <section class="sestava" id="sestava">${viewRoster(plan)}</section>
+    <section class="block" id="swarm-kit"><h2>Role a nákup</h2>${s.slots.map(r => `<div class="sq"><h3>${esc(r.name)} <small>${esc(r.count)}</small></h3><p>${esc(r.goal)}</p>${shopList(null, { gear: r.gear, extras_kit: r.kit })}</div>`).join("")}</section>
     <section class="block" id="swarm"><div class="t-row"><h2>Jádro</h2><span class="tag draft" title="Jádro je Commanderovo, podrobnosti navrhl štáb a potvrdí Commander">Návrh</span></div><p>${esc(s.tagline)}</p>${bullets(s.points)}</section>
     <section class="block"><h2>Principy</h2>${procList(s.principles)}</section>
     <section class="block"><h2>Velení a komunikace</h2>${bullets(s.command)}</section>
-    <section class="block"><h2>Squady a role</h2>${s.role.map(sqDoc).join("")}</section>
     <section class="block"><h2>Postupy</h2>${s.procedure.map(x => `<div class="sq"><h3>${esc(x.title)}</h3>${procList(x.steps)}</div>`).join("")}</section>
     <section class="block"><h2>Protokoly: když se stane, reaguj</h2>${docRx(s.protocol)}</section>
     <section class="block"><h2>Výbava podle odemčení (Season 2)</h2>${bullets(s.kit)}</section>
@@ -695,10 +722,10 @@ function viewDoktrina(tab) {
   return `
     <div class="narrow">
     <header class="unit-head"><div><h1>Doktrína</h1><p>Platí pro všechny mapy a barvy. Kterou hrajeme, rozhodne Commander před zápasem.</p></div></header>
-    <section class="block"><h2>Dvě doktríny</h2><table class="data"><thead><tr><th></th><th>${esc(k.defence.title)}</th><th>${esc(k.swarm.title)}</th></tr></thead><tbody>
-      ${k.compare.map(r => `<tr><td><b>${esc(r.aspect)}</b></td><td>${esc(r.defence)}</td><td>${esc(r.swarm)}</td></tr>`).join("")}</tbody></table></section>
     <nav class="tabs" aria-label="Doktrína">${tabs.map(([path, label], i) => `<a href="#/doktrina${path}"${(i === 1) === swarm ? ' aria-current="page"' : ""}>${esc(label)}</a>`).join("")}</nav>
     ${swarm ? viewSwarm(k) : viewDefence(k)}
+    <section class="block"><h2>Dvě doktríny</h2><table class="data"><thead><tr><th></th><th>${esc(k.defence.title)}</th><th>${esc(k.swarm.title)}</th></tr></thead><tbody>
+      ${k.compare.map(r => `<tr><td><b>${esc(r.aspect)}</b></td><td>${esc(r.defence)}</td><td>${esc(r.swarm)}</td></tr>`).join("")}</tbody></table></section>
     </div>`;
 }
 
@@ -857,14 +884,14 @@ async function loadHist(p) {
       if (error) throw error;
       html = viewCoverage(s, data);
     } else if (p[0] === "historie") {
-      const { data, error } = await sb.from("events").select("id, strategy_id, starts_at, variant, placement, claims(count)")
+      const { data, error } = await sb.from("events").select("id, strategy_id, doctrine, starts_at, variant, placement, claims(count)")
         .eq("status", "closed").order("starts_at", { ascending: false });
       if (error) throw error;
       html = viewHistory(data);
     } else if (p[0] === "akce") {
       const id = Number(p[1]);  // #/akce/abc: not an id, so "Akce neexistuje" instead of a database error (Viktor UAT #011)
       const { data: ev, error } = Number.isSafeInteger(id) && id > 0
-        ? await sb.from("events").select("id, strategy_id, starts_at, status, variant, placement, note, went_well, went_wrong, next_time").eq("id", id).neq("status", "cancelled").maybeSingle()
+        ? await sb.from("events").select("id, strategy_id, doctrine, starts_at, status, variant, placement, note, went_well, went_wrong, next_time").eq("id", id).neq("status", "cancelled").maybeSingle()
         : { data: null, error: null };
       if (error) throw error;
       const [cl, at] = ev ? await Promise.all([
@@ -934,7 +961,7 @@ function viewHistory(evs) {
   if (!evs.length) return `${head}<p class="note">Zatím žádná uzavřená akce. Commander ji uzavře v bloku Sestava po zápase.</p>`;
   return head + bySeason(evs, e => e.starts_at).map(({ s, rows }) => `<section class="block"><h2>${esc(seasonName(s))}</h2>
     <table class="data hist"><thead><tr><th>Datum</th><th>Mapa</th><th>Zóna</th><th class="num">Umístění</th><th class="num">Zapsáno</th></tr></thead><tbody>
-    ${rows.map(e => `<tr><td><a href="#/akce/${e.id}">${esc(fmtWhen(e.starts_at))}</a></td><td>${esc(sideOf(e.strategy_id))}</td><td>${esc(variantName(e.strategy_id, e.variant))}</td><td class="num"><b>${place(e.placement)}</b></td><td class="num">${e.claims[0] ? e.claims[0].count : 0}</td></tr>`).join("")}
+    ${rows.map(e => `<tr><td><a href="#/akce/${e.id}">${esc(fmtWhen(e.starts_at))}</a></td><td>${esc(sideOf(e.strategy_id))}${e.doctrine === "swarm" ? " · Top attack" : ""}</td><td>${esc(variantName(e.strategy_id, e.variant))}</td><td class="num"><b>${place(e.placement)}</b></td><td class="num">${e.claims[0] ? e.claims[0].count : 0}</td></tr>`).join("")}
     </tbody></table></section>`).join("");
 }
 
@@ -945,7 +972,7 @@ function viewEvent(ev, claims, absent = new Set()) {
   const played = claims.length - claims.filter(c => absent.has(c.user_id)).length;
   const debrief = [["Co fungovalo", ev.went_well], ["Co ne", ev.went_wrong], ["Co příště jinak", ev.next_time]].filter(([, t]) => t);
   return `<p class="crumb"><a href="#/historie">Historie</a> / ${esc(fmtWhen(ev.starts_at))}</p>
-    <header class="unit-head"><div><h1>${esc(sideOf(ev.strategy_id))}</h1><p>${esc(fmtWhen(ev.starts_at))} · ${esc(seasonName(seasonOf(ev.starts_at)))}${ev.status === "open" ? " · probíhá" : ""}</p></div></header>
+    <header class="unit-head"><div><h1>${esc(sideOf(ev.strategy_id))}${ev.doctrine === "swarm" ? " · Top attack" : ""}</h1><p>${esc(fmtWhen(ev.starts_at))} · ${esc(seasonName(seasonOf(ev.starts_at)))}${ev.status === "open" ? " · probíhá" : ""}</p></div></header>
     <p class="lede">Umístění <b>${place(ev.placement)}</b> · zóna ${esc(variantName(ev.strategy_id, ev.variant))} · ${played === claims.length ? plural(played, "člověk", "lidé", "lidí") : `hrálo ${played} z ${claims.length} zapsaných`}</p>
     ${debrief.length ? `<section class="block"><h2>Debrief</h2><dl class="debrief">${debrief.map(([h, t]) => `<dt>${h}</dt><dd class="evnote">${esc(t)}</dd>`).join("")}</dl></section>` : ""}
     ${ev.note ? `<section class="block"><h2>Poznámka Commandera</h2><p class="evnote">${esc(ev.note)}</p></section>` : ""}
@@ -1032,9 +1059,9 @@ function render() {
   }
   const p = h.split("/").filter(Boolean);
   let html, active = null, title = "KIN Central Command";
-  cur = null; trace = null;
+  cur = null; trace = null; plan = p[0] === "doktrina" && p[1] === "swarm" ? swarmPlan() : null;
   if (p[0] === "s" && S(p[1])) {
-    const s = S(p[1]); cur = s; active = s.id; curVariant = pickVariant(s, qs);
+    const s = S(p[1]); cur = plan = s; active = s.id; curVariant = pickVariant(s, qs);
     const r = p[2] === "role" && roleOf(s, p[3]), g = p[2] === "squad" && groupOf(s, p[3]);
     if (r) { html = viewRole(s, r); title = `${r.id} ${r.name} · KIN`; }
     else if (g) { html = viewSquad(s, g); title = `${g.name} · KIN`; }
