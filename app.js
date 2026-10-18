@@ -216,7 +216,15 @@ function viewRoster(s) {
 }
 
 // realtime and tab-return re-render the block: keep what the Commander is typing into a form
+// an open SWARM event: every other page points there (a saved role opens the Top defence card, Viktor #001)
+function renderEvBar() {
+  const ev = state.me && state.event, bar = document.getElementById("evbar");
+  if (bar) bar.innerHTML = ev && ev.doctrine === "swarm" && !(plan && plan.swarm)
+    ? `<a href="#/doktrina/swarm"><b>Akce ${esc(fmtWhen(ev.starts_at))}: Top attack (SWARM).</b> Sestava a co koupit jsou na plátně SWARM.</a>` : "";
+}
+
 function renderRoster() {
+  renderEvBar();
   const home = document.getElementById("home-ev");
   if (home) home.innerHTML = homeEvent();
   const el = document.getElementById("sestava");
@@ -237,7 +245,8 @@ async function claim(key) {
   const s = plan;  // the page may change while saving (render() resets plan off roster pages, Viktor #029)
   const g = s.roster.find(g => g.slots.some(x => x.key === key)), slot = g.slots.find(x => x.key === key);
   const { error } = await sb.from("claims").upsert(
-    { event_id: state.event.id, slot_key: key, slot_label: `${g.name} · ${slot.label}`, user_id: state.me.user_id },
+    // SWARM: one role, not "Swarm · 14" (stats count labels as roles, Viktor #005)
+    { event_id: state.event.id, slot_key: key, slot_label: s.swarm ? g.name : `${g.name} · ${slot.label}`, user_id: state.me.user_id },
     { onConflict: "event_id,user_id" });
   await loadEvent();
   if (error && error.code === "23505") {
@@ -1081,6 +1090,7 @@ function render() {
   $app.innerHTML = html;
   document.title = title;
   renderNav(active);
+  renderEvBar();
   applyTrace();
   window.scrollTo(0, 0);
 }

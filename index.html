@@ -424,6 +424,8 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .evf label.wide { flex: 1 1 28ch; }
 .evf input, .evf select, .evf textarea { font: 500 16px/1.3 var(--sans); color: var(--ink); background: var(--panel-2); border: 1px solid var(--rule); padding: 7px 8px; }
 .evclose { margin: 0 0 8px; }
+#evbar a { display: block; margin: 10px 0 0; padding: 9px 12px; border: 1px solid var(--ho); color: var(--ink); font: 600 15px/1.3 var(--cond); letter-spacing: .04em; text-decoration: none; }
+#evbar a b { color: var(--ho); }
 .evcancel { margin: 0 0 12px; }
 .evclose summary, .evcancel summary { display: inline-block; cursor: pointer; font: 600 14px/1 var(--cond); letter-spacing: .06em; text-transform: uppercase; padding: 8px 10px 7px; border: 1px solid var(--rule); }
 .evclose summary:hover { border-color: var(--fr); }
@@ -534,6 +536,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
   <nav id="nav" aria-label="Hlavní"></nav>
   <div id="who" class="who" aria-live="polite"></div>
 </div></header>
+<div id="evbar" class="wrap"></div>
 <main id="app" class="wrap"></main>
 <footer class="foot"><div class="wrap" id="foot"></div></footer>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok" crossorigin="anonymous"></script>
