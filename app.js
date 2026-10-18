@@ -253,7 +253,7 @@ async function claim(key) {
   const g = s.roster.find(g => g.slots.some(x => x.key === key)), slot = g.slots.find(x => x.key === key);
   const { error } = await sb.from("claims").upsert(
     // SWARM: one role, not "Swarm · 14" (stats count labels as roles, Viktor #005)
-    { event_id: state.event.id, slot_key: key, slot_label: s.swarm ? g.name : `${g.name} · ${slot.label}`, user_id: state.me.user_id },
+    { event_id: state.event.id, slot_key: key, slot_label: s.swarm && /^\d+$/.test(slot.label) ? g.name : `${g.name} · ${slot.label}`, user_id: state.me.user_id },
     { onConflict: "event_id,user_id" });
   await loadEvent();
   if (error && error.code === "23505") {
