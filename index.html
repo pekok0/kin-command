@@ -397,6 +397,7 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 
 /* ---- sestava ---- */
 .sestava { margin-top: 36px; }
+.hist-h { margin-top: 40px; }
 .ros-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 14px; }
 .ros-head h2 { margin: 0; }
 .ros-head .num { font: 700 22px/1 var(--cond); }
@@ -421,7 +422,7 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .kick:hover { color: var(--ho); }
 .ros-msg { position: sticky; top: 60px; z-index: 4; margin-top: 12px; padding: 8px 10px; background: var(--ground); border: 1px solid var(--ho); }  /* sticky: errors from slots low in the grid and the close form stay on screen */
 .evf { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
-.evf .note { width: 100%; margin: 0; }
+.evf .note { flex: 1 1 100%; max-width: none; margin: 0; }  /* a full row: else the fields sit beside it */
 .evf label { display: grid; gap: 6px; font: 600 13px/1 var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
 .evf label.wide { flex: 1 1 28ch; }
 .evf input, .evf select, .evf textarea { font: 500 16px/1.3 var(--sans); color: var(--ink); background: var(--panel-2); border: 1px solid var(--rule); padding: 7px 8px; }
@@ -500,15 +501,13 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
   main { padding-top: 20px; }
   .bar .wrap { gap: 10px; min-height: 52px; }
   .brand span:last-child { display: none; }
-  .bar nav a { padding: 8px 7px 7px; font-size: 14px; }
-  /* one-row bar on phones: the nav scrolls sideways instead of stacking rows over the role card */
-  .brand { margin-right: 0; }
-  .bar nav { flex: 1; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-  .bar nav::-webkit-scrollbar { display: none; }
-  /* fading right edge says "more links this way"; ponytail: always on, also when scrolled to the end */
-  .bar nav { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
-             mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+  .bar nav a { padding: 8px 6px 7px; font-size: 14px; }
+  /* five items since 2026-10-19 (specs/akce-flow A8): the nav gets its own full-width row, nothing hidden sideways
+     (with 8 items it scrolled sideways and "Moje role" kept falling out of view, Viktor #005 #024) */
+  .bar .wrap { flex-wrap: wrap; row-gap: 0; }
+  .bar nav { order: 3; flex: 1 1 100%; flex-wrap: nowrap; justify-content: space-between; margin: 0 -6px 4px; }
   .bar nav a { white-space: nowrap; }
+  .tabs a { padding: 11px 8px 10px; font-size: 14px; letter-spacing: .05em; }  /* Doktrina has 3 tabs since 2026-10-19 */
   #who .long { display: none; }
   .intent { grid-template-columns: 1fr; gap: 8px; }
   .steps li { grid-template-columns: 1fr; }
