@@ -177,11 +177,9 @@ function slotRow(x, c) {
   return `<li${mine ? ' class="is-me"' : ""}><button type="button" class="rslot" ${act}><span class="lbl">${x.role ? `<span class="rid">${esc(x.role)}</span>` : ""}${esc(x.label)}</span>${who}</button>${kick}</li>`;
 }
 
-function rosterGroup(g, by, swarm) {
+function rosterGroup(g, by) {
   const n = g.slots.filter(x => by[x.key]).length;
-  // SWARM: the role's shopping list is far below on a phone, one tap away (Viktor #002)
-  const kit = swarm ? `<button type="button" class="kitl" data-kit="${esc(g.id)}">Co koupit</button>` : "";
-  return `<div class="rg"><div class="pg-head">${sym(g.symbol, "sm")}<div><b>${esc(g.name)}</b><small>${esc(g.squad)}</small></div>${kit}<span class="num">${n}/${g.max}</span></div>
+  return `<div class="rg"><div class="pg-head">${sym(g.symbol, "sm")}<div><b>${esc(g.name)}</b><small>${esc(g.squad)}</small></div><span class="num">${n}/${g.max}</span></div>
     <ul>${g.slots.map(x => slotRow(x, by[x.key])).join("")}</ul></div>`;
 }
 
@@ -206,8 +204,8 @@ function viewRoster(s) {
   // first 6 only: glanceable at a briefing and fewer chips to hit by mistake on a phone (a tap moves your slot)
   // SWARM: my slot's shopping list one tap away (denbler 2026-10-19 "at si kazdy hned najde svoje")
   const myc = s.swarm && state.claims.find(c => c.user_id === state.me.user_id);
-  const myg = myc && s.roster.find(g => g.slots.some(x => x.key === myc.slot_key));
-  const mine = myg ? `<p class="mine-kit">Máš místo: <b>${esc(myg.name)}</b> <button type="button" class="kitl" data-kit="${esc(myg.id)}">Tvůj nákup</button></p>` : "";
+  const mys = myc && s.roster.flatMap(g => g.slots.map(x => ({ g, x }))).find(o => o.x.key === myc.slot_key);
+  const mine = mys ? `<p class="mine-kit">Máš místo: <b>${esc(mys.g.name)} · ${esc(mys.x.label)}</b> <button type="button" class="kitl" data-kit="${esc(mys.x.kit)}">Tvůj nákup</button></p>` : "";
   const miss = s.swarm ? slBar(filled)
     : missing.length
     ? `<p class="miss">Chybí: ${missing.slice(0, 6).map(r => `<button type="button" class="rid" data-claim="${esc(r.id)}" title="${esc(r.id)} – ${esc(r.name)}">${esc(r.id)}</button>`).join(" ")}${missing.length > 6 ? ` <span class="more">a dalších ${missing.length - 6}</span>` : ""}</p>`
@@ -219,7 +217,7 @@ function viewRoster(s) {
     ${miss}
     ${mine}
     ${rsvpBar()}
-    <div class="ros${s.swarm ? " swarm" : ""}">${s.roster.map(g => rosterGroup(g, by, s.swarm)).join("")}</div>`;
+    <div class="ros${s.swarm ? " swarm" : ""}">${s.roster.map(g => rosterGroup(g, by)).join("")}</div>`;
 }
 
 // realtime and tab-return re-render the block: keep what the Commander is typing into a form
@@ -271,8 +269,8 @@ async function claim(key) {
   const s = plan;  // the page may change while saving (render() resets plan off roster pages, Viktor #029)
   const g = s.roster.find(g => g.slots.some(x => x.key === key)), slot = g.slots.find(x => x.key === key);
   const { error } = await sb.from("claims").upsert(
-    // SWARM: one role, not "Swarm · 14" (stats count labels as roles, Viktor #005)
-    { event_id: state.event.id, slot_key: key, slot_label: s.swarm && /^\d+$/.test(slot.label) ? g.name : `${g.name} · ${slot.label}`, user_id: state.me.user_id },
+    // SWARM: the role, not "Squad 2 · Raketomet" (stats count labels as roles, Viktor #005)
+    { event_id: state.event.id, slot_key: key, slot_label: s.swarm ? slot.stat : `${g.name} · ${slot.label}`, user_id: state.me.user_id },
     { onConflict: "event_id,user_id" });
   await loadEvent();
   if (error && error.code === "23505") {
@@ -295,12 +293,14 @@ async function unclaim(userId) {
 
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") loadEvent(); });
 
-// SWARM: Petr 2026-10-18 "1 squad leader na 5 lidi", every SL leads the whole swarm
+// SWARM: Petr 2026-10-19 squads of 5 -- every squad with people in it needs its own SL
 function slBar(n) {
-  const sl = new Set(plan.roster.find(g => g.id === "SL").slots.map(x => x.key));  // roster keys, not a prefix (OWASP L1)
-  const need = Math.ceil(n / 5), have = state.claims.filter(c => sl.has(c.slot_key)).length;
-  return n ? `<p class="miss${have >= need ? " ok" : ""}">Je vás ${n}: potřeba ${need} SL, máte ${have}.</p>`
-    : '<p class="miss">Zatím nikdo. Na každých 5 lidí je potřeba 1 Squad leader.</p>';
+  const taken = new Set(state.claims.map(c => c.slot_key));  // roster keys, not a prefix (OWASP L1)
+  const bez = plan.roster.filter(g => g.slots.some(x => x.kit === "SL") && g.slots.some(x => taken.has(x.key))
+    && !g.slots.some(x => x.kit === "SL" && taken.has(x.key))).map(g => g.name);
+  return !n ? '<p class="miss">Zatím nikdo. Zapiš se do squadu, každý squad potřebuje svého SL.</p>'
+    : bez.length ? `<p class="miss">Je vás ${n}. Squady bez SL: ${esc(bez.join(", "))}.</p>`
+    : `<p class="miss ok">Je vás ${n}, každý obsazený squad má SL.</p>`;
 }
 
 function newEventForm(s) {
