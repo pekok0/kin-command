@@ -299,7 +299,7 @@ function slBar(n) {
   const bez = plan.roster.filter(g => g.slots.some(x => x.kit === "SL") && g.slots.some(x => taken.has(x.key))
     && !g.slots.some(x => x.kit === "SL" && taken.has(x.key))).map(g => g.name);
   return !n ? '<p class="miss">Zatím nikdo. Zapiš se do squadu, každý squad potřebuje svého SL.</p>'
-    : bez.length ? `<p class="miss">Je vás ${n}. Squady bez SL: ${esc(bez.join(", "))}.</p>`
+    : bez.length ? `<p class="miss warn">Je vás ${n}. Squady bez SL: ${esc(bez.join(", "))}.</p>`
     : `<p class="miss ok">Je vás ${n}, každý obsazený squad má SL.</p>`;
 }
 
@@ -763,7 +763,7 @@ function viewSwarm(k) {
     <section class="block"><h2>Postupy</h2>${s.procedure.map(x => `<div class="sq"><h3>${esc(x.title)}</h3>${procList(x.steps)}</div>`).join("")}</section>
     <section class="block"><h2>Protokoly: když se stane, reaguj</h2>${docRx(s.protocol)}</section>
     <section class="block"><h2>Výbava podle odemčení (Season 2)</h2>${bullets(s.kit)}</section>
-    <section class="block"><h2>Podle počtu lidí</h2><table class="data"><thead><tr>${s.sizes.cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>
+    <section class="block"><h2>Podle počtu lidí</h2><table class="data"><thead><tr>${s.sizes.cols.map(c => c ? `<th>${esc(c)}</th>` : "<td></td>").join("")}</tr></thead><tbody>
       ${s.sizes.rows.map(r => `<tr>${r.map((c, i) => i ? `<td>${esc(c)}</td>` : `<td><b>${esc(c)}</b></td>`).join("")}</tr>`).join("")}</tbody></table></section>`;
 }
 
@@ -775,7 +775,7 @@ function viewDoktrina(tab) {
     <header class="unit-head"><div><h1>Doktrína</h1><p>Platí pro všechny mapy a barvy. Kterou hrajeme, rozhodne Commander před zápasem.</p></div></header>
     <nav class="tabs" aria-label="Doktrína">${tabs.map(([path, label], i) => `<a href="#/doktrina${path}"${(i === 1) === swarm ? ' aria-current="page"' : ""}>${esc(label)}</a>`).join("")}</nav>
     ${swarm ? viewSwarm(k) : viewDefence(k)}
-    <section class="block"><h2>Dvě doktríny</h2><table class="data"><thead><tr><th></th><th>${esc(k.defence.title)}</th><th>${esc(k.swarm.title)}</th></tr></thead><tbody>
+    <section class="block"><h2>Dvě doktríny</h2><table class="data"><thead><tr><td></td><th>${esc(k.defence.title)}</th><th>${esc(k.swarm.title)}</th></tr></thead><tbody>
       ${k.compare.map(r => `<tr><td><b>${esc(r.aspect)}</b></td><td>${esc(r.defence)}</td><td>${esc(r.swarm)}</td></tr>`).join("")}</tbody></table></section>
     </div>`;
 }
