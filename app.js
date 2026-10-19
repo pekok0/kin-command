@@ -211,7 +211,7 @@ function viewRoster(s) {
     : missing.length
     ? `<p class="miss">Chybí: ${missing.slice(0, 6).map(r => `<button type="button" class="rid" data-claim="${esc(r.id)}" title="${esc(r.id)} – ${esc(r.name)}">${esc(r.id)}</button>`).join(" ")}${missing.length > 6 ? ` <span class="more">a dalších ${missing.length - 6}</span>` : ""}</p>`
     : '<p class="miss ok">Všechny role z plánu obsazené.</p>';
-  return `<div class="ros-head">${head}<span class="num">${filled} <small>/ ${total}</small></span><time datetime="${esc(ev.starts_at)}">${esc(fmtWhen(ev.starts_at))}</time><span class="lead">${s.swarm ? "Top attack (SWARM)" : "Top defence"} · ${esc(sideOf(ev.strategy_id))}</span>${ev.leader ? `<span class="lead">Vede: <b>${esc(ev.leader.name)}</b></span>` : ""}</div>
+  return `<div class="ros-head">${head}<span class="num">${filled} <small>/ ${total}</small></span><time datetime="${esc(ev.starts_at)}">${esc(fmtWhen(ev.starts_at))}</time><span class="lead">${esc(docName(s.swarm ? "swarm" : "defence"))} · ${esc(sideOf(ev.strategy_id))}</span>${ev.leader ? `<span class="lead">Vede: <b>${esc(ev.leader.name)}</b></span>` : ""}</div>
     ${msg}
     ${state.me.is_commander ? closeEventForm(s) : ""}
     ${cancel}
@@ -226,7 +226,7 @@ function viewRoster(s) {
 function akceBody() {
   const s = plan, ev = state.me && state.event;
   if (!ev || !s) return viewRoster(s);
-  const read = s.swarm ? '<a href="#/doktrina/swarm">Top attack (SWARM) v Doktríně</a>'
+  const read = s.swarm ? `<a href="#/doktrina/swarm">${esc(docName("swarm"))} v Doktríně</a>`
     : `<a href="#/s/${esc(s.id)}">${esc(sideLabel(s))}</a> (opening a kroky rolí)`;
   return `<p class="note planl">Plán ke čtení: ${read}</p>${viewRoster(s)}${s.swarm ? swarmMyKit() : ""}`;
 }
@@ -245,7 +245,7 @@ function swarmMyKit() {
 function renderEvBar() {
   const ev = state.me && state.event, bar = document.getElementById("evbar");
   if (bar) bar.innerHTML = ev && ev.doctrine === "swarm" && !["sestava", "ev-card", "home-ev"].some(id => document.getElementById(id))
-    ? `<a href="#/akce"><b>Akce ${esc(fmtWhen(ev.starts_at))}: Top attack (SWARM).</b> Zápis a tvůj nákup jsou v Akci.</a>` : "";
+    ? `<a href="#/akce"><b>Akce ${esc(fmtWhen(ev.starts_at))}: ${esc(docName("swarm"))}.</b> Zápis a tvůj nákup jsou v Akci.</a>` : "";
 }
 
 // returns a function that puts back the roster's typed forms and open <details> after a rebuild
@@ -277,7 +277,7 @@ function renderRoster() {
   const pb = document.getElementById("plan-body");
   if (pb && pb.dataset.swarm !== String(+swarmEv())) {
     pb.dataset.swarm = String(+swarmEv());
-    pb.innerHTML = swarmEv() ? SWARM_BOX : planMatrix;
+    pb.innerHTML = swarmEv() ? swarmBox() : planMatrix;
     applyTrace();
   }
   const el = document.getElementById("sestava");
@@ -331,7 +331,7 @@ function slBar(n) {
 function newEventForm() {
   return `<form class="evf" data-form="new"><p class="note">Žádná akce není otevřená.</p>
     <label>Začátek <input type="datetime-local" name="starts" required min="${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}T00:00"></label>
-    <label>Doktrína <select name="doctrine"><option value="defence">Top defence (plán mapy)</option><option value="swarm">Top attack (SWARM)</option></select></label>
+    <label>Doktrína <select name="doctrine">${["defence", "swarm"].map(d => `<option value="${d}">${esc(docOf(d).title)}: ${esc(docOf(d).short)}</option>`).join("")}</select></label>
     <label>Mapa a strana <select name="strategy" required>${D.strategies.map(x => `<option value="${esc(x.id)}">${esc(sideLabel(x))}</option>`).join("")}</select></label>
     <button type="submit" class="act">${esc(newLabel("defence", D.strategies[0]))}</button></form>`;
 }
@@ -364,7 +364,7 @@ async function cancelEvent(btn) {
 }
 
 // Viktor #003: the button says what gets founded
-const newLabel = (doctrine, s) => `Založit akci: ${doctrine === "swarm" ? "Top attack (SWARM)" : "Top defence"} · ${sideLabel(s)}`;
+const newLabel = (doctrine, s) => `Založit akci: ${docName(doctrine)} · ${sideLabel(s)}`;
 function newHint(f) {
   const b = f && f.querySelector('button[type="submit"]');
   if (b) b.textContent = newLabel(f.elements.doctrine.value, S(f.elements.strategy.value));
@@ -423,7 +423,10 @@ const swarmPlan = () => ({ id: "swarm", swarm: true, roster: D.doktrina.swarm.ro
 const planOf = ev => !ev ? null : ev.doctrine === "swarm" ? swarmPlan() : S(ev.strategy_id) || null;
 // an open SWARM event: the map's Top defence opening does not apply (Petr 2026-10-18), the canvas does
 const swarmEv = () => !!(state.me && state.event && state.event.doctrine === "swarm");
-const SWARM_BOX = '<section class="block swarm-plan"><h2>Dnes Top attack (SWARM)</h2><p>Opening Top defence na této mapě dnes neplatí. Zápis a tvůj nákup jsou v <a href="#/akce">Akci</a>, postupy v <a href="#/doktrina/swarm">Doktríně</a>. Kontaktní zóny nahoře platí dál.</p></section>';
+// doctrine names live in the content (Petr 2026-10-19: FORTRESS, SWARM); events store "defence" / "swarm"
+const docOf = d => d === "swarm" ? D.doktrina.swarm : D.doktrina.defence;
+const docName = d => docOf(d).title;
+const swarmBox = () => `<section class="block swarm-plan"><h2>Dnes ${esc(docName("swarm"))}</h2><p>Opening ${esc(docName("defence"))} na této mapě dnes neplatí. Zápis a tvůj nákup jsou v <a href="#/akce">Akci</a>, postupy v <a href="#/doktrina/swarm">Doktríně</a>. Kontaktní zóny nahoře platí dál.</p></section>`;
 let planMatrix = "";  // the map's Top defence plan, kept to swap back when the SWARM event ends
 let navActive = null;  // menu item of the current page, for re-rendering the nav after a claim
 let trace = null;  // traced role id on the canvas
@@ -551,8 +554,7 @@ function homeEvent() {
   const mine = state.claims.find(c => c.user_id === state.me.user_id);
   const said = (state.rsvps || []).find(r => r.user_id === state.me.user_id);
   const status = mine ? `Máš místo: ${esc(mine.slot_label)}` : said ? `Tvoje odpověď: ${esc((RSVP.find(x => x[0] === said.status) || [, said.status])[1])}` : "Zatím bez odpovědi a bez místa: otevři sestavu";
-  const swarm = ev.doctrine === "swarm";
-  return `<a class="cont evc" href="#/akce"><span class="big">Akce</span><span>${esc(fmtWhen(ev.starts_at))} · ${esc(sideOf(ev.strategy_id))}${swarm ? " · Top attack" : ""}<small>${status}</small></span></a>`;
+  return `<a class="cont evc" href="#/akce"><span class="big">Akce</span><span>${esc(fmtWhen(ev.starts_at))} · ${esc(sideOf(ev.strategy_id))} · ${esc(docName(ev.doctrine))}<small>${status}</small></span></a>`;
 }
 
 // reading pages (map, doctrine) show the open event as a card into Akce, nothing when none is open
@@ -560,7 +562,7 @@ const evCard = () => state.me && state.event ? homeEvent() : "";
 const sheetList = () => `<ul class="sheets">${D.strategies.map(s => `<li><a href="#/s/${s.id}"><b>${esc(s.map)}</b><span class="meta">${esc(s.color)} · ${esc(s.faction)} · ${esc(s.stage)}</span>${s.status === "DRAFT" ? '<span class="tag draft">Draft</span>' : ""}<span class="meta">${arrow()}</span></a></li>`).join("")}</ul>`;
 
 function viewMapy() {
-  return `<header class="unit-head"><div><h1>Mapy</h1><p>Plány Top defence pro každou mapu a stranu: opening, kontaktní zóny, kroky rolí. Na akci se zapisuješ v <a href="#/akce">Akci</a>.</p></div></header>
+  return `<header class="unit-head"><div><h1>Mapy</h1><p>Plány ${esc(docName("defence"))} pro každou mapu a stranu: opening, kontaktní zóny, kroky rolí. Na akci se zapisuješ v <a href="#/akce">Akci</a>.</p></div></header>
     <section class="block">${sheetList()}</section>`;
 }
 
@@ -591,7 +593,7 @@ function viewHome() {
       <li><span><a href="#/akce">Akce</a>: před akcí dej <b>Přijdu</b> a zaber si místo v <b>Sestavě</b>, ať hrajeme cokoli. Hned pod tím je tvůj nákup a odehrané akce po sezónách.</span></li>
       <li><span><a href="#/mapy">Mapy</a>: plán každé mapy a <b>karta tvé role</b> (co koupit, čím jedeš, co děláš v každé fázi). Nech si ji otevřenou na mobilu nebo druhém monitoru.</span></li>
       <li><span><a href="#/vybava">Výbava</a>: celá sestava tvé sub-classy, minimum po wipu i ideál. Zaškrtni, co máš odemčené. Kolik nás co umí, je v <a href="#/pokryti">Pokrytí</a>.</span></li>
-      <li><span><a href="#/doktrina">Doktrína</a>: jak klan hraje (Top defence, SWARM) a Výcvik.</span></li>
+      <li><span><a href="#/doktrina">Doktrína</a>: jak klan hraje (${esc(docName("defence"))}, ${esc(docName("swarm"))}) a Výcvik.</span></li>
     </ol></details>
     <section class="block" aria-labelledby="h-str"><h2 id="h-str">Mapy</h2>${sheetList()}
       <a class="doklink" href="#/doktrina">Doktrína: platí pro všechny mapy ${arrow()}</a></section>
@@ -635,7 +637,7 @@ function viewCanvas(s) {
     ${variantPanel(s)}
     <section class="intent"><h2>Záměr</h2><ul class="bullets">${s.intent.map(i => `<li>${esc(i)}</li>`).join("")}</ul></section>
     <div id="ev-card">${evCard()}</div>
-    <div id="plan-body" data-swarm="${+swarmEv()}">${swarmEv() ? SWARM_BOX : planMatrix}</div>`;
+    <div id="plan-body" data-swarm="${+swarmEv()}">${swarmEv() ? swarmBox() : planMatrix}</div>`;
 }
 
 function budgetBlock(s, gid, own = null) {
@@ -1044,7 +1046,7 @@ function viewHistory(evs) {
   if (!evs.length) return `${head}<p class="note">Zatím žádná uzavřená akce. Commander ji uzavře nahoře v Sestavě po zápase.</p>`;
   return head + bySeason(evs, e => e.starts_at).map(({ s, rows }) => `<section class="block"><h2>${esc(seasonName(s))}</h2>
     <table class="data hist"><thead><tr><th>Datum</th><th>Mapa</th><th>Zóna</th><th class="num">Umístění</th><th class="num">Zapsáno</th></tr></thead><tbody>
-    ${rows.map(e => `<tr><td><a href="#/akce/${e.id}">${esc(fmtWhen(e.starts_at))}</a></td><td>${esc(sideOf(e.strategy_id))}${e.doctrine === "swarm" ? " · Top attack" : ""}</td><td>${esc(variantName(e.strategy_id, e.variant))}</td><td class="num"><b>${place(e.placement)}</b></td><td class="num">${e.claims[0] ? e.claims[0].count : 0}</td></tr>`).join("")}
+    ${rows.map(e => `<tr><td><a href="#/akce/${e.id}">${esc(fmtWhen(e.starts_at))}</a></td><td>${esc(sideOf(e.strategy_id))} · ${esc(docName(e.doctrine))}</td><td>${esc(variantName(e.strategy_id, e.variant))}</td><td class="num"><b>${place(e.placement)}</b></td><td class="num">${e.claims[0] ? e.claims[0].count : 0}</td></tr>`).join("")}
     </tbody></table></section>`).join("");
 }
 
@@ -1055,7 +1057,7 @@ function viewEvent(ev, claims, absent = new Set()) {
   const played = claims.length - claims.filter(c => absent.has(c.user_id)).length;
   const debrief = [["Co fungovalo", ev.went_well], ["Co ne", ev.went_wrong], ["Co příště jinak", ev.next_time]].filter(([, t]) => t);
   return `<p class="crumb"><a href="#/akce">Akce</a> / ${esc(fmtWhen(ev.starts_at))}</p>
-    <header class="unit-head"><div><h1>${esc(sideOf(ev.strategy_id))}${ev.doctrine === "swarm" ? " · Top attack" : ""}</h1><p>${esc(fmtWhen(ev.starts_at))} · ${esc(seasonName(seasonOf(ev.starts_at)))}${ev.status === "open" ? " · probíhá" : ""}</p></div></header>
+    <header class="unit-head"><div><h1>${esc(sideOf(ev.strategy_id))} · ${esc(docName(ev.doctrine))}</h1><p>${esc(fmtWhen(ev.starts_at))} · ${esc(seasonName(seasonOf(ev.starts_at)))}${ev.status === "open" ? " · probíhá" : ""}</p></div></header>
     <p class="lede">Umístění <b>${place(ev.placement)}</b> · zóna ${esc(variantName(ev.strategy_id, ev.variant))} · ${played === claims.length ? plural(played, "člověk", "lidé", "lidí") : `hrálo ${played} z ${claims.length} zapsaných`}</p>
     ${debrief.length ? `<section class="block"><h2>Debrief</h2><dl class="debrief">${debrief.map(([h, t]) => `<dt>${h}</dt><dd class="evnote">${esc(t)}</dd>`).join("")}</dl></section>` : ""}
     ${ev.note ? `<section class="block"><h2>Poznámka Commandera</h2><p class="evnote">${esc(ev.note)}</p></section>` : ""}
