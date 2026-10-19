@@ -204,6 +204,10 @@ function viewRoster(s) {
   // without builders and logistics there is no FOB and no supplies: show the plan's fill order still open
   const missing = (s.fill_order || []).filter(id => !by[id]).map(id => roleOf(s, id)).filter(Boolean);
   // first 6 only: glanceable at a briefing and fewer chips to hit by mistake on a phone (a tap moves your slot)
+  // SWARM: my slot's shopping list one tap away (denbler 2026-10-19 "at si kazdy hned najde svoje")
+  const myc = s.swarm && state.claims.find(c => c.user_id === state.me.user_id);
+  const myg = myc && s.roster.find(g => g.slots.some(x => x.key === myc.slot_key));
+  const mine = myg ? `<p class="mine-kit">Máš místo: <b>${esc(myg.name)}</b> <button type="button" class="kitl" data-kit="${esc(myg.id)}">Tvůj nákup</button></p>` : "";
   const miss = s.swarm ? slBar(filled)
     : missing.length
     ? `<p class="miss">Chybí: ${missing.slice(0, 6).map(r => `<button type="button" class="rid" data-claim="${esc(r.id)}" title="${esc(r.id)} – ${esc(r.name)}">${esc(r.id)}</button>`).join(" ")}${missing.length > 6 ? ` <span class="more">a dalších ${missing.length - 6}</span>` : ""}</p>`
@@ -213,6 +217,7 @@ function viewRoster(s) {
     ${state.me.is_commander ? closeEventForm(s) : ""}
     ${cancel}
     ${miss}
+    ${mine}
     ${rsvpBar()}
     <div class="ros${s.swarm ? " swarm" : ""}">${s.roster.map(g => rosterGroup(g, by, s.swarm)).join("")}</div>`;
 }
