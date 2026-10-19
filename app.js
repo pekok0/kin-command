@@ -674,7 +674,7 @@ function shopList(s, r) {
       <div class="pr">${opt ? "Volitelně, když máš odemčeno · " : ""}${priceLine(opt ? g.ideal_price : g.price, g.qty)}${unlock ? ` · odemknout <b>${unlockText(unlock)}</b>` : ""}</div>
       ${g.note ? `<div class="nt">${esc(g.note)}</div>` : ""}${alt}</div></li>`;
   }).join("");
-  return `<div class="shop-sum"><span>${r.class ? "Navíc za život" : "Celkem za život"}</span><b>${usd(k.min)}${part}</b>${k.ideal !== k.min ? `<span>ideál</span><b>${usd(k.ideal)}${part}</b>` : ""}${um ? `<span>odemkni</span>${um}` : ""}</div>
+  return `<div class="shop-sum"><span>${r.sum || (r.class ? "Navíc za život" : "Celkem za život")}</span><b>${usd(k.min)}${part}</b>${k.ideal !== k.min ? `<span>ideál</span><b>${usd(k.ideal)}${part}</b>` : ""}${um ? `<span>odemkni</span>${um}` : ""}</div>
     <ul class="shop">${tiles}</ul>${ui && ui !== um ? `<div class="unlocks">Pro ideál: ${ui}</div>` : ""}`;
 }
 
@@ -750,7 +750,7 @@ function viewSwarm(k) {
   return `
     <section class="sestava" id="sestava">${viewRoster(plan)}</section>
     <section class="block" id="swarm-kit"><h2>Role a nákup</h2>
-      <div class="sq" id="kit-base"><h3>Základ pro všechny</h3><p>Kupuje každý, ať hraje cokoliv. U rolí níže je jen to, co se kupuje navíc.</p>${shopList(null, { gear: s.base.gear, extras_kit: s.base.kit })}</div>
+      <div class="sq" id="kit-base"><h3>Základ pro všechny</h3><p>Kupuje každý, ať hraje cokoliv. U rolí níže je jen to, co se kupuje navíc. Zbraň, brnění, munice a obvazy tu nejsou: ty si bereš podle sestavy své sub-classy v <a href="#/squady">Squady</a> (MINIMUM po wipu, IDEÁL).</p>${shopList(null, { gear: s.base.gear, extras_kit: s.base.kit, sum: "Základ za život" })}</div>
       ${s.slots.map(r => `<div class="sq" id="kit-${esc(r.id)}"><h3>${esc(r.name)} <small>${esc(r.count)}</small></h3><p>${esc(r.goal)}</p>${shopList(null, { gear: r.extra, extras_kit: r.extra_kit, class: true })}</div>`).join("")}</section>
     <section class="block" id="swarm"><div class="t-row"><h2>Jádro</h2><span class="tag draft" title="Jádro je Commanderovo, podrobnosti navrhl štáb a potvrdí Commander">Návrh</span></div><p>${esc(s.tagline)}</p>${bullets(s.points)}</section>
     <section class="block"><h2>Principy</h2>${procList(s.principles)}</section>
