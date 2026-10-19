@@ -74,7 +74,7 @@ async function onAuth(session) {
       () => { state.error = "Obsah se nenačetl. Zkus stránku načíst znovu."; state.checking = false; renderWho(); render(); });
   renderWho(); loadEvent(); subscribe();
 }
-const onCardRoute = () => /^#\/(squad\/|s\/[^/]+\/role\/)/.test(location.hash);
+const onCardRoute = () => /^#\/(squad\/|s\/[^/]+\/role\/|doktrina\/swarm)/.test(location.hash);  // canvas: "mám" boxes (Viktor #004)
 const onHistRoute = () => HIST.includes(location.hash.replace(/^#\/?/, "").split(/[/?]/)[0]);
 
 function renderWho() {
@@ -177,9 +177,11 @@ function slotRow(x, c) {
   return `<li${mine ? ' class="is-me"' : ""}><button type="button" class="rslot" ${act}><span class="lbl">${x.role ? `<span class="rid">${esc(x.role)}</span>` : ""}${esc(x.label)}</span>${who}</button>${kick}</li>`;
 }
 
-function rosterGroup(g, by) {
+function rosterGroup(g, by, swarm) {
   const n = g.slots.filter(x => by[x.key]).length;
-  return `<div class="rg"><div class="pg-head">${sym(g.symbol, "sm")}<div><b>${esc(g.name)}</b><small>${esc(g.squad)}</small></div><span class="num">${n}/${g.max}</span></div>
+  // SWARM: the role's shopping list is far below on a phone, one tap away (Viktor #002)
+  const kit = swarm ? `<button type="button" class="kitl" data-kit="${esc(g.id)}">Co koupit</button>` : "";
+  return `<div class="rg"><div class="pg-head">${sym(g.symbol, "sm")}<div><b>${esc(g.name)}</b><small>${esc(g.squad)}</small></div>${kit}<span class="num">${n}/${g.max}</span></div>
     <ul>${g.slots.map(x => slotRow(x, by[x.key])).join("")}</ul></div>`;
 }
 
@@ -212,7 +214,7 @@ function viewRoster(s) {
     ${cancel}
     ${miss}
     ${rsvpBar()}
-    <div class="ros${s.swarm ? " swarm" : ""}">${s.roster.map(g => rosterGroup(g, by)).join("")}</div>`;
+    <div class="ros${s.swarm ? " swarm" : ""}">${s.roster.map(g => rosterGroup(g, by, s.swarm)).join("")}</div>`;
 }
 
 // realtime and tab-return re-render the block: keep what the Commander is typing into a form
@@ -223,15 +225,33 @@ function renderEvBar() {
     ? `<a href="#/doktrina/swarm"><b>Akce ${esc(fmtWhen(ev.starts_at))}: Top attack (SWARM).</b> Sestava a co koupit jsou na plátně SWARM.</a>` : "";
 }
 
+// returns a function that puts back the roster's typed forms and open <details> after a rebuild
+function keepForms() {
+  const el = document.getElementById("sestava");
+  if (!el) return () => {};
+  const keep = [...el.querySelectorAll("form[data-form]")].map(f => [f.dataset.form,
+    [...f.elements].filter(x => x.name).map(x => [x.name, x.type === "checkbox" ? x.checked : x.value])]);
+  const opened = [...el.querySelectorAll("details[open]")].map(d => d.className);
+  return () => {
+    const el = document.getElementById("sestava");
+    if (!el) return;
+    for (const c of opened) { const d = el.querySelector(`details.${c}`); if (d) d.open = true; }
+    for (const [name, fields] of keep) {
+      const f = el.querySelector(`form[data-form="${name}"]`);
+      if (!f) continue;
+      for (const [k, v] of fields) { const x = f.elements[k]; if (!x) continue; if (x.type === "checkbox") x.checked = v; else x.value = v; }
+    }
+    el.querySelectorAll('select[name="doctrine"]').forEach(swarmHint);
+  };
+}
+
 function renderRoster() {
   renderEvBar();
   const home = document.getElementById("home-ev");
   if (home) home.innerHTML = homeEvent();
   const el = document.getElementById("sestava");
   if (!el || !plan) return;
-  const keep = [...el.querySelectorAll("form[data-form]")].map(f => [f.dataset.form,
-    [...f.elements].filter(x => x.name).map(x => [x.name, x.type === "checkbox" ? x.checked : x.value])]);
-  const opened = [...el.querySelectorAll("details[open]")].map(d => d.className);
+  const restore = keepForms();
   keepFocus(() => { el.innerHTML = viewRoster(plan); });
   const pb = document.getElementById("plan-body");
   if (pb && pb.dataset.swarm !== String(+swarmEv())) {
@@ -239,13 +259,7 @@ function renderRoster() {
     pb.innerHTML = swarmEv() ? SWARM_BOX : planMatrix;
     applyTrace();
   }
-  for (const c of opened) { const d = el.querySelector(`details.${c}`); if (d) d.open = true; }
-  for (const [name, fields] of keep) {
-    const f = el.querySelector(`form[data-form="${name}"]`);
-    if (!f) continue;
-    for (const [k, v] of fields) { const x = f.elements[k]; if (!x) continue; if (x.type === "checkbox") x.checked = v; else x.value = v; }
-  }
-  el.querySelectorAll('select[name="doctrine"]').forEach(swarmHint);
+  restore();
 }
 
 async function claim(key) {
@@ -265,6 +279,7 @@ async function claim(key) {
     if (slot.role) { me.set(`${s.id}/${slot.role}`); if (plan === s) renderNav(s.id); }
   }
   renderRoster();
+  if (state.flash) document.querySelector(".ros-msg")?.scrollIntoView({ block: "nearest" });
 }
 
 async function unclaim(userId) {
@@ -292,7 +307,7 @@ function newEventForm(s) {
   return `<form class="evf" data-form="new"><p class="note">Žádná akce není otevřená.</p>
     <label>Začátek <input type="datetime-local" name="starts" required min="${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}T00:00"></label>
     ${pick}
-    <button type="submit" class="act">Založit akci: ${s.swarm ? "Top attack (SWARM)" : esc(sideLabel(s))}</button></form>`;
+    <button type="submit" class="act" data-defence="Založit akci: ${esc(sideLabel(s))}">Založit akci: ${s.swarm ? "Top attack (SWARM)" : esc(sideLabel(s))}</button></form>`;
 }
 
 function closeEventForm(s) {
@@ -322,7 +337,11 @@ async function cancelEvent(btn) {
   await loadEvent();
 }
 
-function swarmHint(sel) { const h = sel.form && sel.form.querySelector(".swarm-hint"); if (h) h.hidden = sel.value !== "swarm"; }
+function swarmHint(sel) {
+  const h = sel.form && sel.form.querySelector(".swarm-hint"), b = sel.form && sel.form.querySelector("[data-defence]");
+  if (h) h.hidden = sel.value !== "swarm";
+  if (b) b.textContent = sel.value === "swarm" ? "Založit akci: Top attack (SWARM)" : b.dataset.defence;  // Viktor #003
+}
 document.addEventListener("change", e => { if (e.target.name === "doctrine") swarmHint(e.target); });
 
 document.addEventListener("submit", async e => {
@@ -534,7 +553,7 @@ function viewHome() {
     <div id="home-ev">${homeEvent()}</div>
     <details class="block start howto"${matchMedia("(max-width: 720px)").matches ? "" : " open"}><summary><h2 id="h-start">Jak to tu funguje${arrow()}</h2></summary><ol class="proc">
       <li><span><b>Přihlas se přes Discord</b> (vpravo nahoře). Pustí tě to dál od role Rekrut na serveru Kinetic Solutions.</span></li>
-      <li><span><b>Před akcí</b> otevři plán mapy, dej <b>Přijdu</b> a zaber si místo v <b>Sestavě</b>. Co v plánu chybí, vidíš hned nahoře.</span></li>
+      <li><span><b>Před akcí</b> otevři plán mapy (u Top attack <a href="#/doktrina/swarm">plátno SWARM</a>), dej <b>Přijdu</b> a zaber si místo v <b>Sestavě</b>. Co chybí, vidíš hned nahoře.</span></li>
       <li><span><b>Karta tvé role</b>: co koupit, čím jedeš, co děláš v každé fázi. Nech si ji otevřenou na mobilu nebo druhém monitoru.</span></li>
       <li><span><a href="#/squady">Squady</a>: celá výbava tvé sub-classy, minimum po wipu i ideál. Zaškrtni, co máš odemčené. Kolik nás co umí, je v <a href="#/pokryti">Pokrytí</a>.</span></li>
       <li><span><a href="#/vycvik">Výcvik</a> a <a href="#/doktrina">Doktrína</a>: jak klan hraje na všech mapách.</span></li>
@@ -730,7 +749,9 @@ function viewSwarm(k) {
   const s = k.swarm;
   return `
     <section class="sestava" id="sestava">${viewRoster(plan)}</section>
-    <section class="block" id="swarm-kit"><h2>Role a nákup</h2>${s.slots.map(r => `<div class="sq"><h3>${esc(r.name)} <small>${esc(r.count)}</small></h3><p>${esc(r.goal)}</p>${shopList(null, { gear: r.gear, extras_kit: r.kit })}</div>`).join("")}</section>
+    <section class="block" id="swarm-kit"><h2>Role a nákup</h2>
+      <div class="sq" id="kit-base"><h3>Základ pro všechny</h3><p>Kupuje každý, ať hraje cokoliv. U rolí níže je jen to, co se kupuje navíc.</p>${shopList(null, { gear: s.base.gear, extras_kit: s.base.kit })}</div>
+      ${s.slots.map(r => `<div class="sq" id="kit-${esc(r.id)}"><h3>${esc(r.name)} <small>${esc(r.count)}</small></h3><p>${esc(r.goal)}</p>${shopList(null, { gear: r.extra, extras_kit: r.extra_kit, class: true })}</div>`).join("")}</section>
     <section class="block" id="swarm"><div class="t-row"><h2>Jádro</h2><span class="tag draft" title="Jádro je Commanderovo, podrobnosti navrhl štáb a potvrdí Commander">Návrh</span></div><p>${esc(s.tagline)}</p>${bullets(s.points)}</section>
     <section class="block"><h2>Principy</h2>${procList(s.principles)}</section>
     <section class="block"><h2>Velení a komunikace</h2>${bullets(s.command)}</section>
@@ -782,7 +803,7 @@ function keepFocus(fn) {
   fn();
   if (sel) document.querySelectorAll(sel)[i]?.focus({ preventScroll: true });
 }
-const rerenderKeep = () => keepFocus(() => { const y = scrollY; render(); scrollTo(0, y); });
+const rerenderKeep = () => { const restore = keepForms(); keepFocus(() => { const y = scrollY; render(); scrollTo(0, y); }); restore(); };
 async function setUnlock(item, has) {
   if (currentSeason().id !== haveSeason) {  // the page stayed open over a season start (wipe)
     await loadUnlocks(); haveErr = "Začala nová sezóna, seznam je prázdný. Zaškrtni znovu, co už máš."; rerenderKeep(); return;
@@ -1112,8 +1133,9 @@ function render() {
 }
 
 $app.addEventListener("click", e => {
-  const t = e.target.closest("[data-trace],[data-untrace],[data-pick],[data-me],[data-variant],[data-kitmode],[data-claim],[data-unclaim],[data-rsvp],[data-unlock],[data-cancel]");
+  const t = e.target.closest("[data-trace],[data-untrace],[data-pick],[data-me],[data-variant],[data-kitmode],[data-claim],[data-unclaim],[data-rsvp],[data-unlock],[data-cancel],[data-kit]");
   if (!t) return;
+  if (t.dataset.kit) { document.getElementById("kit-" + t.dataset.kit)?.scrollIntoView(); return; }
   if (t.dataset.rsvp) { setRsvp(t.dataset.rsvp); return; }
   if (t.dataset.cancel !== undefined) { cancelEvent(t); return; }
   if (t.dataset.unlock !== undefined) {
