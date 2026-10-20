@@ -239,7 +239,7 @@ function swarmMyKit() {
   const slot = myc && k.roster.flatMap(g => g.slots).find(x => x.key === myc.slot_key);
   const r = slot && k.slots.find(r => r.id === slot.kit);
   return `<section class="block" id="swarm-kit"><h2>Tvůj nákup</h2>${kitBase(k)}
-    ${r ? kitRole(r) : '<p class="note">Zapiš se do slotu a ukážu ti nákup tvé role. Nákup všech rolí je v <a href="#/doktrina/swarm">Doktríně</a>.</p>'}</section>`;
+    ${r ? kitRole(slot.seat ? { ...r, ...r.seats[slot.seat] } : r) : '<p class="note">Zapiš se do slotu a ukážu ti nákup tvé role. Nákup všech rolí je v <a href="#/doktrina/swarm">Doktríně</a>.</p>'}</section>`;
 }
 
 // realtime and tab-return re-render the block: keep what the Commander is typing into a form
