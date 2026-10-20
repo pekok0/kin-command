@@ -128,6 +128,7 @@ async function loadEvent() {
     console.error(e);
     state.evErr = true; state.flash = LOAD_ERR;
   }
+  syncMyRole();  // outside try: a bug here must not show up as a connection outage (OWASP 2026-10-20 L2)
   renderRoster();
 }
 
@@ -206,14 +207,14 @@ function viewRoster(s) {
   const myr = mys && !s.swarm && mys.x.role && roleOf(s, mys.x.role);
   const mine = !mys ? "" : s.swarm
     ? `<p class="mine-kit">Máš místo: <b>${esc(mys.g.name)} · ${esc(mys.x.label)}</b> <button type="button" class="kitl" data-kit="${esc(mys.x.kit)}">Tvůj nákup</button></p>`
-    : myr ? `<p class="mine-kit">Máš místo: <b>${esc(myr.id)} · ${esc(mys.g.name)}</b> <a class="kitl" href="${roleHref(s, myr)}">Tvoje karta: nákup a kroky</a></p>` : "";
+    : myr ? `<p class="mine-kit">Máš místo: <b>${esc(myr.id)} · ${esc(mys.g.name)}</b>${s.nomap ? "" : ` <a class="kitl" href="${roleHref(s, myr)}">Tvoje karta: nákup a kroky</a>`}</p>` : "";
   const miss = s.swarm ? slBar(filled)
     : missing.length
     ? `<p class="miss">Chybí: ${missing.slice(0, 6).map(r => `<button type="button" class="rid" data-claim="${esc(r.id)}" title="${esc(r.id)} – ${esc(r.name)}">${esc(r.id)}</button>`).join(" ")}${missing.length > 6 ? ` <span class="more">a dalších ${missing.length - 6}</span>` : ""}</p>`
     : '<p class="miss ok">Všechny role z plánu obsazené.</p>';
-  return `<div class="ros-head">${head}<span class="num">${filled} <small>/ ${total}</small></span><time datetime="${esc(ev.starts_at)}">${esc(fmtWhen(ev.starts_at))}</time><span class="lead">${esc(docName(s.swarm ? "swarm" : "defence"))} · ${esc(sideOf(ev.strategy_id))}</span>${ev.leader ? `<span class="lead">Vede: <b>${esc(ev.leader.name)}</b></span>` : ""}</div>
+  return `<div class="ros-head">${head}<span class="num">${filled} <small>/ ${total}</small></span><time datetime="${esc(ev.starts_at)}">${esc(fmtWhen(ev.starts_at))}</time><span class="lead">${esc(docName(s.swarm ? "swarm" : "defence"))} · ${sideOf(ev.strategy_id, "mapa zatím nevybraná")}</span>${ev.leader ? `<span class="lead">Vede: <b>${esc(ev.leader.name)}</b></span>` : ""}</div>
     ${msg}
-    ${state.me.is_commander ? closeEventForm(s) : ""}
+    ${state.me.is_commander ? mapTeamForm(ev) + closeEventForm(s) : ""}
     ${cancel}
     ${miss}
     ${mine}
@@ -226,9 +227,10 @@ function viewRoster(s) {
 function akceBody() {
   const s = plan, ev = state.me && state.event;
   if (!ev || !s) return viewRoster(s);
-  const read = s.swarm ? `<a href="#/doktrina/swarm">${esc(docName("swarm"))} v Doktríně</a>`
-    : `<a href="#/s/${esc(s.id)}">${esc(sideLabel(s))}</a> (opening a kroky rolí)`;
-  return `<p class="note planl">Plán ke čtení: ${read}</p>${viewRoster(s)}${s.swarm ? swarmMyKit() : ""}`;
+  const read = s.swarm ? `Plán ke čtení: <a href="#/doktrina/swarm">${esc(docName("swarm"))} v Doktríně</a>`
+    : s.nomap ? "Karta role a nákup se ukážou, až Commander vybere mapu a tým."
+    : `Plán ke čtení: <a href="#/s/${esc(s.id)}">${esc(sideLabel(s))}</a> (opening a kroky rolí)`;
+  return `<p class="note planl">${read}</p>${viewRoster(s)}${s.swarm ? swarmMyKit() : ""}`;
 }
 
 // the base and my slot's kit; every role's kit is in Doktrina (rozhodnuti 8: not the same list in two places)
@@ -264,7 +266,7 @@ function keepForms() {
       if (!f) continue;
       for (const [k, v] of fields) { const x = f.elements[k]; if (!x) continue; if (x.type === "checkbox") x.checked = v; else x.value = v; }
     }
-    newHint(el.querySelector('form[data-form="new"]'));
+    el.querySelectorAll('form[data-form="new"], form[data-form="mapteam"]').forEach(newHint);
   };
 }
 
@@ -303,10 +305,21 @@ async function claim(key) {
   } else if (error) state.flash = error.code === "42501" ? "Akce už je uzavřená." : saveErr(error);
   else {
     if (!state.evErr) state.flash = null;  // saved, but the reload failed: keep the outage message
-    if (slot.role) { me.set(`${s.id}/${slot.role}`); renderNav(navActive); }
+    if (slot.role && !s.nomap) { me.set(`${s.id}/${slot.role}`); renderNav(navActive); }  // "Moje role" needs a map's card
   }
   renderRoster();
   if (state.flash) document.querySelector(".ros-msg")?.scrollIntoView({ block: "nearest" });
+}
+
+// "Moje role" follows my slot on the open event's current map (review 2026-10-20 M1): the Commander picks or changes
+// the map after sign-ups, and a card of the old map would have the member study the wrong plan on the briefing
+// (map back to "zatim nevim": no card; a role picked by hand on another map stays)
+function syncMyRole() {
+  const s = planOf(state.event), c = s && state.claims.find(c => c.user_id === state.me.user_id);
+  const slot = c && s.roster.flatMap(g => g.slots).find(x => x.key === c.slot_key);
+  if (!slot?.role) return;
+  const want = s.nomap ? null : `${s.id}/${slot.role}`, [, rid] = (me.get() || "/").split("/");
+  if (me.get() !== want && (want || rid === slot.role)) { me.set(want); renderNav(navActive); }
 }
 
 async function unclaim(userId) {
@@ -327,13 +340,26 @@ function slBar(n) {
     : `<p class="miss ok">Je vás ${n}, každý obsazený squad má SL.</p>`;
 }
 
-// one form in Akce for both doctrines (rozhodnuti 8); SWARM keeps the map and side for history
+// map and team: two choices, "zatím nevím" first (specs/akce-mapa-tym); s = the plan picked so far
+const pickFields = s => `<label>Mapa <select name="map"><option value="">zatím nevím</option>${[...new Set(D.strategies.map(x => x.map))].map(m =>
+    `<option value="${esc(m)}"${s && s.map === m ? " selected" : ""}>${esc(m)}</option>`).join("")}</select></label>
+  <label>Tým <select name="team"><option value="">zatím nevím</option>${D.tymy.map(t =>
+    `<option value="${esc(t.id)}"${s && s.team === t.id ? " selected" : ""}>${esc(t.name)}</option>`).join("")}</select></label>`;
+
+// one form in Akce for both doctrines (rozhodnuti 8); founding ahead, the map and team are not known yet (specs/akce-mapa-tym)
 function newEventForm() {
   return `<form class="evf" data-form="new"><p class="note">Žádná akce není otevřená.</p>
     <label>Začátek <input type="datetime-local" name="starts" required min="${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}T00:00"></label>
     <label>Doktrína <select name="doctrine">${["defence", "swarm"].map(d => `<option value="${d}">${esc(docOf(d).title)}: ${esc(docOf(d).short)}</option>`).join("")}</select></label>
-    <label>Mapa a strana <select name="strategy" required>${D.strategies.map(x => `<option value="${esc(x.id)}">${esc(sideLabel(x))}</option>`).join("")}</select></label>
-    <button type="submit" class="act">${esc(newLabel("defence", D.strategies[0]))}</button></form>`;
+    ${pickFields(null)}
+    <button type="submit" class="act">${esc(newLabel("defence", null))}</button></form>`;
+}
+
+// the Commander picks or changes them while the event is open (specs/akce-mapa-tym 3-4); sign-ups keep their slots
+function mapTeamForm(ev) {
+  const s = S(ev.strategy_id);
+  return `<details class="evmap"><summary>Mapa a tým</summary><form class="evf" data-form="mapteam">${pickFields(s)}
+    <button type="submit" class="act">${esc(saveLabel(s))}</button></form></details>`;
 }
 
 function closeEventForm(s) {
@@ -363,13 +389,15 @@ async function cancelEvent(btn) {
   await loadEvent();
 }
 
-// Viktor #003: the button says what gets founded
-const newLabel = (doctrine, s) => `Založit akci: ${docName(doctrine)} · ${sideLabel(s)}`;
+// Viktor #003: the button says what gets founded or saved; a map without a team is not a plan yet (decision 1)
+const planName = s => `${s.map} · ${teamOf(s.team).name}`;
+const newLabel = (doctrine, s) => `Založit akci: ${docName(doctrine)}${s ? " · " + planName(s) : ""}`;
+const saveLabel = s => `Uložit: ${s ? planName(s) : "zatím bez mapy a týmu"}`;
 function newHint(f) {
-  const b = f && f.querySelector('button[type="submit"]');
-  if (b) b.textContent = newLabel(f.elements.doctrine.value, S(f.elements.strategy.value));
+  const b = f && f.querySelector('button[type="submit"]'), s = b && compose(f.elements.map.value, f.elements.team.value);
+  if (b) b.textContent = f.dataset.form === "new" ? newLabel(f.elements.doctrine.value, s) : saveLabel(s);
 }
-document.addEventListener("change", e => { if (["doctrine", "strategy"].includes(e.target.name) && e.target.form?.dataset.form === "new") newHint(e.target.form); });
+document.addEventListener("change", e => { if (["doctrine", "map", "team"].includes(e.target.name) && ["new", "mapteam"].includes(e.target.form?.dataset.form)) newHint(e.target.form); });
 
 document.addEventListener("submit", async e => {
   const f = e.target.closest("form[data-form]");
@@ -377,10 +405,10 @@ document.addEventListener("submit", async e => {
   e.preventDefault();
   const btn = f.querySelector('button[type="submit"]');
   if (btn.disabled) return;  // double click: the first submit is still saving
-  // OWASP 2026-10-19 Low: the database does not check strategy_id's shape, a tampered <option> would be stored
-  if (f.dataset.form === "new" && !S(f.elements.strategy.value)) { state.flash = "Vyber mapu a stranu."; renderRoster(); return; }
   btn.disabled = true;
   const v = Object.fromEntries(new FormData(f)), eventId = state.event && state.event.id;
+  // OWASP 2026-10-19 Low: map and team only pick one of our plans, a tampered <option> cannot send its own strategy_id
+  const pick = f.elements.map && compose(f.elements.map.value, f.elements.team.value), sid = pick ? pick.id : null;
   // attendance = exactly what the Commander saw and ticked in this form (state.claims may be mid-reload);
   // written first: if closing fails the event stays open and this upsert can simply run again
   const att = [...f.querySelectorAll('input[name^="att_"]')].map(x => ({ event_id: eventId, user_id: x.name.slice(4), attended: x.checked }));
@@ -388,11 +416,13 @@ document.addEventListener("submit", async e => {
     const { error: e1 } = await sb.from("attendance").upsert(att, { onConflict: "event_id,user_id" });
     if (e1) { state.flash = e1.code === "42501" ? "Docházku se nepodařilo uložit, zkus to znovu." : saveErr(e1); btn.disabled = false; renderRoster(); return; }
   }
-  const { error } = f.dataset.form === "new"
-    ? await sb.from("events").insert({ strategy_id: v.strategy, doctrine: v.doctrine === "swarm" ? "swarm" : "defence", starts_at: new Date(v.starts).toISOString() })
+  const { data, error } = f.dataset.form === "new"
+    ? await sb.from("events").insert({ strategy_id: sid, doctrine: v.doctrine === "swarm" ? "swarm" : "defence", starts_at: new Date(v.starts).toISOString() })
+    : f.dataset.form === "mapteam" ? await sb.from("events").update({ strategy_id: sid }).eq("id", eventId).select("id")  // count rows like cancelEvent (OWASP L1)
     : await sb.from("events").update({ status: "closed", placement: Number(v.placement), variant: v.variant || null,
         went_well: v.went_well || null, went_wrong: v.went_wrong || null, next_time: v.next_time || null }).eq("id", eventId);
-  state.flash = !error ? null : error.code === "23505" ? "Už je otevřená jiná akce." : saveErr(error);
+  state.flash = error ? (error.code === "23505" ? "Už je otevřená jiná akce." : saveErr(error))
+    : f.dataset.form === "mapteam" && !data.length ? "Mapu a tým se nepodařilo uložit: akce už není otevřená, nebo nemáš práva Commandera." : null;
   btn.disabled = false;
   await loadEvent();
 });
@@ -420,7 +450,11 @@ let cur = null;    // current strategy
 // only Akce has one (Petr 2026-10-19, specs/akce-flow rozhodnuti 8)
 let plan = null;
 const swarmPlan = () => ({ id: "swarm", swarm: true, roster: D.doktrina.swarm.roster, fill_order: [], variants: [] });
-const planOf = ev => !ev ? null : ev.doctrine === "swarm" ? swarmPlan() : S(ev.strategy_id) || null;
+// FORTRESS before the map (specs/akce-mapa-tym): all plans share the 45 slots (test_build), so sign-ups keep their slot
+// when the map comes; role cards, zones and the map's plan wait for the map and team
+const fortressPlan = () => { const s = D.strategies[0];
+  return { id: "fortress", nomap: true, roster: s.roster, fill_order: s.fill_order, roles: s.roles, variants: [] }; };
+const planOf = ev => !ev ? null : ev.doctrine === "swarm" ? swarmPlan() : !ev.strategy_id ? fortressPlan() : S(ev.strategy_id) || null;
 // an open SWARM event: the map's Top defence opening does not apply (Petr 2026-10-18), the canvas does
 const swarmEv = () => !!(state.me && state.event && state.event.doctrine === "swarm");
 // doctrine names live in the content (Petr 2026-10-19: FORTRESS, SWARM); events store "defence" / "swarm"
@@ -554,7 +588,7 @@ function homeEvent() {
   const mine = state.claims.find(c => c.user_id === state.me.user_id);
   const said = (state.rsvps || []).find(r => r.user_id === state.me.user_id);
   const status = mine ? `Máš místo: ${esc(mine.slot_label)}` : said ? `Tvoje odpověď: ${esc((RSVP.find(x => x[0] === said.status) || [, said.status])[1])}` : "Zatím bez odpovědi a bez místa: otevři sestavu";
-  return `<a class="cont evc" href="#/akce"><span class="big">Akce</span><span>${esc(fmtWhen(ev.starts_at))} · ${esc(sideOf(ev.strategy_id))} · ${esc(docName(ev.doctrine))}<small>${status}</small></span></a>`;
+  return `<a class="cont evc" href="#/akce"><span class="big">Akce</span><span>${esc(fmtWhen(ev.starts_at))} · ${sideOf(ev.strategy_id, "mapa zatím nevybraná")} · ${esc(docName(ev.doctrine))}<small>${status}</small></span></a>`;
 }
 
 // reading pages (map, doctrine) show the open event as a card into Akce, nothing when none is open
@@ -935,7 +969,13 @@ const plural = (n, one, few, many) => `${n} ${n === 1 ? one : n >= 2 && n <= 4 ?
 const seasonOf = iso => { const d = new Date(iso).toLocaleDateString("sv-SE"); let s = null; for (const x of D.seasons) if (x.start <= d) s = x; return s; };
 const seasonName = s => s ? s.name : "Před sezónami";
 const place = n => n ? `${n}.` : "-";
-const sideOf = id => { const s = S(id); return s ? sideLabel(s) : id; };
+// specs/akce-mapa-tym: the team as in the game, official name and colour; no logo (EULA 5.2(j), knowledge/tymy-s2.md)
+const teamOf = id => D.tymy.find(t => t.id === id);
+const teamBadge = id => { const t = teamOf(id); return t ? `<span class="team" style="--tc:${esc(t.hex)}">${esc(t.name)}</span>` : ""; };
+// an event's map and team as HTML; null = not picked yet, an id we do not know is shown as stored
+const sideOf = (id, none = "mapa neuvedena") => { if (!id) return none; const s = S(id); return s ? `${esc(s.map)} ${teamBadge(s.team)}` : esc(id); };
+// map and team -> their plan; null while either is "zatím nevím" (one strategy_id field, decision 1)
+const compose = (map, team) => D.strategies.find(s => s.map === map && s.team === team) || null;
 const variantName = (sid, vid) => { const s = S(sid), v = s && vById(s, vid); return v ? v.name : (vid || "-"); };
 const memberLink = m => `<a class="mlink" href="#/hrac/${encodeURIComponent(m.discord_id)}"><img src="${esc(m.avatar_url)}" alt="" loading="lazy">${esc(m.name)}</a>`;
 
@@ -1046,7 +1086,7 @@ function viewHistory(evs) {
   if (!evs.length) return `${head}<p class="note">Zatím žádná uzavřená akce. Commander ji uzavře nahoře v Sestavě po zápase.</p>`;
   return head + bySeason(evs, e => e.starts_at).map(({ s, rows }) => `<section class="block"><h2>${esc(seasonName(s))}</h2>
     <table class="data hist"><thead><tr><th>Datum</th><th>Mapa</th><th>Zóna</th><th class="num">Umístění</th><th class="num">Zapsáno</th></tr></thead><tbody>
-    ${rows.map(e => `<tr><td><a href="#/akce/${e.id}">${esc(fmtWhen(e.starts_at))}</a></td><td>${esc(sideOf(e.strategy_id))} · ${esc(docName(e.doctrine))}</td><td>${esc(variantName(e.strategy_id, e.variant))}</td><td class="num"><b>${place(e.placement)}</b></td><td class="num">${e.claims[0] ? e.claims[0].count : 0}</td></tr>`).join("")}
+    ${rows.map(e => `<tr><td><a href="#/akce/${e.id}">${esc(fmtWhen(e.starts_at))}</a></td><td>${sideOf(e.strategy_id)} · ${esc(docName(e.doctrine))}</td><td>${esc(variantName(e.strategy_id, e.variant))}</td><td class="num"><b>${place(e.placement)}</b></td><td class="num">${e.claims[0] ? e.claims[0].count : 0}</td></tr>`).join("")}
     </tbody></table></section>`).join("");
 }
 
@@ -1057,7 +1097,7 @@ function viewEvent(ev, claims, absent = new Set()) {
   const played = claims.length - claims.filter(c => absent.has(c.user_id)).length;
   const debrief = [["Co fungovalo", ev.went_well], ["Co ne", ev.went_wrong], ["Co příště jinak", ev.next_time]].filter(([, t]) => t);
   return `<p class="crumb"><a href="#/akce">Akce</a> / ${esc(fmtWhen(ev.starts_at))}</p>
-    <header class="unit-head"><div><h1>${esc(sideOf(ev.strategy_id))} · ${esc(docName(ev.doctrine))}</h1><p>${esc(fmtWhen(ev.starts_at))} · ${esc(seasonName(seasonOf(ev.starts_at)))}${ev.status === "open" ? " · probíhá" : ""}</p></div></header>
+    <header class="unit-head"><div><h1>${sideOf(ev.strategy_id)} · ${esc(docName(ev.doctrine))}</h1><p>${esc(fmtWhen(ev.starts_at))} · ${esc(seasonName(seasonOf(ev.starts_at)))}${ev.status === "open" ? " · probíhá" : ""}</p></div></header>
     <p class="lede">Umístění <b>${place(ev.placement)}</b> · zóna ${esc(variantName(ev.strategy_id, ev.variant))} · ${played === claims.length ? plural(played, "člověk", "lidé", "lidí") : `hrálo ${played} z ${claims.length} zapsaných`}</p>
     ${debrief.length ? `<section class="block"><h2>Debrief</h2><dl class="debrief">${debrief.map(([h, t]) => `<dt>${h}</dt><dd class="evnote">${esc(t)}</dd>`).join("")}</dl></section>` : ""}
     ${ev.note ? `<section class="block"><h2>Poznámka Commandera</h2><p class="evnote">${esc(ev.note)}</p></section>` : ""}
