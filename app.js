@@ -1257,10 +1257,21 @@ function renderNav(active) {
 }
 
 function viewAkce() {
-  return `<header class="unit-head"><div><h1>Akce</h1><p>Tady se na akci zapisuješ a vidíš svůj nákup. Mapy a Doktrína jsou ke čtení.</p></div></header>
+  const brief = state.me && state.me.is_commander ? ' <a class="act" href="#/briefing">Protokol briefingu</a>' : "";
+  return `<header class="unit-head"><div><h1>Akce</h1><p>Tady se na akci zapisuješ a vidíš svůj nákup. Mapy a Doktrína jsou ke čtení.${brief}</p></div></header>
     <section class="sestava" id="sestava">${akceBody()}</section>
     ${histShell(sb && state.me ? '<p class="note">Načítám odehrané akce…</p>' : "")}`;
 }
+// the Commander's briefing protocol (Petr 2026-10-21 "uvidim to jenom ja"): the row 'velitel' is readable by the
+// Commander only (014), so a member gets no data, not just no link; the HTML is built from klan/briefing-protokol.md
+async function loadBriefing() {
+  const { data, error } = await sb.from("content").select("data").eq("id", "velitel").maybeSingle();
+  if (location.hash !== "#/briefing") return;
+  $app.innerHTML = `<p class="crumb"><a href="#/akce">Akce</a> / Briefing</p>` + (error ? (console.error(error), '<p class="err">Protokol se nenačetl, obnov stránku (F5).</p>')
+    : data && data.data && data.data.briefing ? `<article class="proto">${data.data.briefing}</article>`
+    : '<p class="note">Protokol briefingu je jen pro Commandera.</p>');
+}
+
 // phones scroll the nav sideways: keep the current page's link in view (again after #who changes width)
 // "Moje role" is first: keep it in view and scroll only when the current link is fully hidden (Viktor #024)
 const navToCurrent = () => {
@@ -1315,6 +1326,10 @@ function render() {
     plan = planOf(state.event); if (plan && !plan.swarm) curVariant = pickVariant(plan, qs);
     html = viewAkce(); active = "akce"; title = "Akce · KIN";
     if (sb && state.me) setTimeout(() => loadHist(["historie"]));
+  } else if (p[0] === "briefing") {
+    active = "akce"; title = "Briefing · KIN";
+    html = sb && state.me && state.me.is_commander ? '<p class="note">Načítám…</p>' : '<p class="note">Protokol briefingu je jen pro Commandera.</p>';
+    if (sb && state.me && state.me.is_commander) setTimeout(loadBriefing);
   } else if (HIST.includes(p[0])) {
     active = p[0] === "pokryti" ? "vybava" : "akce"; title = p[0] === "pokryti" ? "Pokrytí · KIN" : "Akce · KIN";
     html = histShell(sb && state.me ? '<p class="note">Načítám…</p>' : histGate());

@@ -516,6 +516,25 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .hrow .lbl { flex: 1 1 9em; min-width: 7em; color: var(--ink-2); }
 .pavatar { width: 64px; height: 64px; border-radius: 50%; flex: none; }
 .evnote { white-space: pre-wrap; max-width: 75ch; }
+/* ---- briefing protocol (Commander only, klan/briefing-protokol.md) ---- */
+.proto { max-width: 96ch; }
+.proto h1 { font-size: clamp(32px, 2vw + 22px, 52px); text-transform: uppercase; margin-bottom: 12px; }
+.proto h2 { font-size: 20px; margin: 36px 0 10px; padding-top: 14px; border-top: 1px solid var(--rule); }
+.proto h1 + p, .proto p { max-width: 80ch; margin: 8px 0; }
+.proto ul, .proto ol { margin: 8px 0 12px; }
+.proto li { position: relative; padding-left: 20px; margin-top: 6px; max-width: 80ch; }
+.proto ul > li::before { content: ""; position: absolute; left: 2px; top: .62em; width: 9px; height: 2px; background: var(--ink-3); }
+.proto ol { counter-reset: pr; }
+.proto ol > li { counter-increment: pr; }
+.proto ol > li::before { content: counter(pr) "."; position: absolute; left: 0; font: 700 17px/1.5 var(--cond); color: var(--fr); }
+.proto li li { margin-top: 4px; }
+.proto table { width: 100%; border-collapse: collapse; margin: 10px 0 14px; font-size: 16px; }
+.proto th { font: 600 13px/1.2 var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); text-align: left; padding: 0 12px 8px 0; border-bottom: 1px solid var(--rule); }
+.proto td { padding: 8px 12px 8px 0; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+.proto strong { color: var(--ink); }
+.proto code { font: 600 15px/1 var(--cond); color: var(--ink-2); }
+.proto hr { border: 0; margin: 0; }
+@media (max-width: 720px) { .proto table, .proto thead, .proto tbody, .proto tr, .proto td, .proto th { display: block; } .proto thead { display: none; } .proto td { border: 0; padding: 2px 0; } .proto tr { padding: 8px 0; border-bottom: 1px solid var(--rule-soft); } }
 /* ---- login ---- */
 #who { display: flex; align-items: center; gap: 8px; font: 600 14px/1 var(--cond); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-2); }
 #who .nm { white-space: nowrap; }
