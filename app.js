@@ -300,7 +300,7 @@ function swarmMyKit() {
   const k = D.doktrina.swarm, myc = state.claims.find(c => c.user_id === state.me.user_id);
   const slot = myc && plan.roster.flatMap(g => g.slots).find(x => x.key === myc.slot_key);
   const r = slot && k.slots.find(r => r.id === slot.kit);
-  return `<section class="block" id="swarm-kit"><h2>Tvůj nákup</h2>${kitBase(k)}
+  return `<section class="block" id="swarm-kit"><h2>Tvůj nákup</h2>${r && r.own_kit ? "" : kitBase(k)}
     ${r ? kitRole(slot.seat ? { ...r, ...r.seats[slot.seat] } : r) : '<p class="note">Zapiš se do slotu a ukážu ti nákup tvé role. Nákup všech rolí je v <a href="#/doktrina/swarm">Doktríně</a>.</p>'}</section>`;
 }
 
