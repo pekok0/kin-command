@@ -11,7 +11,7 @@ const sb = window.supabase ? supabase.createClient(window.KIN_BACKEND.url, windo
 // a stored Supabase session means the login check is on its way: the gate shows "checking", not the button
 const hadSession = (() => { try { return Object.keys(localStorage).some(k => /^sb-.*-auth-token$/.test(k)); } catch { return false; } })();
 // never echo the provider's error text from the URL (content spoofing); drop it so a reload is clean
-let state = { me: null, error: urlQs.has("error") ? "Přihlášení přes Discord selhalo." : null, event: null, claims: [], rsvps: [], flash: null, checking: !!sb && (hadSession || FRESH) };
+let state = { me: null, error: urlQs.has("error") ? "Přihlášení přes Discord selhalo." : null, event: null, claims: [], rsvps: [], trainings: [], flash: null, checking: !!sb && (hadSession || FRESH) };
 if (urlQs.has("error")) history.replaceState(null, "", location.pathname + location.hash);
 
 const LOGIN_ERR = "Přihlášení se nepovedlo. Zkus to znovu.";
@@ -61,7 +61,7 @@ async function onAuth(session) {
     try { back = sessionStorage.getItem(BACK); sessionStorage.removeItem(BACK); } catch { /* storage blocked */ }
     if (back && back !== location.hash) location.hash = back;
   }
-  const { data, error } = await sb.from("members").select("user_id, discord_id, name, avatar_url, is_commander")
+  const { data, error } = await sb.from("members").select("user_id, discord_id, name, avatar_url, is_commander, is_officer")
     .eq("user_id", session.user.id).maybeSingle();
   if (error) throw error;
   if (!data) { state.error = "Nejsi ověřený člen KIN. Přihlas se znovu."; await sb.auth.signOut(); return; }
@@ -103,11 +103,19 @@ let chan = null;
 let loadSeq = 0;
 const LOAD_ERR = "Sestavu se nepodařilo načíst, zkus to znovu.";
 async function loadEvent() {
-  if (!state.me) { state.event = null; state.claims = []; state.rsvps = []; renderRoster(); return; }
+  if (!state.me) { state.event = null; state.claims = []; state.rsvps = []; state.trainings = []; renderRoster(); return; }
   const seq = ++loadSeq;
   try {
-    const { data: ev, error } = await sb.from("events").select("id, strategy_id, doctrine, squad_swarm, squad_support, starts_at, leader:members!events_created_by_fkey(name)").eq("status", "open").maybeSingle();
-    if (error) throw error;
+    // specs/typy-akci T1: the roster, closing and history work with the open operation only; trainings and courses open
+    // beside it are a list of their own and never state.event
+    const [op, tr] = await Promise.all([
+      sb.from("events").select("id, strategy_id, doctrine, squad_swarm, squad_support, starts_at, leader:members!events_created_by_fkey(name)").eq("status", "open").eq("kind", "operace").maybeSingle(),
+      sb.from("events").select("id, kind, topic, title, description, capacity, starts_at, created_by, leader:members!events_created_by_fkey(name), rsvps(user_id, status, members(name, avatar_url, discord_id))")
+        .eq("status", "open").neq("kind", "operace").order("starts_at"),
+    ]);
+    if (op.error) throw op.error;
+    if (tr.error) throw tr.error;
+    const ev = op.data;
     let claims = [], rsvps = [];
     if (ev) {
       const [cl, rs] = await Promise.all([
@@ -120,7 +128,7 @@ async function loadEvent() {
     }
     // swap the whole state at once, and only for the newest load (a slower old response must not win)
     if (seq !== loadSeq) return;
-    state.event = ev; state.claims = claims; state.rsvps = rsvps; state.evErr = false;
+    state.event = ev; state.claims = claims; state.rsvps = rsvps; state.trainings = tr.data; state.evErr = false;
     if (state.flash === LOAD_ERR) state.flash = null;  // connection is back: drop only our own outage message
   } catch (e) {
     // keep the last known roster: an empty "no event open" would lie and offer a second event (Viktor UAT #003)
@@ -288,11 +296,12 @@ setInterval(() => document.querySelectorAll(".tminus[data-t0]").forEach(e => { e
 // the plan, and for SWARM what I buy; maps and doctrine are for reading only
 function akceBody() {
   const s = plan, ev = state.me && state.event;
-  if (!ev || !s) return viewRoster(s);
+  const tr = state.me ? trainingsSection() : "";  // specs/typy-akci T3: under the operation, also when none is open
+  if (!ev || !s) return viewRoster(s) + tr;
   const read = s.swarm ? `Plán ke čtení: <a href="#/doktrina/swarm">${esc(docName("swarm"))} v Doktríně</a>`
     : s.nomap ? "Karta role a nákup se ukážou, až Commander vybere mapu a tým."
     : `Plán ke čtení: <a href="#/s/${esc(s.id)}">${esc(sideLabel(s))}</a> (opening a kroky rolí)`;
-  return `<p class="note planl">${read}</p>${viewRoster(s)}${s.swarm ? swarmMyKit() : ""}`;
+  return `<p class="note planl">${read}</p>${viewRoster(s)}${s.swarm ? swarmMyKit() : ""}${tr}`;
 }
 
 // the base and my slot's kit; every role's kit is in Doktrina (rozhodnuti 8: not the same list in two places)
@@ -329,6 +338,7 @@ function keepForms() {
       for (const [k, v] of fields) { const x = f.elements[k]; if (!x) continue; if (x.type === "checkbox") x.checked = v; else x.value = v; }
     }
     el.querySelectorAll('form[data-form="new"], form[data-form="mapteam"]').forEach(newHint);
+    el.querySelectorAll('form[data-form="training"]').forEach(capToggle);
   };
 }
 
@@ -557,6 +567,77 @@ async function cancelEvent(btn) {
   await loadEvent();
 }
 
+// ---------- tréninky a kurzy (specs/typy-akci): officers found them beside the operation, members answer in one click ----------
+const KINDS = { trenink: "Trénink", kurz: "Kurz" };
+const TOPICS = { stavba: "Stavba", pechota: "Boj pěchoty", technika: "Technika a vozidla", vrtulniky: "Vrtulníky", jine: "Jiné" };
+const label = (o, k) => Object.hasOwn(o, k) ? o[k] : k;  // a stored value we do not know is shown as stored
+const WHO = [["yes", "Přijdou"], ["maybe", "Možná"], ["no", "Nemůžou"]];  // names of others, so not "Prijdu" as on the buttons
+const goers = tr => tr.rsvps.filter(r => r.status === "yes").length;
+const trCount = tr => tr.capacity ? `${goers(tr)} / ${esc(tr.capacity)}` : String(goers(tr));
+
+function trainingsSection() {
+  const list = state.trainings.length ? `<ul class="trl">${state.trainings.map(trainingRow).join("")}</ul>`
+    : '<p class="note">Teď není vypsaný žádný trénink ani kurz. Vypisují je důstojníci.</p>';
+  return `<section class="block" id="treninky"><h2>Tréninky a kurzy</h2>${state.me.is_commander || state.me.is_officer ? newTrainingForm() : ""}${list}</section>`;
+}
+
+function trainingRow(tr) {
+  const by = { yes: [], maybe: [], no: [] }, id = esc(tr.id);
+  for (const r of tr.rsvps) (by[r.status] || []).push(r.members);
+  const mine = (tr.rsvps.find(r => r.user_id === state.me.user_id) || {}).status;
+  // T4: no "Prijdu" on a full course unless I already have a place; the capacity trigger refuses it anyway
+  const full = tr.capacity && by.yes.length >= tr.capacity && mine !== "yes";
+  const ctl = state.me.is_commander || tr.created_by === state.me.user_id ? `<details class="t${id}"><summary>Uzavřít nebo zrušit</summary>
+      <p class="note">Obojí ho z Akce odebere. Uzavři ten, který proběhl, zruš ten, který nebude.</p>
+      <button type="button" class="act" data-tclose="${id}:closed">Proběhl, uzavřít</button> <button type="button" class="act" data-tclose="${id}:cancelled">Zrušit</button></details>` : "";
+  return `<li class="tr"><p class="tr-k"><span class="ref">${esc(label(KINDS, tr.kind))}</span>${esc(label(TOPICS, tr.topic))}</p>
+    <h3>${esc(tr.title)}</h3>
+    <p class="tr-m"><time datetime="${esc(tr.starts_at)}">${esc(fmtWhen(tr.starts_at))}</time> · Vede <b>${esc(tr.leader ? tr.leader.name : "?")}</b> · Přijde <b>${trCount(tr)}</b></p>
+    ${tr.description ? `<p class="tr-d">${esc(tr.description)}</p>` : ""}
+    <div class="rsvp" role="group" aria-label="${esc(tr.title)}: přijdeš?">${RSVP.map(([k, l]) => `<button type="button" class="act" data-trsvp="${id}:${k}" aria-pressed="${mine === k}"${k === "yes" && full ? ` disabled aria-describedby="full-${id}"` : ""}>${l}</button>`).join("")}</div>
+    ${full ? `<p class="tr-full" id="full-${id}">Kurz je plný.</p>` : ""}
+    ${WHO.map(([k, l]) => by[k].length ? `<p class="tr-who"><b>${l}:</b> ${by[k].map(memberLink).join(" ")}</p>` : "").join("")}
+    ${ctl}</li>`;
+}
+
+function newTrainingForm() {
+  return `<details class="trnew"><summary>Vypsat trénink nebo kurz</summary><form class="evf" data-form="training">
+    <label>Typ <select name="kind"><option value="trenink">Trénink: pro všechny</option><option value="kurz">Kurz: omezený počet míst</option></select></label>
+    <label>Téma <select name="topic">${Object.entries(TOPICS).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></label>
+    <label class="wide">Název <input name="title" required maxlength="80"></label>
+    <label>Začátek <input type="datetime-local" name="starts" required min="${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}T00:00"></label>
+    <label class="cap" hidden>Počet míst <input type="number" name="capacity" min="2" max="12" value="8" required disabled></label>
+    <label class="wide">Krátký popis <textarea name="description" maxlength="500" rows="2"></textarea></label>
+    <button type="submit" class="act">Vypsat</button></form></details>`;
+}
+// a course has places, a training does not: the field shows and is sent only for a course
+const capToggle = f => { const off = f.elements.kind.value !== "kurz"; f.querySelector(".cap").hidden = off; f.elements.capacity.disabled = off; };
+
+// T2: the Commander and officers; the database refuses anyone else, and an operation from an officer
+async function createTraining(f) {
+  const v = Object.fromEntries(new FormData(f)), kind = v.kind === "kurz" ? "kurz" : "trenink";
+  const { error } = await sb.from("events").insert({ kind, topic: v.topic, title: v.title.trim(), starts_at: new Date(v.starts).toISOString(),
+    description: v.description.trim() || null, capacity: kind === "kurz" ? Number(v.capacity) : null });
+  state.flash = !error ? null : error.code === "42501" ? "Trénink nebo kurz vypíše jen důstojník (role Velitel) nebo Commander." : saveErr(error);
+  if (!error) { f.reset(); capToggle(f); }  // the next one starts from an empty form
+}
+
+async function rsvpTraining(id, status) {
+  const { error } = await sb.from("rsvps").upsert({ event_id: id, user_id: state.me.user_id, status, updated_at: new Date().toISOString() },
+    { onConflict: "event_id,user_id" });
+  // 23514 = the capacity trigger (012): someone took the last place a moment earlier
+  state.flash = !error ? null : error.code === "23514" ? "Kurz je plný." : error.code === "42501" ? "Trénink už je uzavřený." : saveErr(error);
+  await loadEvent();
+}
+
+// T5: the founder or the Commander (events_close, 012); no row back = not open any more, or not his
+async function closeTraining(id, status) {
+  const { data, error } = await sb.from("events").update({ status: status === "closed" ? "closed" : "cancelled" })
+    .eq("id", id).neq("kind", "operace").select("id");
+  state.flash = error ? saveErr(error) : !data.length ? "Nepodařilo se uložit: trénink už není otevřený, nebo ho nevypsal ty." : null;
+  await loadEvent();
+}
+
 // Viktor #003: the button says what gets founded or saved; a map without a team is not a plan yet (decision 1)
 const planName = s => `${s.map} · ${teamOf(s.team).name}`;
 const newLabel = (doctrine, s) => `Založit akci: ${docName(doctrine)}${s ? " · " + planName(s) : ""}`;
@@ -566,6 +647,7 @@ function newHint(f) {
   if (b) b.textContent = f.dataset.form === "new" ? newLabel(f.elements.doctrine.value, s) : saveLabel(s);
 }
 document.addEventListener("change", e => { if (["doctrine", "map", "team"].includes(e.target.name) && ["new", "mapteam"].includes(e.target.form?.dataset.form)) newHint(e.target.form); });
+document.addEventListener("change", e => { if (e.target.name === "kind" && e.target.form?.dataset.form === "training") capToggle(e.target.form); });
 
 document.addEventListener("submit", async e => {
   const f = e.target.closest("form[data-form]");
@@ -574,6 +656,7 @@ document.addEventListener("submit", async e => {
   const btn = f.querySelector('button[type="submit"]');
   if (btn.disabled) return;  // double click: the first submit is still saving
   btn.disabled = true;
+  if (f.dataset.form === "training") { await createTraining(f); btn.disabled = false; await loadEvent(); return; }
   const v = Object.fromEntries(new FormData(f)), eventId = state.event && state.event.id;
   // OWASP 2026-10-19 Low: map and team only pick one of our plans, a tampered <option> cannot send its own strategy_id
   const pick = f.elements.map && compose(f.elements.map.value, f.elements.team.value), sid = pick ? pick.id : null;
@@ -773,12 +856,14 @@ function unlockText(u) { return `${esc(u.track)} ${u.level}`; }
 // open event + my status on the home page (kept current by renderRoster after every roster load)
 function homeEvent() {
   if (!sb || !state.me) return "";
-  const ev = state.event;
-  if (!ev) return state.evErr ? `<p class="err home-ev">${LOAD_ERR}</p>` : '<p class="note home-ev">Teď není otevřená žádná akce.</p>';
+  const ev = state.event, tr = state.trainings[0];
+  // specs/typy-akci T6: the nearest training or course as a second line, under the operation or without one
+  const next = tr ? `<a class="trnext" href="#/akce"><span class="ref">${esc(label(KINDS, tr.kind))}</span><span>${esc(tr.title)} · ${esc(fmtWhen(tr.starts_at))} · přijde ${trCount(tr)}</span></a>` : "";
+  if (!ev) return (state.evErr ? `<p class="err home-ev">${LOAD_ERR}</p>` : '<p class="note home-ev">Teď není otevřená žádná akce.</p>') + next;
   const mine = state.claims.find(c => c.user_id === state.me.user_id);
   const said = (state.rsvps || []).find(r => r.user_id === state.me.user_id);
   const status = mine ? `Máš místo: ${esc(mine.slot_label)}` : said ? `Tvoje odpověď: ${esc((RSVP.find(x => x[0] === said.status) || [, said.status])[1])}` : "Zatím bez odpovědi a bez místa: otevři sestavu";
-  return `<a class="cont evc" href="#/akce"><span class="big">Akce</span><span>${esc(fmtWhen(ev.starts_at))} · ${sideOf(ev.strategy_id, "mapa zatím nevybraná")} · ${esc(docName(ev.doctrine))}<small>${status}</small></span></a>`;
+  return `<a class="cont evc" href="#/akce"><span class="big">Operace</span><span>${esc(fmtWhen(ev.starts_at))} · ${sideOf(ev.strategy_id, "mapa zatím nevybraná")} · ${esc(docName(ev.doctrine))}<small>${status}</small></span></a>${next}`;
 }
 
 // reading pages (map, doctrine) show the open event as a card into Akce, nothing when none is open
@@ -1061,7 +1146,7 @@ async function loadUnlocks() {
 }
 // a re-render replaces the focused control: put keyboard focus back on its twin
 function keepFocus(fn) {
-  const a = document.activeElement, k = a && ["data-unlock", "data-kitmode", "data-rsvp", "data-me", "data-swarm", "data-support"].find(x => a.hasAttribute(x));
+  const a = document.activeElement, k = a && ["data-unlock", "data-kitmode", "data-rsvp", "data-trsvp", "data-me", "data-swarm", "data-support"].find(x => a.hasAttribute(x));
   const sel = k && `[${k}="${CSS.escape(a.getAttribute(k))}"]`, i = sel ? [...document.querySelectorAll(sel)].indexOf(a) : -1;
   fn();
   if (sel) document.querySelectorAll(sel)[i]?.focus({ preventScroll: true });
@@ -1200,13 +1285,13 @@ async function loadHist(p) {
       html = viewCoverage(s, data);
     } else if (p[0] === "historie") {
       const { data, error } = await sb.from("events").select("id, strategy_id, doctrine, starts_at, variant, placement, claims(count)")
-        .eq("status", "closed").order("starts_at", { ascending: false });
+        .eq("status", "closed").eq("kind", "operace").order("starts_at", { ascending: false });  // a closed training is no played event
       if (error) throw error;
       html = viewHistory(data);
     } else if (p[0] === "akce") {
       const id = Number(p[1]);  // #/akce/abc: not an id, so "Akce neexistuje" instead of a database error (Viktor UAT #011)
       const { data: ev, error } = Number.isSafeInteger(id) && id > 0
-        ? await sb.from("events").select("id, strategy_id, doctrine, starts_at, status, variant, placement, note, went_well, went_wrong, next_time").eq("id", id).neq("status", "cancelled").maybeSingle()
+        ? await sb.from("events").select("id, strategy_id, doctrine, starts_at, status, variant, placement, note, went_well, went_wrong, next_time").eq("id", id).eq("kind", "operace").neq("status", "cancelled").maybeSingle()
         : { data: null, error: null };
       if (error) throw error;
       const [cl, at] = ev ? await Promise.all([
@@ -1429,8 +1514,10 @@ function render() {
 }
 
 $app.addEventListener("click", e => {
-  const t = e.target.closest("[data-trace],[data-untrace],[data-pick],[data-me],[data-variant],[data-kitmode],[data-claim],[data-unclaim],[data-rsvp],[data-unlock],[data-cancel],[data-kit],[data-swarm],[data-support],[data-lead]");
+  const t = e.target.closest("[data-trace],[data-untrace],[data-pick],[data-me],[data-variant],[data-kitmode],[data-claim],[data-unclaim],[data-rsvp],[data-unlock],[data-cancel],[data-kit],[data-swarm],[data-support],[data-lead],[data-trsvp],[data-tclose]");
   if (!t) return;
+  if (t.dataset.trsvp) { const [id, st] = t.dataset.trsvp.split(":"); rsvpTraining(Number(id), st); return; }
+  if (t.dataset.tclose) { t.disabled = true; const [id, st] = t.dataset.tclose.split(":"); closeTraining(Number(id), st); return; }
   if (t.dataset.swarm) { const [i, d] = t.dataset.swarm.split(":").map(Number); setSwarm(i, d); return; }
   if (t.dataset.support) { const [i, d] = t.dataset.support.split(":").map(Number); setSupport(i, d); return; }
   if (t.dataset.lead) {  // the button flips between "Povedu squad" and "Předat SL": keep focus on my row
