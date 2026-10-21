@@ -222,7 +222,8 @@ function viewRoster(s) {
   if (!ev) return state.evErr ? `${head}${msg}`
     : `${head}${state.me.is_commander ? newEventForm() : '<p class="note">Žádná akce není otevřená. Založí ji Commander.</p>'}${msg}`;
   const cancel = state.me.is_commander ? cancelEventForm() : "";
-  if (!s) return `${head}<p class="note">Otevřená akce (${esc(fmtWhen(ev.starts_at))}) je pro mapu ${esc(ev.strategy_id)}, kterou Central Command nezná.</p>${msg}${cancel}`;
+  // the map form too: picking a known map or "zatím nevím" keeps the sign-ups, cancelling drops them (threat model N1)
+  if (!s) return `${head}<p class="note">Otevřená akce (${esc(fmtWhen(ev.starts_at))}) je pro mapu ${esc(ev.strategy_id)}, kterou Central Command nezná.</p>${msg}${state.me.is_commander ? mapTeamForm(ev) : ""}${cancel}`;
   const by = Object.fromEntries(state.claims.map(c => [c.slot_key, c]));
   const filled = state.claims.filter(c => s.roster.some(g => g.slots.some(x => x.key === c.slot_key))).length;
   const total = s.roster.reduce((n, g) => n + g.max, 0);
