@@ -607,18 +607,36 @@ body {
     var(--ground);
   background-attachment: fixed;
 }
-/* the radar: one slow sweep over the whole floor, behind everything */
-body::before {
-  content: ""; position: fixed; z-index: -1; left: 50%; top: 50%; width: 160vmax; height: 160vmax; margin: -80vmax 0 0 -80vmax;
-  background: conic-gradient(from 0deg, transparent 0 318deg, oklch(0.86 0.15 205 / 0.05) 340deg, oklch(0.86 0.15 205 / 0.13) 359deg, transparent 360deg);
-  border-radius: 50%; pointer-events: none; animation: radar 11s linear infinite;
-}
 body::after {
   content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
   background: radial-gradient(ellipse at center, transparent 55%, oklch(0.08 0.02 255 / 0.65));
 }
-@keyframes radar { to { transform: rotate(1turn); } }
 :focus-visible { outline: 2px solid var(--fr); outline-offset: 2px; box-shadow: 0 0 0 4px oklch(0.86 0.15 205 / 0.2); }
+
+/* the operations map behind everything (Petr 2026-10-21: not a sweep, "neco lepsiho a vic cool"): sectors, our units
+   pinging, hostiles blinking, planned moves marching toward the Hot Zone, one slow scan band; decoration only */
+.ops { position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: .42; overflow: hidden; }
+.ops svg { width: 100%; height: 100%; display: block; }
+.ops .lbl text { font: 600 18px var(--cond); letter-spacing: .1em; fill: oklch(0.86 0.15 205 / 0.55); }
+.ops .u rect, .ops .u path, .ops .u ellipse { fill: oklch(0.86 0.15 205 / 0.10); stroke: oklch(0.86 0.15 205 / 0.75); stroke-width: 2; }
+.ops .u path { fill: none; }
+.ops .ping { fill: none; stroke: oklch(0.86 0.15 205 / 0.6); stroke-width: 1.5; transform-box: fill-box; transform-origin: center;
+  animation: ops-ping 4.2s var(--ease) infinite; animation-delay: var(--d, 0s); }
+@keyframes ops-ping { 0% { transform: scale(0.6); opacity: .9; } 70%, 100% { transform: scale(2.4); opacity: 0; } }
+.ops .h rect { fill: oklch(0.72 0.19 25 / 0.12); stroke: oklch(0.72 0.19 25 / 0.7); stroke-width: 2; animation: ops-blink 3.4s steps(2, end) infinite; animation-delay: var(--d, 0s); }
+@keyframes ops-blink { 0%, 60% { opacity: 1; } 61%, 100% { opacity: .35; } }
+.ops .mv { fill: none; stroke: oklch(0.86 0.15 205 / 0.5); stroke-width: 2; stroke-dasharray: 10 12; animation: ops-march 2.6s linear infinite; animation-delay: var(--d, 0s); }
+.ops marker path { fill: oklch(0.86 0.15 205 / 0.6); }
+@keyframes ops-march { to { stroke-dashoffset: -44; } }
+.ops .hz circle { fill: oklch(0.86 0.15 205 / 0.04); stroke: oklch(0.86 0.15 205 / 0.45); stroke-width: 2; stroke-dasharray: 18 12; }
+.ops .hz .hz-ring { fill: none; stroke-dasharray: none; transform-box: fill-box; transform-origin: center; animation: ops-zone 6s var(--ease) infinite; }
+@keyframes ops-zone { 0% { transform: scale(0.85); opacity: .7; } 100% { transform: scale(1.3); opacity: 0; } }
+.ops .hz text { font: 700 20px var(--cond); letter-spacing: .2em; text-anchor: middle; fill: oklch(0.86 0.15 205 / 0.6); }
+.ops::after { content: ""; position: absolute; left: 0; right: 0; top: -30%; height: 30%;
+  background: linear-gradient(180deg, transparent, oklch(0.86 0.15 205 / 0.07) 70%, oklch(0.86 0.15 205 / 0.16) 98%, transparent);
+  animation: ops-scan 13s linear infinite; }
+@keyframes ops-scan { to { transform: translateY(440%); } }
+@media (max-width: 720px) { .ops { opacity: .38; } .ops .lbl { display: none; } }
 
 /* bar: a console strip, gold seam below, a cyan light line under it */
 .bar { background: linear-gradient(180deg, oklch(0.16 0.04 252 / 0.92), var(--bar-bg)); backdrop-filter: blur(10px) saturate(1.3);
@@ -710,7 +728,7 @@ li.fx-new { animation: fx-unfold 520ms var(--ease) both; }
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 
 @media (prefers-reduced-motion: reduce) {
-  body::before, #app > *, li.fx-claim .rslot, li.fx-claim::after, .veh.fx-new::after, li.fx-free .rslot, li.fx-new, .veh.fx-new, .slb.fx-lead { animation: none !important; }
+  .ops *, .ops::after, #app > *, li.fx-claim .rslot, li.fx-claim::after, .veh.fx-new::after, li.fx-free .rslot, li.fx-new, .veh.fx-new, .slb.fx-lead { animation: none !important; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
@@ -718,12 +736,28 @@ li.fx-new { animation: fx-unfold 520ms var(--ease) both; }
 <body>
 <!--
 THESIS: Central Command is the clan's war room at night: the plan on edge-lit glass plates over a dark operations floor, and every change on the roster answers with light and sound. It refuses the flat document page it replaces and the neon gamer dashboard.
-OWN-WORLD: near-black navy floor with a fine grid, contour lines and one slow radar sweep; plates of navy glass lit from above with cyan corner brackets and a soft lift; phosphor cyan for us and every control, hostile red, unknown yellow, gold only as the patch's brand thread; Barlow Semi Condensed caps for labels, Barlow for reading.
+OWN-WORLD: near-black navy floor with a fine grid, contour lines and a live operations map behind it (sectors, our units pinging, hostiles blinking, moves marching to the Hot Zone, a slow scan band); plates of navy glass lit from above with cyan corner brackets and a soft lift; phosphor cyan for us and every control, hostile red, unknown yellow, gold only as the patch's brand thread; Barlow Semi Condensed caps for labels, Barlow for reading.
 STORY: a member opens Akce, takes a place in a squad and sees it lock in with a scan and a chirp, then reads what to buy; the Commander grows squads and vehicles and the whole roster answers live.
 FIRST VIEWPORT: Akce: title, squads as separate lit plates (core on a solid bracket, Swarm on a dashed one, + / - beside the count), my place glowing, the speaker toggle in the bar.
 FORM: brief-pinned by Petr 2026-10-21 ("futuristicky design war room, tmavy s velkym kontrastem, prvky animovane a interaktivni"), seed 94cb211f, assigned index set aside for the pinned brief.
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
 -->
+<div class="ops" aria-hidden="true"><svg viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+  <defs><marker id="ops-ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker></defs>
+  <g class="lbl"><text x="100" y="30">A</text><text x="300" y="30">B</text><text x="500" y="30">C</text><text x="700" y="30">D</text><text x="900" y="30">E</text><text x="1100" y="30">F</text><text x="1300" y="30">G</text><text x="1500" y="30">H</text>
+    <text x="14" y="106">1</text><text x="14" y="306">2</text><text x="14" y="506">3</text><text x="14" y="706">4</text><text x="14" y="906">5</text></g>
+  <g class="hz"><circle cx="1010" cy="430" r="132"/><circle class="hz-ring" cx="1010" cy="430" r="132"/><text x="1010" y="284">HOT ZONE</text></g>
+  <path class="mv" d="M300 700 C 470 640, 640 560, 880 470" marker-end="url(#ops-ah)"/>
+  <path class="mv" style="--d:-4s" d="M520 860 C 690 760, 820 640, 930 540" marker-end="url(#ops-ah)"/>
+  <path class="mv" style="--d:-2s" d="M240 330 C 480 300, 700 340, 870 400" marker-end="url(#ops-ah)"/>
+  <g class="u" transform="translate(300 700)"><circle class="ping" r="34"/><rect x="-24" y="-16" width="48" height="32"/><path d="M-24 -16L24 16M24 -16L-24 16"/></g>
+  <g class="u" style="--d:-1.2s" transform="translate(520 860)"><circle class="ping" r="34"/><rect x="-24" y="-16" width="48" height="32"/><path d="M-24 -16L24 16M24 -16L-24 16"/></g>
+  <g class="u" style="--d:-2.4s" transform="translate(240 330)"><circle class="ping" r="34"/><rect x="-24" y="-16" width="48" height="32"/><path d="M-24 -16L24 16M24 -16L-24 16"/></g>
+  <g class="u arm" style="--d:-3.1s" transform="translate(160 540)"><circle class="ping" r="34"/><rect x="-24" y="-16" width="48" height="32"/><ellipse cx="0" cy="0" rx="14" ry="7"/></g>
+  <g class="h" transform="translate(1240 320)"><rect x="-17" y="-17" width="34" height="34" transform="rotate(45)"/></g>
+  <g class="h" style="--d:-1.7s" transform="translate(1330 560)"><rect x="-17" y="-17" width="34" height="34" transform="rotate(45)"/></g>
+  <g class="h" style="--d:-0.6s" transform="translate(1180 760)"><rect x="-17" y="-17" width="34" height="34" transform="rotate(45)"/></g>
+</svg></div>
 <header class="bar"><div class="wrap">
   <a class="brand" href="#/"><img class="emblem" src="znacka/kin-ikona.svg" alt="" width="30" height="30"><span class="mark">KIN</span><span>Central Command</span></a>
   <nav id="nav" aria-label="Hlavní"></nav>
