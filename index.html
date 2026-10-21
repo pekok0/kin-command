@@ -29,29 +29,40 @@
 
 :root {
   color-scheme: dark;
-  /* Navy & Bullion: the KIN patch on a navy uniform; gold is thread for the brand only (top bar, emblem) */
-  --ground: oklch(0.24 0.059 262);
-  --panel: oklch(0.275 0.065 262);
-  --panel-2: oklch(0.31 0.07 262);
-  --rule: oklch(0.43 0.06 262);
-  --rule-soft: oklch(0.35 0.055 262);
-  --acetate: oklch(0.275 0.065 262 / 0.9);
-  --bar-bg: oklch(0.24 0.059 262 / 0.94);
-  --slot-bg: oklch(0.24 0.059 262 / 0.7);
-  --ink: oklch(0.94 0.013 95);
-  --ink-2: oklch(0.83 0.02 255);
-  --ink-3: oklch(0.71 0.03 255);
+  /* War room (Petr 2026-10-21): a combat information center at night -- near-black navy floor, edge-lit glass plates,
+     phosphor cyan for us and every control, hostile red, gold only as the patch's brand thread */
+  --ground: oklch(0.14 0.03 255);
+  --panel: oklch(0.19 0.042 252);
+  --panel-2: oklch(0.235 0.055 248);
+  --rule: oklch(0.45 0.08 228);
+  --rule-soft: oklch(0.31 0.055 242);
+  --acetate: oklch(0.18 0.045 250 / 0.8);
+  --bar-bg: oklch(0.12 0.03 255 / 0.84);
+  --slot-bg: oklch(0.16 0.04 252 / 0.82);
+  --ink: oklch(0.97 0.012 230);
+  --ink-2: oklch(0.85 0.03 232);
+  --ink-3: oklch(0.71 0.045 238);
   --gold: oklch(0.80 0.12 85);
   --gold-thread: oklch(0.80 0.12 85 / 0.55);
-  --fr: oklch(0.86 0.095 215);
-  --fr-fill: oklch(0.86 0.095 215 / 0.13);
-  --ho: oklch(0.74 0.15 24);
-  --gr: oklch(0.82 0.14 145);
-  --un: oklch(0.91 0.14 103);
-  --un-fill: oklch(0.91 0.14 103 / 0.11);
+  --fr: oklch(0.86 0.15 205);
+  --fr-fill: oklch(0.86 0.15 205 / 0.14);
+  --fr-glow: oklch(0.86 0.15 205 / 0.5);
+  --ho: oklch(0.72 0.19 25);
+  --gr: oklch(0.82 0.16 150);
+  --un: oklch(0.91 0.15 100);
+  --un-fill: oklch(0.91 0.15 100 / 0.12);
   --sans: Barlow, "Segoe UI", system-ui, sans-serif;
   --cond: "Barlow Semi Condensed", "Arial Narrow", Barlow, system-ui, sans-serif;
-  --step: 90ms steps(2, end);
+  --step: 160ms cubic-bezier(.16, 1, .3, 1);
+  --ease: cubic-bezier(.16, 1, .3, 1);
+  /* a plate: lit from above, lifted off the floor */
+  --plate-bg: linear-gradient(180deg, oklch(0.24 0.055 245 / 0.92), oklch(0.17 0.04 252 / 0.9) 46%, oklch(0.15 0.035 254 / 0.92));
+  --plate-lift: inset 0 1px 0 oklch(0.86 0.15 205 / 0.28), inset 0 0 0 1px oklch(0.45 0.08 228 / 0.55), 0 22px 44px -22px oklch(0.05 0.02 255 / 0.95), 0 3px 8px -3px oklch(0.05 0.02 255 / 0.7);
+  --brk: oklch(0.86 0.15 205 / 0.85);
+  --brackets: linear-gradient(var(--brk), var(--brk)) top left / 12px 1px no-repeat, linear-gradient(var(--brk), var(--brk)) top left / 1px 12px no-repeat,
+    linear-gradient(var(--brk), var(--brk)) top right / 12px 1px no-repeat, linear-gradient(var(--brk), var(--brk)) top right / 1px 12px no-repeat,
+    linear-gradient(var(--brk), var(--brk)) bottom left / 12px 1px no-repeat, linear-gradient(var(--brk), var(--brk)) bottom left / 1px 12px no-repeat,
+    linear-gradient(var(--brk), var(--brk)) bottom right / 12px 1px no-repeat, linear-gradient(var(--brk), var(--brk)) bottom right / 1px 12px no-repeat;
 }
 * { box-sizing: border-box; }
 html { scrollbar-color: var(--rule) var(--ground); -webkit-text-size-adjust: 100%; }
@@ -584,21 +595,139 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
   .sheets li a { grid-template-columns: 1fr auto; gap: 6px 12px; }
   .sheets .meta { grid-column: 1; }
 }
+/* ==== war room (Petr 2026-10-21): depth, light and motion over the same structure ==== */
+body {
+  position: relative; isolation: isolate;
+  background:
+    radial-gradient(120% 70% at 50% -12%, oklch(0.34 0.09 228 / 0.42), transparent 62%),
+    radial-gradient(80% 60% at 100% 110%, oklch(0.30 0.08 250 / 0.35), transparent 70%),
+    repeating-linear-gradient(0deg, oklch(0.86 0.15 205 / 0.04) 0 1px, transparent 1px 56px),
+    repeating-linear-gradient(90deg, oklch(0.86 0.15 205 / 0.04) 0 1px, transparent 1px 56px),
+    url(contours.svg) 0 0 / 1200px 900px,
+    var(--ground);
+  background-attachment: fixed;
+}
+/* the radar: one slow sweep over the whole floor, behind everything */
+body::before {
+  content: ""; position: fixed; z-index: -1; left: 50%; top: 50%; width: 160vmax; height: 160vmax; margin: -80vmax 0 0 -80vmax;
+  background: conic-gradient(from 0deg, transparent 0 318deg, oklch(0.86 0.15 205 / 0.05) 340deg, oklch(0.86 0.15 205 / 0.13) 359deg, transparent 360deg);
+  border-radius: 50%; pointer-events: none; animation: radar 11s linear infinite;
+}
+body::after {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 55%, oklch(0.08 0.02 255 / 0.65));
+}
+@keyframes radar { to { transform: rotate(1turn); } }
+:focus-visible { outline: 2px solid var(--fr); outline-offset: 2px; box-shadow: 0 0 0 4px oklch(0.86 0.15 205 / 0.2); }
+
+/* bar: a console strip, gold seam below, a cyan light line under it */
+.bar { background: linear-gradient(180deg, oklch(0.16 0.04 252 / 0.92), var(--bar-bg)); backdrop-filter: blur(10px) saturate(1.3);
+  box-shadow: 0 1px 0 var(--gold-thread), 0 2px 0 oklch(0.86 0.15 205 / 0.18), 0 18px 30px -20px oklch(0.05 0.02 255 / 0.9); border-bottom: 0; }
+.bar nav a { position: relative; transition: color var(--step), background-color var(--step); }
+.bar nav a::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 2px; height: 2px; background: var(--fr);
+  box-shadow: 0 0 10px var(--fr-glow); transform: scaleX(0); transform-origin: left; transition: transform 260ms var(--ease); }
+.bar nav a:hover::after, .bar nav a[aria-current]::after { transform: scaleX(1); }
+.bar nav a:hover, .bar nav a[aria-current] { background: oklch(0.86 0.15 205 / 0.08); }
+.snd { display: grid; place-items: center; width: 40px; height: 40px; flex: none; color: var(--ink-3); border: 1px solid var(--rule-soft);
+  transition: color var(--step), border-color var(--step), box-shadow var(--step); }
+.snd:hover { color: var(--fr); border-color: var(--fr); box-shadow: 0 0 14px -2px var(--fr-glow); }
+.snd .ico { width: 18px; height: 18px; vertical-align: 0; }
+.snd[aria-pressed="true"] { color: var(--fr); }
+.snd[aria-pressed="true"] .off, .snd[aria-pressed="false"] .on { display: none; }
+
+/* plates: every panel is edge-lit glass with corner brackets, lifted off the floor */
+.ros, .matrix-wrap, .picker, .loadout { background: var(--brackets), var(--plate-bg); border: 0; box-shadow: var(--plate-lift); }
+.tile, .cls a, .strip li, .lo-store li, .cont, #evbar a, .vbar button, .drill a.pic {
+  background-color: transparent; background-image: var(--plate-bg); box-shadow: var(--plate-lift); border-color: transparent;
+  transition: transform 220ms var(--ease), box-shadow 220ms var(--ease); }
+.tile.opt, .strip li.opt { box-shadow: inset 0 0 0 1px oklch(0.45 0.08 228 / 0.55); border: 1px dashed var(--rule); }
+.cls a:hover, .tile:hover, .cont:hover, .vbar button:hover, .drill a.pic:hover {
+  transform: translateY(-2px); box-shadow: var(--plate-lift), 0 0 0 1px var(--fr), 0 0 26px -6px var(--fr-glow); }
+.vbar button[aria-pressed="true"] { box-shadow: var(--plate-lift), inset 0 -3px 0 var(--fr), 0 0 22px -8px var(--fr-glow); }
+.cont { box-shadow: var(--plate-lift), 0 0 0 1px var(--fr), 0 0 34px -10px var(--fr-glow); }
+.cont .big { text-shadow: 0 0 18px var(--fr-glow); }
+h1 { text-shadow: 0 0 28px oklch(0.86 0.15 205 / 0.18); }
+.role-head .code, .strat-head h1 span { text-shadow: 0 0 22px var(--fr-glow); }
+.matrix thead th, .matrix tbody th { background: oklch(0.21 0.05 248 / 0.95); }
+.tabs a[aria-current] { background: oklch(0.86 0.15 205 / 0.1); box-shadow: inset 0 -2px 0 var(--fr), 0 6px 16px -10px var(--fr-glow); }
+
+/* controls: lit edge, glow on approach, a press you can feel */
+.act, .me-btn, .rid, .ref, .evclose summary, .evmap summary, .evcancel summary, .kitl {
+  transition: border-color var(--step), box-shadow var(--step), background-color var(--step), transform 120ms var(--ease); }
+.act { background: linear-gradient(180deg, oklch(0.25 0.05 245 / 0.9), oklch(0.18 0.04 252 / 0.9)); box-shadow: inset 0 1px 0 oklch(0.86 0.15 205 / 0.18); }
+.act:hover, .evclose summary:hover, .evmap summary:hover { border-color: var(--fr); box-shadow: inset 0 1px 0 oklch(0.86 0.15 205 / 0.3), 0 0 18px -4px var(--fr-glow); }
+.act:active, .rslot:active, .rid:active { transform: translateY(1px) scale(0.985); }
+.act.big { color: var(--ground); background: linear-gradient(180deg, oklch(0.9 0.14 205), oklch(0.78 0.15 210)); box-shadow: 0 0 0 1px var(--fr), 0 10px 30px -10px var(--fr-glow); }
+.act.big:hover { background: linear-gradient(180deg, oklch(0.94 0.12 205), oklch(0.82 0.15 210)); box-shadow: 0 0 0 1px var(--fr), 0 0 36px -6px var(--fr-glow); }
+.swctl .act { font-weight: 700; }
+.swctl .act:disabled { background: none; box-shadow: none; }
+.rid { box-shadow: 0 0 12px -6px var(--fr-glow); }
+
+/* roster: every squad, Podpora and vehicle is its own plate on the floor */
+.ros { gap: 14px; padding: 14px; }
+.ros .rg { border: 0; background: var(--brackets), var(--plate-bg); box-shadow: var(--plate-lift); transition: box-shadow 260ms var(--ease); }
+.ros .rg:hover { box-shadow: var(--plate-lift), 0 0 0 1px oklch(0.86 0.15 205 / 0.45), 0 0 30px -12px var(--fr-glow); }
+.ros.swarm { background: none; box-shadow: none; padding: 0; }
+.rg .pg-head b { letter-spacing: .04em; text-shadow: 0 0 16px oklch(0.86 0.15 205 / 0.25); }
+.rg .pg-head .num, .ros-head .num { color: var(--fr); text-shadow: 0 0 14px var(--fr-glow); }
+.sqc .veli.none { color: var(--ho); text-shadow: 0 0 12px oklch(0.72 0.19 25 / 0.45); }
+.sqc ul { border-left-color: oklch(0.86 0.15 205 / 0.55); }
+.sqc ul.body { border-left-color: oklch(0.86 0.15 205 / 0.35); }
+.veh { border: 0; background: oklch(0.13 0.03 254 / 0.6); box-shadow: inset 0 0 0 1px var(--rule-soft), inset 0 1px 0 oklch(0.86 0.15 205 / 0.2); }
+.rslot { position: relative; transition: background-color var(--step), box-shadow var(--step); }
+.rslot:not([disabled]):hover { background: linear-gradient(90deg, oklch(0.86 0.15 205 / 0.16), oklch(0.86 0.15 205 / 0.03) 70%); box-shadow: inset 0 0 0 1px oklch(0.86 0.15 205 / 0.45); }
+.rslot .free { transition: color var(--step), border-color var(--step); }
+.rslot:not([disabled]):hover .free { color: var(--fr); border-color: var(--fr); }
+.rg li.is-me .rslot, .sqc li.is-me .rslot { background: linear-gradient(90deg, oklch(0.86 0.15 205 / 0.22), oklch(0.86 0.15 205 / 0.06)); box-shadow: inset 0 0 0 1px var(--fr), 0 0 22px -8px var(--fr-glow); }
+.slb { background: var(--ink); color: var(--ground); box-shadow: 0 0 0 1px var(--fr), 0 0 14px -2px var(--fr-glow); }
+.miss.warn { box-shadow: 0 0 24px -12px oklch(0.72 0.19 25 / 0.6); }
+
+/* change marks (app.js markChanges): one authored move per kind, from an already visible state */
+.rg li, .veh { position: relative; }
+li.fx-claim .rslot { animation: fx-lock 900ms var(--ease); }
+li.fx-claim::after, .veh.fx-new::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(100deg, transparent 20%, oklch(0.86 0.15 205 / 0.45) 50%, transparent 80%); background-size: 250% 100%;
+  animation: fx-scan 700ms var(--ease) forwards; }
+@keyframes fx-lock { 0% { box-shadow: inset 0 0 0 2px var(--fr), 0 0 34px 2px var(--fr-glow); } 100% { box-shadow: inset 0 0 0 1px transparent; } }
+@keyframes fx-scan { from { background-position: 120% 0; opacity: 1; } to { background-position: -30% 0; opacity: 0; } }
+li.fx-free .rslot { animation: fx-free 600ms steps(6, end); }
+@keyframes fx-free { 0% { box-shadow: inset 0 0 0 1px var(--ho); background: oklch(0.72 0.19 25 / 0.18); clip-path: inset(0); }
+  30% { clip-path: inset(0 0 40% 0); transform: translateX(3px); } 60% { clip-path: inset(30% 0 0 0); transform: translateX(-2px); }
+  100% { box-shadow: inset 0 0 0 1px transparent; background: transparent; clip-path: inset(0); transform: none; } }
+li.fx-new { animation: fx-unfold 520ms var(--ease) both; }
+@keyframes fx-unfold { from { clip-path: inset(0 0 100% 0); transform: translateY(-6px); } to { clip-path: inset(0); transform: none; } }
+.veh.fx-new { animation: fx-deploy 700ms var(--ease) both; }
+@keyframes fx-deploy { from { transform: scale(0.94); filter: brightness(1.9); box-shadow: inset 0 0 0 2px var(--fr), 0 0 40px 4px var(--fr-glow); } to { transform: none; filter: none; } }
+.slb.fx-lead { animation: fx-stamp 650ms var(--ease) both; }
+@keyframes fx-stamp { 0% { transform: scale(2.4) rotate(-10deg); opacity: 0; }
+  55% { transform: scale(0.9); opacity: 1; box-shadow: 0 0 0 6px oklch(0.86 0.15 205 / 0.35), 0 0 30px var(--fr-glow); } 100% { transform: none; } }
+
+/* every page arrives once: the content rises off the floor */
+#app > * { animation: rise 420ms var(--ease) both; }
+#app > *:nth-child(2) { animation-delay: 40ms; }
+#app > *:nth-child(3) { animation-delay: 80ms; }
+#app > *:nth-child(n+4) { animation-delay: 120ms; }
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  body::before, #app > *, li.fx-claim .rslot, li.fx-claim::after, .veh.fx-new::after, li.fx-free .rslot, li.fx-new, .veh.fx-new, .slb.fx-lead { animation: none !important; }
+}
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
 <!--
-THESIS: Central Command is the KIN unit patch's staff room: the plan on a navy table, the clan identity stitched in gold only at the edges. It refuses the gamer-HUD dashboard and the olive map table it replaces.
-OWN-WORLD: deep navy ground and acetate panels ruled in navy hairlines with faint contour lines, bone lettering in Barlow Semi Condensed caps, gold bullion thread only for the emblem, the KIN tab and the top-bar seam; APP-6 hues keep their meanings: friendly blue for us and every control, hostile red, green team green, unknown yellow for drafts and gaps.
-STORY: a member logs in, finds their role, sees what to buy, when to move and what to do, and keeps that card open in battle.
-FIRST VIEWPORT: home: the round emblem beside CENTRAL COMMAND, lede, how-to (folded on phones), strategy list; canvas: strategy title, Draft tag, zone variants, the map sketch.
-FORM: brief-pinned (Kinetic Solutions patch identity, Petr 2026-10-16), no concept roll; structure of the previous build kept (seed 25ab8fb5).
+THESIS: Central Command is the clan's war room at night: the plan on edge-lit glass plates over a dark operations floor, and every change on the roster answers with light and sound. It refuses the flat document page it replaces and the neon gamer dashboard.
+OWN-WORLD: near-black navy floor with a fine grid, contour lines and one slow radar sweep; plates of navy glass lit from above with cyan corner brackets and a soft lift; phosphor cyan for us and every control, hostile red, unknown yellow, gold only as the patch's brand thread; Barlow Semi Condensed caps for labels, Barlow for reading.
+STORY: a member opens Akce, takes a place in a squad and sees it lock in with a scan and a chirp, then reads what to buy; the Commander grows squads and vehicles and the whole roster answers live.
+FIRST VIEWPORT: Akce: title, squads as separate lit plates (core on a solid bracket, Swarm on a dashed one, + / - beside the count), my place glowing, the speaker toggle in the bar.
+FORM: brief-pinned by Petr 2026-10-21 ("futuristicky design war room, tmavy s velkym kontrastem, prvky animovane a interaktivni"), seed 94cb211f, assigned index set aside for the pinned brief.
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
 -->
 <header class="bar"><div class="wrap">
   <a class="brand" href="#/"><img class="emblem" src="znacka/kin-ikona.svg" alt="" width="30" height="30"><span class="mark">KIN</span><span>Central Command</span></a>
   <nav id="nav" aria-label="Hlavní"></nav>
+  <button type="button" id="snd" class="snd" aria-pressed="true" aria-label="Zvuky sestavy" title="Zvuky sestavy"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6h3l4-3v10l-4-3H2z"/><path class="on" d="M11 5.5c1 .8 1 4.2 0 5M13 3.5c2 1.8 2 7.2 0 9"/><path class="off" d="M11 6l4 4M15 6l-4 4"/></svg></button>
   <div id="who" class="who" aria-live="polite"></div>
 </div></header>
 <div id="evbar" class="wrap"></div>

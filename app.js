@@ -179,7 +179,7 @@ function slotRow(x, c, sq) {
   // the badge is taken and handed over on one's own row only, one per squad (decision 4: not even the Commander assigns it)
   const lead = !sq || !mine ? "" : c.lead ? '<button type="button" class="act lead" data-lead="0">Předat SL</button>'
     : sq.led ? "" : '<button type="button" class="act lead" data-lead="1">Povedu squad</button>';
-  return `<li${mine ? ' class="is-me"' : ""}><button type="button" class="rslot" ${act}><span class="lbl">${x.role ? `<span class="rid">${esc(x.role)}</span>` : ""}${esc(x.label)}</span>${who}</button>${lead}${kick}</li>`;
+  return `<li data-key="${esc(x.key)}"${mine ? ' class="is-me"' : ""}><button type="button" class="rslot" ${act}><span class="lbl">${x.role ? `<span class="rid">${esc(x.role)}</span>` : ""}${esc(x.label)}</span>${who}</button>${lead}${kick}</li>`;
 }
 
 function rosterGroup(g, by) {
@@ -225,7 +225,7 @@ function podporaCard(g, by) {
     const ctl = state.me.is_commander ? `<div class="sqp">${esc(t.name)} <b>${esc(t.n)}</b><span class="swctl">
       <button type="button" class="act" data-support="${t.ti}:-1" aria-label="Podpora: ubrat ${esc(t.name)}"${less ? ` disabled aria-describedby="${esc(wid)}"` : ""}>\u2212 ${esc(t.name)}</button>
       <button type="button" class="act" data-support="${t.ti}:1" aria-label="Podpora: přidat ${esc(t.name)}"${more ? ` disabled aria-describedby="${esc(wid)}"` : ""}>+ ${esc(t.name)}</button></span></div>${why ? `<p class="why" id="${esc(wid)}">${esc(why)}</p>` : ""}` : "";
-    const cars = t.cars.map(c => `<div class="veh"><div class="vh">${sym(t.symbol, "sm")}<b class="vn">${esc(c.name)}</b><span class="num">${c.slots.filter(x => by[x.key]).length}/${c.slots.length}</span></div>
+    const cars = t.cars.map(c => `<div class="veh" data-veh="${esc(c.slots[0].key)}"><div class="vh">${sym(t.symbol, "sm")}<b class="vn">${esc(c.name)}</b><span class="num">${c.slots.filter(x => by[x.key]).length}/${c.slots.length}</span></div>
       <ul>${c.slots.map(x => slotRow(x, by[x.key])).join("")}</ul></div>`).join("");
     return ctl || cars ? `<div class="vtype">${ctl}${cars}</div>` : "";
   }).join("");
@@ -339,7 +339,80 @@ function renderRoster() {
   const restore = keepForms();
   keepFocus(() => { el.innerHTML = akceBody(); });
   restore();
+  markChanges(el);
 }
+
+// war room (Petr 2026-10-21, specs/war-room W2-W3): every change on the roster shows on the row or vehicle and plays one
+// cue, mine and the others' (realtime) alike; the first paint and a switched event stay quiet
+let seen = null;
+function markChanges(el) {
+  const now = { ev: state.event && state.event.id, flash: state.flash,
+    by: Object.fromEntries(state.claims.map(c => [c.slot_key, c.user_id])),
+    leads: new Set(state.claims.filter(c => c.lead).map(c => c.slot_key)),
+    keys: new Set([...el.querySelectorAll("li[data-key]")].map(li => li.dataset.key)),
+    vehs: new Set([...el.querySelectorAll(".veh[data-veh]")].map(v => v.dataset.veh)) };
+  const was = seen;
+  seen = now;
+  if (!was || was.ev !== now.ev) return;
+  const fired = new Set(), mark = (node, cls, cue) => { if (node) { node.classList.add(cls); fired.add(cue); } };
+  for (const li of el.querySelectorAll("li[data-key]")) {
+    const k = li.dataset.key;
+    if (!was.keys.has(k)) { mark(li, "fx-new", "add"); continue; }
+    if (now.by[k] && now.by[k] !== was.by[k]) mark(li, "fx-claim", "claim");
+    else if (!now.by[k] && was.by[k]) mark(li, "fx-free", "free");
+    if (now.leads.has(k) && !was.leads.has(k)) mark(li.querySelector(".slb"), "fx-lead", "lead");
+  }
+  for (const v of el.querySelectorAll(".veh[data-veh]")) if (!was.vehs.has(v.dataset.veh)) mark(v, "fx-new", "vehicle");
+  if ([...was.keys].some(k => !now.keys.has(k))) fired.add("remove");
+  if (now.flash && now.flash !== was.flash) fired.add("error");
+  const cue = ["error", "vehicle", "lead", "claim", "add", "free", "remove"].find(c => fired.has(c));
+  if (cue) sound(cue);
+}
+
+// synthesized cues (Web Audio, no files): short, quiet, off with the speaker in the bar (remembered in localStorage)
+let actx = null;
+let soundPref = null;  // private window without localStorage: the toggle still works for this visit
+const soundOn = () => { try { return (localStorage.getItem("kin-sound") || soundPref) !== "off"; } catch { return soundPref !== "off"; } };
+const CUES = {  // [start Hz, end Hz, seconds, wave, delay s]
+  claim: [[520, 880, .07, "square", 0], [1320, 1320, .08, "sine", .07]],
+  free: [[660, 330, .16, "triangle", 0]],
+  add: [[1800, 1800, .02, "square", 0], [990, 990, .09, "sine", .04]],
+  remove: [[440, 220, .1, "square", 0]],
+  vehicle: [[80, 150, .26, "sawtooth", 0], [740, 740, .12, "sine", .14]],
+  lead: [[660, 660, .12, "sine", 0], [880, 880, .12, "sine", .07], [1320, 1320, .2, "sine", .14]],
+  error: [[150, 120, .2, "square", 0]],
+};
+function sound(name) {
+  if (!soundOn() || !CUES[name]) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === "suspended") actx.resume();  // allowed after the first click; before it the cue just stays silent
+    const t0 = actx.currentTime;
+    for (const [f0, f1, dur, type, at] of CUES[name]) {
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(f0, t0 + at);
+      o.frequency.exponentialRampToValueAtTime(f1, t0 + at + dur);
+      g.gain.setValueAtTime(0.0001, t0 + at);
+      g.gain.exponentialRampToValueAtTime(type === "sine" ? 0.09 : 0.035, t0 + at + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + dur);
+      o.connect(g).connect(actx.destination);
+      o.start(t0 + at);
+      o.stop(t0 + at + dur + 0.02);
+    }
+  } catch (e) { console.error(e); }  // no audio device: the page works on without cues
+}
+function renderSound() {
+  const b = document.getElementById("snd");
+  if (b) b.setAttribute("aria-pressed", String(soundOn()));
+}
+document.getElementById("snd")?.addEventListener("click", () => {
+  soundPref = soundOn() ? "off" : "on";
+  try { localStorage.setItem("kin-sound", soundPref); } catch { /* private window: soundPref holds it */ }
+  renderSound();
+  sound("claim");
+});
+renderSound();
 
 async function claim(key) {
   const s = plan;  // the page may change while saving (render() resets plan off roster pages, Viktor #029)
