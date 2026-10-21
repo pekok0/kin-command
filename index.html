@@ -680,7 +680,8 @@ body::after {
 .snd[aria-pressed="true"] .off, .snd[aria-pressed="false"] .on { display: none; }
 
 /* plates: every panel is edge-lit glass with corner brackets, lifted off the floor */
-.ros, .matrix-wrap, .picker, .loadout { background: var(--brackets), var(--plate-bg); border: 0; box-shadow: var(--plate-lift); }
+.matrix-wrap, .picker, .loadout { background: var(--brackets), var(--plate-bg); border: 0; box-shadow: var(--plate-lift); }
+.ros { background: none; border: 0; box-shadow: none; }
 .tile, .cls a, .strip li, .lo-store li, .cont, #evbar a, .vbar button, .drill a.pic {
   background-color: transparent; background-image: var(--plate-bg); box-shadow: var(--plate-lift); border-color: transparent;
   transition: transform 220ms var(--ease), box-shadow 220ms var(--ease); }
@@ -708,7 +709,7 @@ h1 { text-shadow: 0 0 28px oklch(0.86 0.15 205 / 0.18); }
 .rid { box-shadow: 0 0 12px -6px var(--fr-glow); }
 
 /* roster: every squad, Podpora and vehicle is its own plate on the floor */
-.ros { gap: 14px; padding: 14px; }
+.ros { gap: 14px; padding: 0; }
 .ros .rg { border: 0; background: var(--brackets), var(--plate-bg); box-shadow: var(--plate-lift); transition: box-shadow 260ms var(--ease); }
 .ros .rg:hover { box-shadow: var(--plate-lift), 0 0 0 1px oklch(0.86 0.15 205 / 0.45), 0 0 30px -12px var(--fr-glow); }
 .ros.swarm { background: none; box-shadow: none; padding: 0; }
@@ -782,6 +783,20 @@ h1 { text-shadow: 0 0 28px oklch(0.86 0.15 205 / 0.18); }
   .op-cmd .evcancel { margin-left: 0; }
 }
 @media (prefers-reduced-motion: reduce) { .op-lamp, .op-status .miss::before { animation: none; } }
+
+/* trainings and courses (specs/typy-akci) in the war room: a plate each, side by side on a wide screen */
+.trl { border-top: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 14px; margin-top: 12px; }
+.tr { padding: 16px 18px; border-bottom: 0; background: var(--brackets), var(--plate-bg); box-shadow: var(--plate-lift); transition: box-shadow 260ms var(--ease); }
+.tr:hover { box-shadow: var(--plate-lift), 0 0 0 1px oklch(0.86 0.15 205 / 0.45), 0 0 30px -12px var(--fr-glow); }
+.tr-k .ref { color: var(--fr); border-color: oklch(0.86 0.15 205 / 0.6); background: var(--fr-fill); box-shadow: 0 0 12px -6px var(--fr-glow); }
+.tr h3 { text-shadow: 0 0 18px oklch(0.86 0.15 205 / 0.25); }
+.tr .rsvp { gap: 0; }
+.tr .rsvp .act { margin-left: -1px; min-height: 40px; }
+.tr .rsvp .act[aria-pressed="true"] { position: relative; z-index: 1; color: var(--ground); background: linear-gradient(180deg, oklch(0.92 0.13 205), oklch(0.8 0.15 210)); box-shadow: 0 0 0 1px var(--fr), 0 0 20px -4px var(--fr-glow); }
+.tr details summary, .trnew summary { display: inline-flex; align-items: center; min-height: 40px; margin-top: 10px; padding: 10px 14px 9px; font: 600 14px/1 var(--cond); letter-spacing: .06em; text-transform: uppercase; cursor: pointer;
+  border: 1px solid var(--rule); background: linear-gradient(180deg, oklch(0.25 0.05 245 / 0.9), oklch(0.18 0.04 252 / 0.9)); box-shadow: inset 0 1px 0 oklch(0.86 0.15 205 / 0.18); }
+.tr details summary { color: var(--ink-3); }
+.trnew[open] { padding: 12px; background: oklch(0.13 0.03 254 / 0.6); box-shadow: inset 0 0 0 1px var(--rule-soft); }
 
 /* change marks (app.js markChanges): one authored move per kind, from an already visible state */
 .rg li, .veh { position: relative; }

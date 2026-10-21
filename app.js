@@ -288,6 +288,8 @@ function viewRoster(s) {
 function tminus(iso) {
   const d = Math.round((new Date(iso) - Date.now()) / 1000), a = Math.abs(d), p = n => String(n).padStart(2, "0");
   const h = Math.floor(a / 3600), m = Math.floor(a % 3600 / 60);
+  // a Sunday event founded on Thursday is 70+ hours away: days read faster than three-digit hours
+  if (d > 0 && h >= 48) return `T−${Math.floor(h / 24)} d ${p(h % 24)}:${p(m)}`;
   return d > 0 ? `T−${p(h)}:${p(m)}:${p(a % 60)}` : `+${p(h)}:${p(m)}`;
 }
 setInterval(() => document.querySelectorAll(".tminus[data-t0]").forEach(e => { e.textContent = tminus(e.dataset.t0); }), 1000);
