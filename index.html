@@ -445,6 +445,18 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .sqc li.is-me .rslot { flex-basis: 100%; }  /* "Povedu squad" / "Předat SL" under my name: in a 300 px column the nick keeps its room */
 .slb { flex: none; font: 700 13px/1 var(--cond); letter-spacing: .06em; color: var(--ground); background: var(--ink); padding: 4px 5px 3px; }
 .rg li .lead { flex: none; min-height: 44px; margin: 4px 0 2px auto; }
+/* SWARM Podpora (specs/swarm-squady P3): a vehicle frames its crew in a hairline box headed by its unit symbol, so the
+   seats read as one crew; Podpora spans the grid and on a wide screen the vehicle types stand side by side */
+.podc { grid-column: 1 / -1; }
+.vtypes { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 0 24px; align-items: start; }
+.podc .sqp { flex-wrap: wrap; row-gap: 4px; }
+.podc .swctl .act { white-space: nowrap; }  /* on a phone "+ Combat heli" goes under the type, not over two lines */
+.veh { margin: 8px 0 10px; padding: 0 8px 6px; border: 1px solid var(--rule); }
+.vh { display: flex; align-items: center; gap: 8px; padding: 8px 0 6px; margin-bottom: 4px; border-bottom: 1px solid var(--rule-soft); }
+.vh .vn { font: 700 16px/1 var(--cond); letter-spacing: .04em; text-transform: uppercase; }
+.vh .num { margin-left: auto; font: 700 15px/1 var(--cond); color: var(--ink-2); }
+.podc li { flex-wrap: wrap; }
+.ros.swarm .podc .rslot .lbl { flex: 0 0 5.5em; min-width: 0; }  /* seats line up; "2. člen posádky" wraps */
 .kick { padding: 8px; color: var(--ink-3); }
 .kick:hover { color: var(--ho); }
 .ros-msg { position: sticky; top: 60px; z-index: 4; margin-top: 12px; padding: 8px 10px; background: var(--ground); border: 1px solid var(--ho); }  /* sticky: errors from slots low in the grid and the close form stay on screen */

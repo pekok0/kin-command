@@ -106,7 +106,7 @@ async function loadEvent() {
   if (!state.me) { state.event = null; state.claims = []; state.rsvps = []; renderRoster(); return; }
   const seq = ++loadSeq;
   try {
-    const { data: ev, error } = await sb.from("events").select("id, strategy_id, doctrine, squad_swarm, starts_at, leader:members!events_created_by_fkey(name)").eq("status", "open").maybeSingle();
+    const { data: ev, error } = await sb.from("events").select("id, strategy_id, doctrine, squad_swarm, squad_support, starts_at, leader:members!events_created_by_fkey(name)").eq("status", "open").maybeSingle();
     if (error) throw error;
     let claims = [], rsvps = [];
     if (ev) {
@@ -213,6 +213,26 @@ function squadCard(g, by) {
     <ul class="body">${body.map(x => slotRow(x, by[x.key], sq)).join("")}</ul></div>`;
 }
 
+// SWARM Podpora (specs/swarm-squady P2-P3): a vehicle = its crew, framed like a unit; the Commander adds and removes
+// vehicles per type, "-" only the last one and only while its whole crew is free (as "- Swarm")
+function podporaCard(g, by) {
+  const n = g.slots.filter(x => by[x.key]).length;
+  const types = g.vehicles.map(t => {
+    const last = t.cars[t.cars.length - 1], wid = `why-POD-${t.kit}`;
+    const less = !last ? `žádný ${t.name}` : last.slots.some(x => by[x.key]) ? `${last.name} má posádku` : "";
+    const more = t.n >= t.max ? `${t.name}: nejvýš ${t.max}` : "";
+    const why = [less, more].filter(Boolean).join(", ");
+    const ctl = state.me.is_commander ? `<div class="sqp">${esc(t.name)} <b>${esc(t.n)}</b><span class="swctl">
+      <button type="button" class="act" data-support="${t.ti}:-1" aria-label="Podpora: ubrat ${esc(t.name)}"${less ? ` disabled aria-describedby="${esc(wid)}"` : ""}>\u2212 ${esc(t.name)}</button>
+      <button type="button" class="act" data-support="${t.ti}:1" aria-label="Podpora: přidat ${esc(t.name)}"${more ? ` disabled aria-describedby="${esc(wid)}"` : ""}>+ ${esc(t.name)}</button></span></div>${why ? `<p class="why" id="${esc(wid)}">${esc(why)}</p>` : ""}` : "";
+    const cars = t.cars.map(c => `<div class="veh"><div class="vh">${sym(t.symbol, "sm")}<b class="vn">${esc(c.name)}</b><span class="num">${c.slots.filter(x => by[x.key]).length}/${c.slots.length}</span></div>
+      <ul>${c.slots.map(x => slotRow(x, by[x.key])).join("")}</ul></div>`).join("");
+    return ctl || cars ? `<div class="vtype">${ctl}${cars}</div>` : "";
+  }).join("");
+  return `<div class="rg podc"><div class="pg-head">${sym(g.symbol, "sm")}<div><b>${esc(g.name)}</b><small>${esc(g.squad)}</small></div><span class="num">${n}/${g.max}</span></div>
+    <div class="vtypes">${types}</div></div>`;
+}
+
 function viewRoster(s) {
   const head = "<h2>Sestava</h2>";
   const msg = state.flash ? `<p class="err ros-msg" role="alert">${esc(state.flash)}</p>` : "";
@@ -236,7 +256,7 @@ function viewRoster(s) {
   const mys = myc && s.roster.flatMap(g => g.slots.map(x => ({ g, x }))).find(o => o.x.key === myc.slot_key);
   const myr = mys && !s.swarm && mys.x.role && roleOf(s, mys.x.role);
   const mine = !mys ? "" : s.swarm
-    ? `<p class="mine-kit">Máš místo: <b>${esc(mys.g.name)} · ${esc(mys.x.label)}</b> <button type="button" class="kitl" data-kit="${esc(mys.x.kit)}">Tvůj nákup</button></p>`
+    ? `<p class="mine-kit">Máš místo: <b>${esc(mys.x.car || mys.g.name)} · ${esc(mys.x.label)}</b> <button type="button" class="kitl" data-kit="${esc(mys.x.kit)}">Tvůj nákup</button></p>`
     : myr ? `<p class="mine-kit">Máš místo: <b>${esc(myr.id)} · ${esc(mys.g.name)}</b>${s.nomap ? "" : ` <a class="kitl" href="${roleHref(s, myr)}">Tvoje karta: nákup a kroky</a>`}</p>` : "";
   const miss = s.swarm ? slBar(filled)
     : missing.length
@@ -249,7 +269,7 @@ function viewRoster(s) {
     ${miss}
     ${mine}
     ${rsvpBar()}
-    <div class="ros${s.swarm ? " swarm" : ""}">${s.roster.map(g => g.swarmN ? squadCard(g, by) : rosterGroup(g, by)).join("")}</div>`;
+    <div class="ros${s.swarm ? " swarm" : ""}">${s.roster.map(g => g.swarmN ? squadCard(g, by) : g.vehicles ? podporaCard(g, by) : rosterGroup(g, by)).join("")}</div>`;
 }
 
 // Akce (Petr 2026-10-19, specs/akce-flow rozhodnuti 8): the open event's roster for both doctrines, where to read
@@ -380,6 +400,16 @@ async function setSwarm(idx, delta) {
   await loadEvent();
 }
 
+// the Commander adds or removes a vehicle (specs/swarm-squady P2); the event keeps every type's count, null = the template's
+// ponytail: the same race as setSwarm (a sign-up into the vehicle just dropped stays unseen); DB trigger if it bites
+async function setSupport(ti, delta) {
+  const ev = state.event, counts = D.doktrina.swarm.sestava.podpora.map((t, i) => ev.squad_support?.[i] ?? t.default);
+  counts[ti] += delta;
+  const { data, error } = await sb.from("events").update({ squad_support: counts }).eq("id", ev.id).select("id");
+  state.flash = error ? saveErr(error) : !data.length ? "Vozidla se nepodařilo uložit: akce už není otevřená, nebo nemáš práva Commandera." : null;
+  await loadEvent();
+}
+
 // the SL badge on my own row (S4-S5); one per squad: the unique index claims_one_lead refuses a second (23505)
 async function takeLead(on) {
   const uid = state.me.user_id;
@@ -503,17 +533,26 @@ let cur = null;    // current strategy
 // only Akce has one (Petr 2026-10-19, specs/akce-flow rozhodnuti 8)
 let plan = null;
 // squads from the template and the event's sizes (specs/swarm-squady); keys stay SW-Q{n}-AT, SW-Q{n}-RS, SW-Q{n}-SW (the
-// first Swarm, same key as before), SW-Q{n}-SW2 ..; Podpora unchanged
-function swarmRoster(k, sizes) {
+// first Swarm, same key as before), SW-Q{n}-SW2 ..; Podpora from its vehicles
+function swarmRoster(k, sizes, support) {
   const t = k.sestava, sw = t.swarm;
   return [...Array.from({ length: t.squads }, (_, idx) => {
     const n = idx + 1, swarmN = (sizes && sizes[idx]) || sw.default;
     const slots = [...t.core.map(c => ({ key: `SW-Q${n}-${c.kit}`, label: c.label, role: null, kit: c.kit, stat: c.label })),
       ...Array.from({ length: swarmN }, (_, i) => ({ key: `SW-Q${n}-${sw.kit}${i ? i + 1 : ""}`, label: sw.label, role: null, kit: sw.kit, stat: sw.label }))];
     return { id: `Q${n}`, name: `Squad ${n}`, symbol: "infantry", max: slots.length, idx, swarmN, slots };
-  }), t.podpora];
+  }), podporaGroup(t.podpora, support)];
 }
-const swarmPlan = ev => ({ id: "swarm", swarm: true, roster: swarmRoster(D.doktrina.swarm, ev.squad_swarm), fill_order: [], variants: [] });
+// Podpora = vehicles per type from the template and the event's counts (specs/swarm-squady P1); seat i of vehicle v
+// is SW-<type><(v-1)*seats + i>, so Tank 1 keeps SW-TK1..3 and Tank 2 is SW-TK4..6. stat = the role kept in history
+function podporaGroup(types, counts) {
+  const vehicles = types.map((t, ti) => { const n = counts?.[ti] ?? t.default;
+    return { ...t, ti, n, cars: Array.from({ length: n }, (_, v) => ({ name: `${t.name} ${v + 1}`, slots: t.seats.map((seat, i) =>
+      ({ key: `SW-${t.kit}${v * t.seats.length + i + 1}`, label: seat, role: null, kit: t.kit, seat, car: `${t.name} ${v + 1}`, stat: `${t.name} · ${seat}` })) })) }; });
+  const slots = vehicles.flatMap(t => t.cars.flatMap(c => c.slots));
+  return { id: "POD", name: "Podpora", squad: "pod velitelem", symbol: "armor", max: slots.length, vehicles, slots };
+}
+const swarmPlan = ev => ({ id: "swarm", swarm: true, roster: swarmRoster(D.doktrina.swarm, ev.squad_swarm, ev.squad_support), fill_order: [], variants: [] });
 // FORTRESS before the map (specs/akce-mapa-tym): all plans share the 45 slots (test_build), so sign-ups keep their slot
 // when the map comes; role cards, zones and the map's plan wait for the map and team
 const fortressPlan = () => { const s = D.strategies[0];
@@ -570,6 +609,8 @@ function sym(kind, cls = "") {
     supply: '<path d="M6 24 H42"/>',
     recon: '<path d="M6 30 L42 6"/>',
     armor: '<path d="M16 12 H32 A6 6 0 0 1 32 24 H16 A6 6 0 0 1 16 12 Z"/>',
+    rotary: '<path d="M14 12 L34 24 V12 L14 24 Z"/>',
+    motorized: '<path d="M24 6 V30"/>',
     hq: '<path d="M6 30 V42"/>',
   }[kind] || "";
   return `<svg class="sym ${cls}" viewBox="0 -6 48 50" aria-hidden="true"><circle class="ech" cx="24" cy="0" r="2.4"/><rect x="6" y="6" width="36" height="24"/>${icon}</svg>`;
@@ -802,7 +843,8 @@ function shopList(s, r) {
     const opt = !g.item, name = g.item || g.ideal, unlock = opt ? g.ideal_unlock : g.unlock;
     const std = g.std ? `<div class="alt">${itemIcon(g.std_icon, "sm")}<span>Mezistupeň: <b>${esc(g.std)}</b> · ${usd(g.std_price)}${g.std_unlock ? ` · odemknout ${unlockText(g.std_unlock)}` : ""}</span></div>` : "";
     const alt = std + (g.item && g.ideal && g.ideal !== g.item
-      ? `<div class="alt">${itemIcon(g.ideal_icon, "sm")}<span>Ideál: <b>${esc(g.ideal)}</b> · ${usd(g.ideal_price)}${g.ideal_unlock ? ` · odemknout ${unlockText(g.ideal_unlock)}` : ""}</span></div>` : "");
+      ? `<div class="alt">${itemIcon(g.ideal_icon, "sm")}<span>Ideál: <b>${esc(g.ideal)}</b> · ${usd(g.ideal_price)}${g.ideal_unlock ? ` · odemknout ${unlockText(g.ideal_unlock)}` : ""}</span></div>`
+      : g.item && g.qty !== "?" && g.ideal_qty !== g.qty ? `<div class="alt"><span>Ideál: <b>${esc(g.ideal_qty)}×</b> · celkem ${usd(g.ideal_cost)}</span></div>` : "");
     return `<li class="tile${opt ? " opt" : ""}">${itemIcon(opt ? g.ideal_icon : g.icon)}<div class="tx">
       <div class="nm"><span class="qty">${g.qty === "?" ? '<span class="unk">?</span>' : g.qty + "×"}</span><span>${esc(name)}</span>${haveBox({ name, unlock })}</div>
       <div class="pr">${opt ? "Volitelně, když máš odemčeno · " : ""}${priceLine(opt ? g.ideal_price : g.price, g.qty)}${unlock ? ` · odemknout <b>${unlockText(unlock)}</b>` : ""}</div>
@@ -934,7 +976,7 @@ async function loadUnlocks() {
 }
 // a re-render replaces the focused control: put keyboard focus back on its twin
 function keepFocus(fn) {
-  const a = document.activeElement, k = a && ["data-unlock", "data-kitmode", "data-rsvp", "data-me", "data-swarm"].find(x => a.hasAttribute(x));
+  const a = document.activeElement, k = a && ["data-unlock", "data-kitmode", "data-rsvp", "data-me", "data-swarm", "data-support"].find(x => a.hasAttribute(x));
   const sel = k && `[${k}="${CSS.escape(a.getAttribute(k))}"]`, i = sel ? [...document.querySelectorAll(sel)].indexOf(a) : -1;
   fn();
   if (sel) document.querySelectorAll(sel)[i]?.focus({ preventScroll: true });
@@ -1288,9 +1330,10 @@ function render() {
 }
 
 $app.addEventListener("click", e => {
-  const t = e.target.closest("[data-trace],[data-untrace],[data-pick],[data-me],[data-variant],[data-kitmode],[data-claim],[data-unclaim],[data-rsvp],[data-unlock],[data-cancel],[data-kit],[data-swarm],[data-lead]");
+  const t = e.target.closest("[data-trace],[data-untrace],[data-pick],[data-me],[data-variant],[data-kitmode],[data-claim],[data-unclaim],[data-rsvp],[data-unlock],[data-cancel],[data-kit],[data-swarm],[data-support],[data-lead]");
   if (!t) return;
   if (t.dataset.swarm) { const [i, d] = t.dataset.swarm.split(":").map(Number); setSwarm(i, d); return; }
+  if (t.dataset.support) { const [i, d] = t.dataset.support.split(":").map(Number); setSupport(i, d); return; }
   if (t.dataset.lead) {  // the button flips between "Povedu squad" and "Předat SL": keep focus on my row
     takeLead(t.dataset.lead === "1").then(() => document.querySelector(".ros li.is-me [data-lead], .ros li.is-me .rslot")?.focus({ preventScroll: true }));
     return;
