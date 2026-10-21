@@ -1174,16 +1174,21 @@ const haveBox = e => e.unlock && haveSet
 const TRACKER = "https://wardogstracker.gg/api/v1";
 const ROLES = [["assault", "Assault"], ["medic", "Medic"], ["support", "Support"], ["recon", "Recon"], ["driver", "Driver"], ["pilot", "Pilot"]];
 let trk = null, trkBusy = false;  // trk = {msg} | {err} | {help}, plus {levels, synced} once the profile was read
+// Discord lookup is opt-in on the Tracker (Petr 2026-10-22: linked, still 404), so the member can give their profile link
+// once; the SteamID stays in this browser only. Someone else's link would only tick that player's items on my own rows.
+const TRK_STEAM = "kin-trk-steam";
+const steamOf = s => (String(s).match(/7656\d{13}/) || [])[0] || null;
+const savedSteam = () => { try { return steamOf(localStorage.getItem(TRK_STEAM)); } catch { return null; } };
 async function trackerGet(path) {
   const r = await fetch(TRACKER + path, { signal: AbortSignal.timeout(8000) });
   if (r.status === 404 || r.status === 429) return { status: r.status, retry: Number(r.headers.get("Retry-After")) || 60 };
   if (!r.ok) throw new Error(`tracker ${r.status}`);
   return { status: r.status, json: await r.json() };
 }
-async function importTracker() {
+async function importTracker(steam) {
   if (currentSeason().id !== haveSeason) await loadUnlocks();  // the page stayed open over a wipe
-  const p = await trackerGet(`/players/by-discord/${encodeURIComponent(state.me.discord_id)}`);
-  if (p.status === 404) return { help: true };
+  const p = await trackerGet(steam ? `/players/${steam}` : `/players/by-discord/${encodeURIComponent(state.me.discord_id)}`);
+  if (p.status === 404) return steam ? { help: true, err: "Profil z odkazu Tracker nenašel, nebo je soukromý. Zkontroluj odkaz." } : { help: true };
   if (p.status === 429) return { err: `Tracker teď nebere další dotazy, zkus to za ${p.retry} s.` };
   const pl = p.json.player, st = pl && pl.stats;
   if (!pl || typeof pl.steamId !== "string") throw new Error("tracker: unexpected player shape");
@@ -1206,9 +1211,9 @@ async function importTracker() {
   }
   return { levels, synced, msg: `Přidáno ${add.length}, už zaškrtnuto ${names.size - add.length}.` };
 }
-function runTracker(btn) {
+function runTracker(btn, steam) {
   btn.disabled = true; trkBusy = true;
-  importTracker().catch(e => { console.error(e); return { err: "Tracker teď neodpovídá, zaškrtni ručně." }; })
+  importTracker(steam).catch(e => { console.error(e); return { err: "Tracker teď neodpovídá, zaškrtni ručně." }; })
     .then(r => { trk = r; trkBusy = false; rerenderKeep(); document.querySelector("[data-tracker]")?.focus({ preventScroll: true }); });
 }
 const TRK_LINK = '<a href="https://wardogstracker.gg" target="_blank" rel="noopener">WARDOGS Tracker</a>';
@@ -1219,10 +1224,23 @@ function trackerBox() {
     <p class="note">Zaškrtne „mám“ u všeho, co máš ve hře odemčené, a ukáže levely rolí. Nic neodškrtne. Data: ${TRK_LINK} (neoficiální web komunity).</p>
     ${r.levels ? `<p class="trk-lv">${r.levels.map(([n, l]) => `<span>${n} <b>${l}</b></span>`).join("")}<span class="ref">sync ${esc(fmtWhen(r.synced.toISOString()))}</span></p>` : ""}
     ${r.msg ? `<p class="need ok">${esc(r.msg)}</p>` : r.err ? `<p class="need err">${esc(r.err)}</p>` : ""}
-    ${r.help ? `<div class="need err"><p>Na Trackeru tě podle Discordu nenajdeme. Postup:</p><ol>
-      <li>Na ${TRK_LINK} se přihlas přes Steam.</li><li>V profilu propoj Discord a povol, aby tě šlo podle Discordu najít.</li>
-      <li>Synchronizuj statistiky a klikni sem znovu.</li></ol></div>` : ""}</div>`;
+    ${r.help ? `<div class="trk-help"><p><b>Tracker tě podle Discordu nenašel.</b> Hledání podle Discordu tam funguje, jen když ho hráč sám povolí. Jde to i bez něj:</p><ol>
+      <li><a href="https://wardogstracker.gg/api/wardogs/connect?redirect=/" target="_blank" rel="noopener">Přihlas se na Trackeru přes Steam a synchronizuj statistiky</a> (asi 10 s).</li>
+      <li>Otevři na Trackeru svůj profil a zkopíruj adresu stránky (tvar wardogstracker.gg/profile/7656…).</li>
+      <li>Vlož ji sem a potvrď:</li></ol>
+      <form class="trk-form" data-trkform><input name="profile" inputmode="url" autocomplete="off" placeholder="https://wardogstracker.gg/profile/7656…" aria-label="Odkaz na tvůj profil na WARDOGS Trackeru"><button type="submit" class="act">Načíst z profilu</button></form>
+      <p class="note">Prohlížeč si odkaz pamatuje, příště stačí tlačítko nahoře.</p></div>` : ""}</div>`;
 }
+document.addEventListener("submit", e => {
+  const f = e.target.closest("form[data-trkform]");
+  if (!f) return;
+  e.preventDefault();
+  if (trkBusy) return;
+  const steam = steamOf(f.elements.profile.value);
+  if (!steam) { trk = { ...trk, help: true, err: "Tohle není odkaz na profil na Trackeru (v adrese je 17místné číslo začínající 7656)." }; rerenderKeep(); return; }
+  try { localStorage.setItem(TRK_STEAM, steam); } catch { /* storage blocked: works for this click */ }
+  runTracker(f.querySelector("button"), steam);
+});
 
 function slotCell(c, key, mode) {
   const g = c.gear.find(x => x.slot === key), e = g && inMode(g, mode);
@@ -1585,7 +1603,7 @@ $app.addEventListener("click", e => {
   if (t.dataset.kit) { document.getElementById("kit-" + t.dataset.kit)?.scrollIntoView(); return; }
   if (t.dataset.rsvp) { setRsvp(t.dataset.rsvp); return; }
   if (t.dataset.cancel !== undefined) { cancelEvent(t); return; }
-  if (t.dataset.tracker !== undefined) { runTracker(t); return; }
+  if (t.dataset.tracker !== undefined) { runTracker(t, savedSteam()); return; }
   if (t.dataset.unlock !== undefined) {
     t.disabled = true;  // no second toggle while saving; render() builds a fresh box from haveSet
     const item = t.dataset.unlock;  // disabled box loses focus before keepFocus sees it: put it back (Viktor #027)
