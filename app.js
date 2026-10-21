@@ -262,15 +262,27 @@ function viewRoster(s) {
     : missing.length
     ? `<p class="miss">Chybí: ${missing.slice(0, 6).map(r => `<button type="button" class="rid" data-claim="${esc(r.id)}" title="${esc(r.id)} – ${esc(r.name)}">${esc(r.id)}</button>`).join(" ")}${missing.length > 6 ? ` <span class="more">a dalších ${missing.length - 6}</span>` : ""}</p>`
     : '<p class="miss ok">Všechny role z plánu obsazené.</p>';
-  return `<div class="ros-head">${head}<span class="num">${filled} <small>/ ${total}</small></span><time datetime="${esc(ev.starts_at)}">${esc(fmtWhen(ev.starts_at))}</time><span class="lead">${esc(docName(s.swarm ? "swarm" : "defence"))} · ${sideOf(ev.strategy_id, "mapa zatím nevybraná")}</span>${ev.leader ? `<span class="lead">Vede: <b>${esc(ev.leader.name)}</b></span>` : ""}</div>
+  // the operation console (Petr 2026-10-21 "prehlednejsi a vychytanejsi ... tlacitka, notifikace, sestava"): who and what
+  // with a live T- clock and the fill gauge, then the alert strip, my place and answer, the Commander's commands last
+  const pct = total ? Math.round(filled / total * 100) : 0;
+  return `<div class="opcon"><div class="ros-head"><div class="op-id"><span class="op-lamp" aria-hidden="true"></span>${head}
+      <span class="lead">${esc(docName(s.swarm ? "swarm" : "defence"))} · ${sideOf(ev.strategy_id, "mapa zatím nevybraná")}</span>${ev.leader ? `<span class="lead">Vede: <b>${esc(ev.leader.name)}</b></span>` : ""}</div>
+    <div class="op-clock"><time datetime="${esc(ev.starts_at)}">${esc(fmtWhen(ev.starts_at))}</time><b class="tminus" data-t0="${esc(ev.starts_at)}">${tminus(ev.starts_at)}</b></div>
+    <div class="op-fill"><span class="num">${filled} <small>/ ${total}</small></span><span class="gauge" style="--p:${pct}%" aria-hidden="true"></span><small>zapsaných</small></div></div>
+    <div class="op-status">${miss}</div>
+    <div class="op-me">${mine}${rsvpBar()}</div>
+    ${state.me.is_commander ? `<div class="op-cmd" role="group" aria-label="Příkazy Commandera">${mapTeamForm(ev)}${closeEventForm(s)}<a class="act" href="#/briefing">Protokol briefingu</a>${cancel}</div>` : ""}</div>
     ${msg}
-    ${state.me.is_commander ? mapTeamForm(ev) + closeEventForm(s) : ""}
-    ${cancel}
-    ${miss}
-    ${mine}
-    ${rsvpBar()}
     <div class="ros${s.swarm ? " swarm" : ""}">${s.roster.map(g => g.swarmN ? squadCard(g, by) : g.vehicles ? podporaCard(g, by) : rosterGroup(g, by)).join("")}</div>`;
 }
+
+// "T-01:12:05" before the start, "+00:14" after it; one interval ticks every clock on the page
+function tminus(iso) {
+  const d = Math.round((new Date(iso) - Date.now()) / 1000), a = Math.abs(d), p = n => String(n).padStart(2, "0");
+  const h = Math.floor(a / 3600), m = Math.floor(a % 3600 / 60);
+  return d > 0 ? `T−${p(h)}:${p(m)}:${p(a % 60)}` : `+${p(h)}:${p(m)}`;
+}
+setInterval(() => document.querySelectorAll(".tminus[data-t0]").forEach(e => { e.textContent = tminus(e.dataset.t0); }), 1000);
 
 // Akce (Petr 2026-10-19, specs/akce-flow rozhodnuti 8): the open event's roster for both doctrines, where to read
 // the plan, and for SWARM what I buy; maps and doctrine are for reading only
@@ -1330,8 +1342,7 @@ function renderNav(active) {
 }
 
 function viewAkce() {
-  const brief = state.me && state.me.is_commander ? ' <a class="act" href="#/briefing">Protokol briefingu</a>' : "";
-  return `<header class="unit-head"><div><h1>Akce</h1><p>Tady se na akci zapisuješ a vidíš svůj nákup. Mapy a Doktrína jsou ke čtení.${brief}</p></div></header>
+  return `<header class="unit-head"><div><h1>Akce</h1><p>Tady se na akci zapisuješ a vidíš svůj nákup. Mapy a Doktrína jsou ke čtení.</p></div></header>
     <section class="sestava" id="sestava">${akceBody()}</section>
     ${histShell(sb && state.me ? '<p class="note">Načítám odehrané akce…</p>' : "")}`;
 }
