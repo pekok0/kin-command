@@ -106,12 +106,12 @@ async function loadEvent() {
   if (!state.me) { state.event = null; state.claims = []; state.rsvps = []; renderRoster(); return; }
   const seq = ++loadSeq;
   try {
-    const { data: ev, error } = await sb.from("events").select("id, strategy_id, doctrine, starts_at, leader:members!events_created_by_fkey(name)").eq("status", "open").maybeSingle();
+    const { data: ev, error } = await sb.from("events").select("id, strategy_id, doctrine, squad_swarm, starts_at, leader:members!events_created_by_fkey(name)").eq("status", "open").maybeSingle();
     if (error) throw error;
     let claims = [], rsvps = [];
     if (ev) {
       const [cl, rs] = await Promise.all([
-        sb.from("claims").select("slot_key, slot_label, user_id, members(name, avatar_url, discord_id)").eq("event_id", ev.id),
+        sb.from("claims").select("slot_key, slot_label, user_id, lead, members(name, avatar_url, discord_id)").eq("event_id", ev.id),
         sb.from("rsvps").select("user_id, status, members(name, avatar_url, discord_id)").eq("event_id", ev.id),
       ]);
       if (cl.error) throw cl.error;
@@ -169,19 +169,48 @@ function subscribe() {
     .subscribe();
 }
 
-function slotRow(x, c) {
+// sq = the SWARM squad of the row ({ led }), else undefined: only squads have the SL badge (specs/swarm-squady)
+function slotRow(x, c, sq) {
   const mine = c && c.user_id === state.me.user_id;
-  const who = c ? `<img src="${esc(c.members.avatar_url)}" alt="" loading="lazy"><span class="nm">${esc(c.members.name)}</span>` : '<span class="free">volné</span>';
+  const who = c ? `<img src="${esc(c.members.avatar_url)}" alt="" loading="lazy"><span class="nm">${esc(c.members.name)}</span>${sq && c.lead ? '<span class="slb" title="Squad leader">SL</span>' : ""}` : '<span class="free">volné</span>';
   const act = mine ? `data-unclaim="${esc(c.user_id)}" title="Odhlásit se"` : c ? "disabled" : `data-claim="${esc(x.key)}"`;
   const kick = c && !mine && state.me.is_commander
     ? `<button type="button" class="kick" data-unclaim="${esc(c.user_id)}" aria-label="Odhlásit ${esc(c.members.name)}">${cross()}</button>` : "";
-  return `<li${mine ? ' class="is-me"' : ""}><button type="button" class="rslot" ${act}><span class="lbl">${x.role ? `<span class="rid">${esc(x.role)}</span>` : ""}${esc(x.label)}</span>${who}</button>${kick}</li>`;
+  // the badge is taken and handed over on one's own row only, one per squad (decision 4: not even the Commander assigns it)
+  const lead = !sq || !mine ? "" : c.lead ? '<button type="button" class="act lead" data-lead="0">Předat SL</button>'
+    : sq.led ? "" : '<button type="button" class="act lead" data-lead="1">Povedu squad</button>';
+  return `<li${mine ? ' class="is-me"' : ""}><button type="button" class="rslot" ${act}><span class="lbl">${x.role ? `<span class="rid">${esc(x.role)}</span>` : ""}${esc(x.label)}</span>${who}</button>${lead}${kick}</li>`;
 }
 
 function rosterGroup(g, by) {
   const n = g.slots.filter(x => by[x.key]).length;
   return `<div class="rg"><div class="pg-head">${sym(g.symbol, "sm")}<div><b>${esc(g.name)}</b><small>${esc(g.squad)}</small></div><span class="num">${n}/${g.max}</span></div>
     <ul>${g.slots.map(x => slotRow(x, by[x.key])).join("")}</ul></div>`;
+}
+
+// the squad part of a slot key (SW-Q2-SW3 -> Q2), as the unique index claims_one_lead counts it (011): a badge on a
+// place the page does not show (dropped by "-", forged key) still leads its squad (OWASP 2026-10-21 L1)
+const squadOf = k => k.split("-")[1];
+const leadOf = g => state.claims.find(c => c.lead && squadOf(c.slot_key) === g.id);
+
+// SWARM squad (specs/swarm-squady): a fixed core + a Swarm body the Commander grows and shrinks; SL is a badge on one
+// of the people, named in the head
+function squadCard(g, by) {
+  const sw = D.doktrina.swarm.sestava.swarm, core = g.slots.slice(0, -g.swarmN), body = g.slots.slice(-g.swarmN);
+  const n = g.slots.filter(x => by[x.key]).length, lead = leadOf(g);
+  // "-" drops the last Swarm place, so only while it is free
+  const less = g.swarmN <= sw.min ? `aspoň ${sw.min} ${sw.label}` : by[body[body.length - 1].key] ? `poslední ${sw.label} je obsazený` : "";
+  const more = g.swarmN >= sw.max ? `nejvýš ${sw.max} ${sw.label}` : "";
+  const why = [less, more].filter(Boolean).join(", ");
+  const ctl = state.me.is_commander ? `<span class="swctl">
+      <button type="button" class="act" data-swarm="${g.idx}:-1" aria-label="${esc(g.name)}: ubrat ${esc(sw.label)}"${less ? ` disabled aria-describedby="why-${g.id}"` : ""}>\u2212 ${esc(sw.label)}</button>
+      <button type="button" class="act" data-swarm="${g.idx}:1" aria-label="${esc(g.name)}: přidat ${esc(sw.label)}"${more ? ` disabled aria-describedby="why-${g.id}"` : ""}>+ ${esc(sw.label)}</button></span>` : "";
+  const veli = lead ? `Velí: <span class="who">${esc(lead.members.name)}</span>` : "Velí: nikdo, kdokoli ze squadu si vezme SL";
+  const sq = { led: !!lead };
+  return `<div class="rg sqc"><div class="pg-head">${sym(g.symbol, "sm")}<div><b>${esc(g.name)}</b><small class="veli${!lead && n ? " none" : ""}">${veli}</small></div><span class="num">${n}/${g.max}</span></div>
+    <p class="sqp">Jádro</p><ul class="core">${core.map(x => slotRow(x, by[x.key], sq)).join("")}</ul>
+    <div class="sqp">${esc(sw.label)} <b>${esc(g.swarmN)}</b>${ctl}</div>${ctl && why ? `<p class="why" id="why-${g.id}">${esc(why)}</p>` : ""}
+    <ul class="body">${body.map(x => slotRow(x, by[x.key], sq)).join("")}</ul></div>`;
 }
 
 function viewRoster(s) {
@@ -219,7 +248,7 @@ function viewRoster(s) {
     ${miss}
     ${mine}
     ${rsvpBar()}
-    <div class="ros${s.swarm ? " swarm" : ""}">${s.roster.map(g => rosterGroup(g, by)).join("")}</div>`;
+    <div class="ros${s.swarm ? " swarm" : ""}">${s.roster.map(g => g.swarmN ? squadCard(g, by) : rosterGroup(g, by)).join("")}</div>`;
 }
 
 // Akce (Petr 2026-10-19, specs/akce-flow rozhodnuti 8): the open event's roster for both doctrines, where to read
@@ -236,7 +265,7 @@ function akceBody() {
 // the base and my slot's kit; every role's kit is in Doktrina (rozhodnuti 8: not the same list in two places)
 function swarmMyKit() {
   const k = D.doktrina.swarm, myc = state.claims.find(c => c.user_id === state.me.user_id);
-  const slot = myc && k.roster.flatMap(g => g.slots).find(x => x.key === myc.slot_key);
+  const slot = myc && plan.roster.flatMap(g => g.slots).find(x => x.key === myc.slot_key);
   const r = slot && k.slots.find(r => r.id === slot.kit);
   return `<section class="block" id="swarm-kit"><h2>Tvůj nákup</h2>${kitBase(k)}
     ${r ? kitRole(slot.seat ? { ...r, ...r.seats[slot.seat] } : r) : '<p class="note">Zapiš se do slotu a ukážu ti nákup tvé role. Nákup všech rolí je v <a href="#/doktrina/swarm">Doktríně</a>.</p>'}</section>`;
@@ -296,7 +325,7 @@ async function claim(key) {
   const g = s.roster.find(g => g.slots.some(x => x.key === key)), slot = g.slots.find(x => x.key === key);
   const { error } = await sb.from("claims").upsert(
     // SWARM: the role, not "Squad 2 · Raketomet" (stats count labels as roles, Viktor #005)
-    { event_id: state.event.id, slot_key: key, slot_label: s.swarm ? slot.stat : `${g.name} · ${slot.label}`, user_id: state.me.user_id },
+    { event_id: state.event.id, slot_key: key, slot_label: s.swarm ? slot.stat : `${g.name} · ${slot.label}`, user_id: state.me.user_id, lead: false },
     { onConflict: "event_id,user_id" });
   await loadEvent();
   if (error && error.code === "23505") {
@@ -330,14 +359,37 @@ async function unclaim(userId) {
 
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") loadEvent(); });
 
-// SWARM: Petr 2026-10-19 squads of 5 -- every squad with people in it needs its own SL
+// SWARM: every squad with people in it needs its SL, a badge one of them takes (Petr 2026-10-19, specs/swarm-squady S7)
 function slBar(n) {
-  const taken = new Set(state.claims.map(c => c.slot_key));  // roster keys, not a prefix (OWASP L1)
-  const bez = plan.roster.filter(g => g.slots.some(x => x.kit === "SL") && g.slots.some(x => taken.has(x.key))
-    && !g.slots.some(x => x.kit === "SL" && taken.has(x.key))).map(g => g.name);
+  const by = Object.fromEntries(state.claims.map(c => [c.slot_key, c]));  // roster keys, not a prefix (OWASP L1)
+  const bez = plan.roster.filter(g => g.swarmN && g.slots.some(x => by[x.key]) && !leadOf(g)).map(g => g.name);
   return !n ? '<p class="miss">Zatím nikdo. Zapiš se do squadu, každý squad potřebuje svého SL.</p>'
     : bez.length ? `<p class="miss warn">Je vás ${n}. Squady bez SL: ${esc(bez.join(", "))}.</p>`
     : `<p class="miss ok">Je vás ${n}, každý obsazený squad má SL.</p>`;
+}
+
+// the Commander sizes a squad's Swarm (specs/swarm-squady S2); the event keeps every squad's size, null = the template's
+// ponytail: a sign-up racing the "-" can land on the dropped place and stays unseen until its owner picks again; DB trigger if it bites
+async function setSwarm(idx, delta) {
+  const t = D.doktrina.swarm.sestava, ev = state.event;
+  const sizes = Array.from({ length: t.squads }, (_, i) => (ev.squad_swarm && ev.squad_swarm[i]) || t.swarm.default);
+  sizes[idx] += delta;
+  const { data, error } = await sb.from("events").update({ squad_swarm: sizes }).eq("id", ev.id).select("id");
+  state.flash = error ? saveErr(error) : !data.length ? "Velikost squadu se nepodařilo uložit: akce už není otevřená, nebo nemáš práva Commandera." : null;
+  await loadEvent();
+}
+
+// the SL badge on my own row (S4-S5); one per squad: the unique index claims_one_lead refuses a second (23505)
+async function takeLead(on) {
+  const uid = state.me.user_id;
+  const { data, error } = await sb.from("claims").update({ lead: on }).eq("event_id", state.event.id).eq("user_id", uid).select("slot_key");
+  await loadEvent();
+  const mine = state.claims.find(c => c.user_id === uid);
+  const other = mine && state.claims.find(c => c.lead && c.user_id !== uid && squadOf(c.slot_key) === squadOf(mine.slot_key));
+  state.flash = error ? (error.code === "23505" ? `Squad už vede ${other ? other.members.name : "někdo jiný"}.` : saveErr(error))
+    : !data.length ? "SL se nepodařilo uložit: akce už není otevřená." : state.evErr ? state.flash : null;
+  renderRoster();
+  if (state.flash) document.querySelector(".ros-msg")?.scrollIntoView({ block: "nearest" });
 }
 
 // map and team: two choices, "zatím nevím" first (specs/akce-mapa-tym); s = the plan picked so far
@@ -449,12 +501,23 @@ let cur = null;    // current strategy
 // the roster Akce signs people up to: the open event's map plan (Top defence) or the SWARM canvas (specs/akce-swarm);
 // only Akce has one (Petr 2026-10-19, specs/akce-flow rozhodnuti 8)
 let plan = null;
-const swarmPlan = () => ({ id: "swarm", swarm: true, roster: D.doktrina.swarm.roster, fill_order: [], variants: [] });
+// squads from the template and the event's sizes (specs/swarm-squady); keys stay SW-Q{n}-AT, SW-Q{n}-RS, SW-Q{n}-SW (the
+// first Swarm, same key as before), SW-Q{n}-SW2 ..; Podpora unchanged
+function swarmRoster(k, sizes) {
+  const t = k.sestava, sw = t.swarm;
+  return [...Array.from({ length: t.squads }, (_, idx) => {
+    const n = idx + 1, swarmN = (sizes && sizes[idx]) || sw.default;
+    const slots = [...t.core.map(c => ({ key: `SW-Q${n}-${c.kit}`, label: c.label, role: null, kit: c.kit, stat: c.label })),
+      ...Array.from({ length: swarmN }, (_, i) => ({ key: `SW-Q${n}-${sw.kit}${i ? i + 1 : ""}`, label: sw.label, role: null, kit: sw.kit, stat: sw.label }))];
+    return { id: `Q${n}`, name: `Squad ${n}`, symbol: "infantry", max: slots.length, idx, swarmN, slots };
+  }), t.podpora];
+}
+const swarmPlan = ev => ({ id: "swarm", swarm: true, roster: swarmRoster(D.doktrina.swarm, ev.squad_swarm), fill_order: [], variants: [] });
 // FORTRESS before the map (specs/akce-mapa-tym): all plans share the 45 slots (test_build), so sign-ups keep their slot
 // when the map comes; role cards, zones and the map's plan wait for the map and team
 const fortressPlan = () => { const s = D.strategies[0];
   return { id: "fortress", nomap: true, roster: s.roster, fill_order: s.fill_order, roles: s.roles, variants: [] }; };
-const planOf = ev => !ev ? null : ev.doctrine === "swarm" ? swarmPlan() : !ev.strategy_id ? fortressPlan() : S(ev.strategy_id) || null;
+const planOf = ev => !ev ? null : ev.doctrine === "swarm" ? swarmPlan(ev) : !ev.strategy_id ? fortressPlan() : S(ev.strategy_id) || null;
 // an open SWARM event: the map's Top defence opening does not apply (Petr 2026-10-18), the canvas does
 const swarmEv = () => !!(state.me && state.event && state.event.doctrine === "swarm");
 // doctrine names live in the content (Petr 2026-10-19: FORTRESS, SWARM); events store "defence" / "swarm"
@@ -870,7 +933,7 @@ async function loadUnlocks() {
 }
 // a re-render replaces the focused control: put keyboard focus back on its twin
 function keepFocus(fn) {
-  const a = document.activeElement, k = a && ["data-unlock", "data-kitmode", "data-rsvp", "data-me"].find(x => a.hasAttribute(x));
+  const a = document.activeElement, k = a && ["data-unlock", "data-kitmode", "data-rsvp", "data-me", "data-swarm"].find(x => a.hasAttribute(x));
   const sel = k && `[${k}="${CSS.escape(a.getAttribute(k))}"]`, i = sel ? [...document.querySelectorAll(sel)].indexOf(a) : -1;
   fn();
   if (sel) document.querySelectorAll(sel)[i]?.focus({ preventScroll: true });
@@ -1224,8 +1287,13 @@ function render() {
 }
 
 $app.addEventListener("click", e => {
-  const t = e.target.closest("[data-trace],[data-untrace],[data-pick],[data-me],[data-variant],[data-kitmode],[data-claim],[data-unclaim],[data-rsvp],[data-unlock],[data-cancel],[data-kit]");
+  const t = e.target.closest("[data-trace],[data-untrace],[data-pick],[data-me],[data-variant],[data-kitmode],[data-claim],[data-unclaim],[data-rsvp],[data-unlock],[data-cancel],[data-kit],[data-swarm],[data-lead]");
   if (!t) return;
+  if (t.dataset.swarm) { const [i, d] = t.dataset.swarm.split(":").map(Number); setSwarm(i, d); return; }
+  if (t.dataset.lead) {  // the button flips between "Povedu squad" and "Předat SL": keep focus on my row
+    takeLead(t.dataset.lead === "1").then(() => document.querySelector(".ros li.is-me [data-lead], .ros li.is-me .rslot")?.focus({ preventScroll: true }));
+    return;
+  }
   if (t.dataset.kit) { document.getElementById("kit-" + t.dataset.kit)?.scrollIntoView(); return; }
   if (t.dataset.rsvp) { setRsvp(t.dataset.rsvp); return; }
   if (t.dataset.cancel !== undefined) { cancelEvent(t); return; }

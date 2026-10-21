@@ -422,6 +422,29 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .ros.swarm .rslot .nm { flex: 1; max-width: none; }
 .rslot .free { font: 600 13px/1 var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); border: 1px dashed var(--rule); padding: 5px 7px 4px; }
 .rg li.is-me .rslot { background: var(--fr-fill); box-shadow: inset 0 0 0 1px var(--fr); }
+/* SWARM squad (specs/swarm-squady): the fixed core on a solid bracket, the Swarm body on a dashed one (Dashed Outline
+   Rule: not fixed) with the Commander's + / - beside its count; SL is a badge on a person, bone like the key chip, never gold */
+.sqc .veli { display: block; margin-top: 5px; font: 500 14px/1.3 var(--sans); letter-spacing: 0; text-transform: none; color: var(--ink-2); }
+.sqc .veli .who { font-weight: 600; color: var(--ink); }
+.sqc .veli.none { color: var(--ho); }
+.sqp { display: flex; align-items: center; gap: 6px; margin: 12px 0 4px; font: 700 12px/1 var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+.sqp b { font-size: 15px; color: var(--ink); }
+.swctl { display: flex; gap: 6px; margin-left: auto; }
+.swctl .act { min-height: 44px; min-width: 44px; letter-spacing: .04em; }
+.swctl .act:disabled { color: var(--ink-3); border-style: dashed; cursor: default; }
+.swctl .act:disabled:hover { border-color: var(--rule); }
+.why { margin: 2px 0 6px; font: 500 14px/1.3 var(--sans); color: var(--ink-3); text-align: right; }
+.sqc ul { padding-left: 8px; border-left: 2px solid var(--ink-3); }
+.sqc ul.body { border-left-style: dashed; }
+.ros.swarm .rslot, .ros.swarm .kick { min-height: 44px; }
+.ros.swarm .kick { min-width: 44px; }
+.ros.swarm { grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); }  /* label, avatar, nick, SL badge and the kick in one row */
+.sqc li { flex-wrap: wrap; }
+.ros.swarm .sqc .rslot .lbl { flex: 0 0 5em; min-width: 0; }  /* names line up under each other */
+.ros.swarm .sqc .rslot .nm { flex: 0 1 auto; }  /* the SL badge right after the name */
+.sqc li.is-me .rslot { flex-basis: 100%; }  /* "Povedu squad" / "Předat SL" under my name: in a 300 px column the nick keeps its room */
+.slb { flex: none; font: 700 13px/1 var(--cond); letter-spacing: .06em; color: var(--ground); background: var(--ink); padding: 4px 5px 3px; }
+.rg li .lead { flex: none; min-height: 44px; margin: 4px 0 2px auto; }
 .kick { padding: 8px; color: var(--ink-3); }
 .kick:hover { color: var(--ho); }
 .ros-msg { position: sticky; top: 60px; z-index: 4; margin-top: 12px; padding: 8px 10px; background: var(--ground); border: 1px solid var(--ho); }  /* sticky: errors from slots low in the grid and the close form stay on screen */
