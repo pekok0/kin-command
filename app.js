@@ -1193,7 +1193,8 @@ async function importTracker(steam) {
   const pl = p.json.player, st = pl && pl.stats;
   if (!pl || typeof pl.steamId !== "string") throw new Error("tracker: unexpected player shape");
   if (!st) return { err: "Na Trackeru ještě nemáš synchronizované statistiky. Synchronizuj je tam a zkus to znovu." };
-  const levels = ROLES.map(([k, n]) => [n, Number(st.roles && st.roles[k] && st.roles[k].level) || 0]);
+  // track names as knowledge/db after build.py TRACK_NAMES, so a ladder step's unlock reads them directly
+  const levels = [["WARDOG", Number(st.wardogLevel) || 0], ...ROLES.map(([k, n]) => [n, Number(st.roles && st.roles[k] && st.roles[k].level) || 0])];
   const synced = new Date(st.syncedAt);
   if (isNaN(synced)) throw new Error("tracker: unexpected syncedAt");
   // after a wipe the Tracker keeps the old season until the member plays and syncs again (spec decision 4)
@@ -1285,10 +1286,33 @@ function viewSquadPage(q) {
     <p class="goal">${esc(q.goal)}</p><ul class="bullets block" style="margin-top:16px">${q.points.map(x => `<li>${esc(x)}</li>`).join("")}</ul>
     ${modeBar()}${q.classes.map(c => classCard(q, c, kmode)).join("")}`;
 }
+// ---------- ladders (hub/specs/vybava-zebricky): best step per level range, mine and the next one ----------
+const SRC = { A: "A", B: "B", C: "C", ODVOZENO: "odvozeno" };
+// a step is within reach when it needs no unlock, I ticked "mám", or my level from the Tracker reaches it
+const canHave = (st, lv) => !st.unlock || !!(haveSet && haveSet.has(st.item)) || !!(lv && (lv[st.unlock.track] || 0) >= st.unlock.level);
+function ladderBlock(lad, lv) {
+  const can = lad.steps.map(st => canHave(st, lv));
+  const known = !!lv || lad.steps.some(st => st.unlock && haveSet && haveSet.has(st.item));
+  const mine = known ? can.lastIndexOf(true) : -1, next = known ? can.indexOf(false, mine + 1) : -1;
+  const nu = next >= 0 && lad.steps[next].unlock;
+  return `<div class="lad"><div class="lad-h"><span class="sl">${lad.group ? esc(lad.group) : SLOT_LABEL[lad.slot]}</span>${nu ? `<span class="lad-next">Další: od ${esc(nu.track)} ${nu.level}</span>` : ""}</div>
+    <ol class="lad-steps">${lad.steps.map((st, i) => `<li class="st${i === mine ? " mine" : ""}${i === next ? " next" : ""}${known && !can[i] ? " locked" : ""}">
+      ${itemIcon(st.icon)}<span class="st-n">${esc(st.item)}</span><span class="st-u">${st.unlock ? `${esc(st.unlock.track)} ${st.unlock.level} · ${usd(st.unlock.cash)}` : "hned"}</span>
+      <span class="st-src" title="Síla zdroje · počet zdrojů">${SRC[st.source]} · ${st.n}</span>${i === mine ? '<span class="st-tag">Tvůj</span>' : ""}${haveBox({ name: st.item, unlock: st.unlock })}</li>`).join("")}</ol>
+    <details class="lad-why"><summary>Proč</summary><dl>${lad.steps.map(st => `<dt>${esc(st.item)}</dt><dd>${esc(st.why)}</dd>`).join("")}</dl>${lad.note ? `<p class="note">${esc(lad.note)}</p>` : ""}</details></div>`;
+}
+function ladderSection(c) {
+  if (!c.ladders || !c.ladders.length) return "";
+  const lv = trk && trk.levels ? Object.fromEntries(trk.levels) : null;
+  return `<section class="block lads-sec"><h2>Žebříček podle levelu</h2>
+    <p class="note">Návrh z mety Season 2 (rešerše 22. 10.): u každého slotu nejlepší volba pro rozsah levelů, od startu po cíl. ${lv ? "<b>Tvůj</b> je nejlepší krok, který už můžeš mít, <b>Další</b> je cíl." : `Načti levely z WARDOGS Trackeru ve <a href="#/vybava">Výbavě</a> a uvidíš, kde jsi.`} Zdroj: A data nebo oficiální, B víc hráčů, C jeden zdroj; číslo = kolik zdrojů.</p>
+    <div class="lads">${c.ladders.map(lad => ladderBlock(lad, lv)).join("")}</div></section>`;
+}
+
 function viewClass(q, c) {
   const uses = D.strategies.map(s => [s, s.roles.filter(r => r.class === c.id)]).filter(([, rs]) => rs.length);
   return `<p class="crumb"><a href="#/vybava">Výbava</a> / <a href="#/squad/${q.id}">${esc(q.name)}</a> / ${esc(c.name)}</p>
-    ${modeBar()}${classCard(q, c, kmode, "h1")}
+    ${modeBar()}${classCard(q, c, kmode, "h1")}${ladderSection(c)}
     ${uses.length ? `<section class="block"><h2>Role v plánech</h2><ul class="uses">${uses.map(([s, rs]) => `<li>${esc(sideLabel(s))}: ${rs.map(r => roleLink(s, r)).join(" ")}</li>`).join("")}</ul></section>` : ""}`;
 }
 

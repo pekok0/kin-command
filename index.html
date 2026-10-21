@@ -538,6 +538,30 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .need { margin-top: 6px; font-weight: 600; color: var(--un); }
 .need.ok { color: var(--fr); }
 .need.err { color: var(--ho); }
+/* ladders (hub/specs/vybava-zebricky): a lit plate per slot, steps as a chain; mine = cyan, next = dashed, out of reach dim */
+.lads { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 520px), 1fr)); gap: 14px; margin-top: 14px; }
+.lad { padding: 14px 16px; background: var(--brackets), var(--plate-bg); box-shadow: var(--plate-lift); }
+.lad-h { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 14px; }
+.lad-h .sl { font: 600 14px/1 var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+.lad-next { font: 600 14px/1.2 var(--cond); letter-spacing: .04em; color: var(--fr); }
+.lad-steps { display: grid; gap: 6px; margin-top: 10px; counter-reset: st; }
+.st { display: grid; grid-template-columns: 40px 1fr auto; grid-template-areas: "ic n src" "ic u tag"; align-items: center; gap: 0 10px; padding: 6px 10px; border: 1px solid var(--rule-soft); background: oklch(0.15 0.03 252 / 0.6); }
+.st img, .st .ic { grid-area: ic; width: 40px; height: 40px; object-fit: contain; }
+.st-n { grid-area: n; font-weight: 600; color: var(--ink); }
+.st-u { grid-area: u; font-size: 13px; color: var(--ink-3); }
+.st-src { grid-area: src; font: 600 12px/1 var(--cond); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.st .have, .st-tag { grid-area: tag; justify-self: end; }
+.st-tag { font: 700 12px/1 var(--cond); letter-spacing: .1em; text-transform: uppercase; padding: 4px 7px; color: var(--ground); background: var(--fr); box-shadow: 0 0 14px -4px var(--fr-glow); }
+.st.mine { border-color: var(--fr); background: var(--fr-fill); box-shadow: 0 0 22px -10px var(--fr-glow); }
+.st.mine .have { display: none; }
+.st.next { border-style: dashed; border-color: oklch(0.86 0.15 205 / 0.55); }
+.st.locked:not(.next) { opacity: .55; }
+.lad-why summary { margin-top: 10px; font: 600 13px/1 var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); cursor: pointer; }
+.lad-why dl { margin-top: 8px; display: grid; grid-template-columns: minmax(90px, max-content) 1fr; gap: 4px 12px; font-size: 14px; }
+.lad-why dt { font-weight: 600; color: var(--ink-2); }
+.lad-why dd { color: var(--ink-2); }
+@media (max-width: 480px) { .lad-why dl { grid-template-columns: 1fr; } .lad-why dd { margin-bottom: 6px; } }
+
 /* WARDOGS Tracker import (specs/odemceno v2): one lit plate on Výbava, role levels as a read-out row */
 .trk { margin-top: 16px; padding: 16px 18px; background: var(--brackets), var(--plate-bg); box-shadow: var(--plate-lift); }
 .trk .note { margin-top: 10px; }
