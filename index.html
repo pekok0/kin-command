@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <!-- specs/zamek, OWASP C8: scripts only from this site and the pinned supabase-js on jsDelivr -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://cdn.discordapp.com; font-src 'self'; connect-src 'self' https://gjvefmsnpmjkbvqtmwbz.supabase.co wss://gjvefmsnpmjkbvqtmwbz.supabase.co; object-src 'none'; base-uri 'none'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://cdn.discordapp.com; font-src 'self'; connect-src 'self' https://gjvefmsnpmjkbvqtmwbz.supabase.co wss://gjvefmsnpmjkbvqtmwbz.supabase.co https://wardogstracker.gg; object-src 'none'; base-uri 'none'; form-action 'self'">
 <meta name="theme-color" content="#0f1e3b">
 <title>KIN Central Command</title>
 <link rel="icon" href="znacka/kin-ikona.svg" type="image/svg+xml">
@@ -538,6 +538,12 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .need { margin-top: 6px; font-weight: 600; color: var(--un); }
 .need.ok { color: var(--fr); }
 .need.err { color: var(--ho); }
+/* WARDOGS Tracker import (specs/odemceno v2): one lit plate on Výbava, role levels as a read-out row */
+.trk { margin-top: 16px; padding: 16px 18px; background: var(--brackets), var(--plate-bg); box-shadow: var(--plate-lift); }
+.trk .note { margin-top: 10px; }
+.trk-lv { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 12px; font: 600 15px/1.3 var(--cond); letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); }
+.trk-lv b { color: var(--fr); font-size: 18px; text-shadow: 0 0 14px var(--fr-glow); }
+.trk ol { margin: 6px 0 0 20px; font-weight: 400; color: var(--ink-2); }
 .absent .mlink { text-decoration: line-through; }
 .debrief { display: grid; grid-template-columns: max-content 1fr; gap: 8px 18px; max-width: 90ch; }
 .debrief dt { font: 700 15px/1.4 var(--cond); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }

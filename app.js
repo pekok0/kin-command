@@ -74,7 +74,7 @@ async function onAuth(session) {
       () => { state.error = "Obsah se nenačetl. Zkus stránku načíst znovu."; state.checking = false; renderWho(); render(); });
   renderWho(); loadEvent(); subscribe();
 }
-const onCardRoute = () => /^#\/(squad\/|s\/[^/]+\/role\/|doktrina\/swarm)/.test(location.hash);  // canvas: "mám" boxes (Viktor #004)
+const onCardRoute = () => /^#\/(squad\/|s\/[^/]+\/role\/|doktrina\/swarm|vybava)/.test(location.hash);  // canvas: "mám" boxes (Viktor #004), Výbava: Tracker button
 const onHistRoute = () => HIST.includes(location.hash.replace(/^#\/?/, "").split(/[/?]/)[0]);
 
 function renderWho() {
@@ -1169,6 +1169,61 @@ async function setUnlock(item, has) {
 const haveBox = e => e.unlock && haveSet
   ? `<label class="have" title="Mám odemčeno (${esc(currentSeason().name)})"><input type="checkbox" data-unlock="${esc(e.name)}"${haveSet.has(e.name) ? " checked" : ""}>mám</label>` : "";
 
+// ---------- WARDOGS Tracker (specs/odemceno v2): "mam" and role levels from wardogstracker.gg, on a click ----------
+// The member's own browser asks (CORS open, no key); only numbers and our own item names reach the page and the database.
+const TRACKER = "https://wardogstracker.gg/api/v1";
+const ROLES = [["assault", "Assault"], ["medic", "Medic"], ["support", "Support"], ["recon", "Recon"], ["driver", "Driver"], ["pilot", "Pilot"]];
+let trk = null, trkBusy = false;  // trk = {msg} | {err} | {help}, plus {levels, synced} once the profile was read
+async function trackerGet(path) {
+  const r = await fetch(TRACKER + path, { signal: AbortSignal.timeout(8000) });
+  if (r.status === 404 || r.status === 429) return { status: r.status, retry: Number(r.headers.get("Retry-After")) || 60 };
+  if (!r.ok) throw new Error(`tracker ${r.status}`);
+  return { status: r.status, json: await r.json() };
+}
+async function importTracker() {
+  if (currentSeason().id !== haveSeason) await loadUnlocks();  // the page stayed open over a wipe
+  const p = await trackerGet(`/players/by-discord/${encodeURIComponent(state.me.discord_id)}`);
+  if (p.status === 404) return { help: true };
+  if (p.status === 429) return { err: `Tracker teď nebere další dotazy, zkus to za ${p.retry} s.` };
+  const pl = p.json.player, st = pl && pl.stats;
+  if (!pl || typeof pl.steamId !== "string") throw new Error("tracker: unexpected player shape");
+  if (!st) return { err: "Na Trackeru ještě nemáš synchronizované statistiky. Synchronizuj je tam a zkus to znovu." };
+  const levels = ROLES.map(([k, n]) => [n, Number(st.roles && st.roles[k] && st.roles[k].level) || 0]);
+  const synced = new Date(st.syncedAt);
+  if (isNaN(synced)) throw new Error("tracker: unexpected syncedAt");
+  // after a wipe the Tracker keeps the old season until the member plays and syncs again (spec decision 4)
+  if (seasonOf(st.syncedAt).id !== haveSeason) return { levels, synced, err: "Data na Trackeru jsou z minulé sezóny, synchronizuj je tam." };
+  const u = await trackerGet(`/players/${encodeURIComponent(pl.steamId)}/unlocks`);
+  const items = u.json && u.json.unlocks && u.json.unlocks.items;
+  if (!Array.isArray(items)) return { levels, synced, err: "Tracker odemčené předměty neukázal (máš je tam skryté?). Zaškrtni je ručně." };
+  const names = new Set(items.map(i => D.unlock_ids[String(i.gameId).toLowerCase()]).filter(Boolean));
+  const add = [...names].filter(n => !haveSet.has(n));  // only adds: what the member ticked by hand stays (T4)
+  if (add.length) {
+    const { error } = await sb.from("unlocks").upsert(add.map(item => ({ user_id: state.me.user_id, season: haveSeason, item })),
+      { onConflict: "user_id,season,item", ignoreDuplicates: true });
+    if (error) return { levels, synced, err: saveErr(error) };
+    await loadUnlocks();
+  }
+  return { levels, synced, msg: `Přidáno ${add.length}, už zaškrtnuto ${names.size - add.length}.` };
+}
+function runTracker(btn) {
+  btn.disabled = true; trkBusy = true;
+  importTracker().catch(e => { console.error(e); return { err: "Tracker teď neodpovídá, zaškrtni ručně." }; })
+    .then(r => { trk = r; trkBusy = false; rerenderKeep(); document.querySelector("[data-tracker]")?.focus({ preventScroll: true }); });
+}
+const TRK_LINK = '<a href="https://wardogstracker.gg" target="_blank" rel="noopener">WARDOGS Tracker</a>';
+function trackerBox() {
+  if (!state.me || !haveSet) return "";
+  const r = trk || {};
+  return `<div class="trk"><button type="button" class="act" data-tracker${trkBusy ? " disabled" : ""}>${trkBusy ? "Načítám…" : "Načíst z WARDOGS Trackeru"}</button>
+    <p class="note">Zaškrtne „mám“ u všeho, co máš ve hře odemčené, a ukáže levely rolí. Nic neodškrtne. Data: ${TRK_LINK} (neoficiální web komunity).</p>
+    ${r.levels ? `<p class="trk-lv">${r.levels.map(([n, l]) => `<span>${n} <b>${l}</b></span>`).join("")}<span class="ref">sync ${esc(fmtWhen(r.synced.toISOString()))}</span></p>` : ""}
+    ${r.msg ? `<p class="need ok">${esc(r.msg)}</p>` : r.err ? `<p class="need err">${esc(r.err)}</p>` : ""}
+    ${r.help ? `<div class="need err"><p>Na Trackeru tě podle Discordu nenajdeme. Postup:</p><ol>
+      <li>Na ${TRK_LINK} se přihlas přes Steam.</li><li>V profilu propoj Discord a povol, aby tě šlo podle Discordu najít.</li>
+      <li>Synchronizuj statistiky a klikni sem znovu.</li></ol></div>` : ""}</div>`;
+}
+
 function slotCell(c, key, mode) {
   const g = c.gear.find(x => x.slot === key), e = g && inMode(g, mode);
   return `<div class="slot${e ? "" : " empty"}"><span class="sl">${SLOT_LABEL[key]}</span>${e ? `${itemIcon(e.icon)}<span class="sn">${esc(e.name)}</span>${e.unlock ? `<span class="su">${unlockText(e.unlock)}</span>` : ""}${g.std ? `<span class="su">mezistupeň ${esc(g.std)}${g.std_unlock ? ` · ${unlockText(g.std_unlock)}` : ""}</span>` : ""}${haveBox(e)}${e.cost != null ? `<span class="pr">${usd(e.cost)}</span>` : ""}` : key === "slot2" ? '<span class="ph">Sidearm</span>' : ""}</div>`;
@@ -1202,6 +1257,7 @@ function classCard(q, c, mode, h = "h2") {
 function viewSquads() {
   return `<header class="unit-head"><div><h1>Výbava</h1><p>Sestavy sub-class pro všechny mapy: minimum po wipu i ideál</p></div></header>
     <p class="note">Přihlášený člen si u předmětů zaškrtne, co má odemčené. Kolik nás co má: <a class="act" href="#/pokryti">Pokrytí rolí</a></p>
+    ${trackerBox()}
     ${D.squads.map(q => `<section class="block"><h2><a href="#/squad/${q.id}">${esc(q.name)}</a></h2><p class="goal">${esc(q.goal)}</p>
       <ul class="cls">${q.classes.map(c => `<li><a href="${classHref(q, c)}"><b>${esc(c.name)}</b><span>${usd(c.kit.min)} · ideál ${usd(c.kit.ideal)}</span></a></li>`).join("")}</ul></section>`).join("")}`;
 }
@@ -1349,7 +1405,7 @@ function viewCoverage(season, members) {
     if (g.ideal && g.ideal_unlock && !items.includes(g.ideal)) items.push(g.ideal);
   }
   return `${head}
-    <p class="note">Členů, kteří něco zaškrtli: <b>${users.length}</b>. Kdo nic nezaškrtl, v počtech chybí.</p>
+    <p class="note">Členů, kteří něco zaškrtli: <b>${users.length}</b>. Kdo nic nezaškrtl, v počtech chybí. Zaškrtnutí jde načíst z ${TRK_LINK} ve <a href="#/vybava">Výbavě</a>.</p>
     <section class="block"><h2>Sub-classy</h2><table class="data cov"><thead><tr><th>Sub-class</th><th class="num">Mají MINIMUM</th><th class="num">Mají IDEÁL</th></tr></thead><tbody>
     ${D.squads.map(q => q.classes.map(c => `<tr><td><a href="${classHref(q, c)}">${esc(q.name)} · ${esc(c.name)}</a></td><td class="num"><b>${ready(unlockNeeds(c, "min"))}</b></td><td class="num">${ready(unlockNeeds(c, "ideal"))}</td></tr>`).join("")).join("")}
     </tbody></table></section>
@@ -1516,7 +1572,7 @@ function render() {
 }
 
 $app.addEventListener("click", e => {
-  const t = e.target.closest("[data-trace],[data-untrace],[data-pick],[data-me],[data-variant],[data-kitmode],[data-claim],[data-unclaim],[data-rsvp],[data-unlock],[data-cancel],[data-kit],[data-swarm],[data-support],[data-lead],[data-trsvp],[data-tclose]");
+  const t = e.target.closest("[data-trace],[data-untrace],[data-pick],[data-me],[data-variant],[data-kitmode],[data-claim],[data-unclaim],[data-rsvp],[data-unlock],[data-cancel],[data-kit],[data-swarm],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker]");
   if (!t) return;
   if (t.dataset.trsvp) { const [id, st] = t.dataset.trsvp.split(":"); rsvpTraining(Number(id), st); return; }
   if (t.dataset.tclose) { t.disabled = true; const [id, st] = t.dataset.tclose.split(":"); closeTraining(Number(id), st); return; }
@@ -1529,6 +1585,7 @@ $app.addEventListener("click", e => {
   if (t.dataset.kit) { document.getElementById("kit-" + t.dataset.kit)?.scrollIntoView(); return; }
   if (t.dataset.rsvp) { setRsvp(t.dataset.rsvp); return; }
   if (t.dataset.cancel !== undefined) { cancelEvent(t); return; }
+  if (t.dataset.tracker !== undefined) { runTracker(t); return; }
   if (t.dataset.unlock !== undefined) {
     t.disabled = true;  // no second toggle while saving; render() builds a fresh box from haveSet
     const item = t.dataset.unlock;  // disabled box loses focus before keepFocus sees it: put it back (Viktor #027)
