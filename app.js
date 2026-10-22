@@ -208,20 +208,12 @@ function rankCard(m, prog, merits) {
 // ticks on their own profile
 const taskDone = (x, done, trackerOk, prog) => x.check === "tracker" ? trackerOk : x.check === "ops" ? !!prog && prog.ops >= 1 : done.has(x.id);
 function tasksCard(m, done, trackerOk, prog) {
-  // the member ticks own tasks, the Commander confirms anyone's (backlog 6c, 021)
-  const can = m.user_id === state.me.user_id || state.me.is_commander, ok = D.ukoly.map(x => taskDone(x, done, trackerOk, prog));
+  // nobody ticks by hand: the database's verifier writes what the sources say (Petr 2026-10-22, specs/ukoly-clenu U8)
+  const ok = D.ukoly.map(x => taskDone(x, done, trackerOk, prog));
   return `<section class="block ukoly" id="ukoly"><h2>Úkoly <small>${ok.filter(Boolean).length} z ${ok.length}</small></h2><ul class="tasks">
     ${D.ukoly.map((x, i) => `<li data-task="${esc(x.id)}"${ok[i] ? ' class="ok"' : ""}><span class="tk-mark" aria-hidden="true"></span>
-      <a href="${esc(x.url || x.href)}"${x.url ? ' target="_blank" rel="noopener"' : ""}>${esc(x.name)}</a>
-      ${!x.check && can ? `<button type="button" class="act tk" data-task-tick="${esc(x.id)}" data-uid="${esc(m.user_id)}" aria-pressed="${ok[i]}">${ok[i] ? "Hotovo" : "Mám hotové"}</button>` : ""}</li>`).join("")}</ul>
-    <p class="note"><a href="#/ukoly">Kdo co má hotové</a></p></section>`;
-}
-async function tickTask(b) {
-  b.disabled = true;
-  const id = b.dataset.taskTick, uid = b.dataset.uid, on = b.getAttribute("aria-pressed") !== "true";
-  const { error } = on ? await sb.from("tasks_done").insert({ user_id: uid, task: id }) : await sb.from("tasks_done").delete().eq("user_id", uid).eq("task", id);
-  if (error) { console.error(error); b.disabled = false; b.insertAdjacentHTML("afterend", '<p class="err">Nepodařilo se uložit.</p>'); return; }
-  render();
+      <a href="${esc(x.url || x.href)}"${x.url ? ' target="_blank" rel="noopener"' : ""}>${esc(x.name)}</a></li>`).join("")}</ul>
+    <p class="note">Odškrtne se samo, jakmile to uvidíme u zdroje. Steam skupinu a klan na Trackeru poznáme, jen když máš na Trackeru propojený i Discord. <a href="#/ukoly">Kdo co má hotové</a></p></section>`;
 }
 // everyone's tasks, the most missing first (specs/ukoly-clenu U5)
 function viewTasks(ms, done, trk, prog) {
@@ -1875,14 +1867,13 @@ function render() {
 }
 
 $app.addEventListener("click", e => {
-  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-kit],[data-role],[data-squad],[data-seat],[data-fx],[data-leadfor],[data-merit-del],[data-task-tick],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker],[data-nova]");
+  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-kit],[data-role],[data-squad],[data-seat],[data-fx],[data-leadfor],[data-merit-del],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker],[data-nova]");
   if (!t) return;
   if (t.dataset.trsvp) { const [id, st] = t.dataset.trsvp.split(":"); rsvpTraining(Number(id), st); return; }
   if (t.dataset.tclose) { t.disabled = true; const [id, st] = t.dataset.tclose.split(":"); closeTraining(Number(id), st); return; }
   if (t.dataset.role) { const [i, kit, d] = t.dataset.role.split(":"); setRole(Number(i), kit, Number(d)); return; }
   if (t.dataset.squad) { setSquad(t.dataset.squad); return; }
   if (t.dataset.leadfor) { const [uid, on] = t.dataset.leadfor.split(":"); giveLead(uid, on === "1"); return; }
-  if (t.dataset.taskTick) { tickTask(t); return; }
   if (t.dataset.meritDel) { sb.from("merits").delete().eq("id", t.dataset.meritDel).then(({ error }) => { if (error) console.error(error); render(); }); return; }
   if (t.dataset.fx) { const [gid, what, arg] = t.dataset.fx.split(":"); setFortress(gid, what, arg); return; }
   if (t.dataset.seat) { const [kit, v, d] = t.dataset.seat.split(":"); setSeat(kit, Number(v), Number(d)); return; }

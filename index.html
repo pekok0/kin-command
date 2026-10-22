@@ -628,19 +628,20 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .merits li { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--rule-soft); }
 .merits small { margin-left: auto; color: var(--ink-3); }
 .rank .merit { margin-top: 10px; }
-/* member tasks (specs/ukoly-clenu): a mark, the task as a link, the tick on my own profile */
+/* member tasks (specs/ukoly-clenu): a mark and the task as a link; ticks come only from the sources (U8) */
 .ukoly h2 small { margin-left: 10px; font: 600 15px/1 var(--cond); letter-spacing: .08em; color: var(--ink-3); }
 .tasks { list-style: none; margin: 8px 0 0; padding: 0; max-width: 640px; }
-.tasks li { display: grid; grid-template-columns: 22px 1fr auto; gap: 12px; align-items: center; min-height: 48px; padding: 4px 0; border-bottom: 1px solid var(--rule); }
+.tasks li { display: grid; grid-template-columns: 22px 1fr; gap: 12px; align-items: center; min-height: 48px; padding: 4px 0; border-bottom: 1px solid var(--rule); }
 .tk-mark { width: 18px; height: 18px; border: 2px solid var(--ink-3); }
 .tasks li.ok .tk-mark { border-color: var(--fr); background: var(--fr) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8l3 3 7-7' fill='none' stroke='%23051018' stroke-width='2.4'/%3E%3C/svg%3E") center / 14px no-repeat; box-shadow: 0 0 12px var(--fr-glow); }
 .tasks li.ok a { color: var(--ink-2); }
-.tk[aria-pressed="true"] { border-color: var(--fr); color: var(--fr); }
 .unit-head + .matrix-wrap { margin-top: 18px; }
 .tasks-all th { white-space: normal; min-width: 110px; font-size: 13px; vertical-align: bottom; }
 .tasks-all th .num { display: block; margin-top: 6px; text-align: left; color: var(--fr); }
 .tasks-all td:first-child { white-space: nowrap; }
-.tasks-all td[data-task] { text-align: center; color: var(--ink-3); }
+/* a value starts under its header and nothing sticks to the frame, like .matrix (Petr 2026-10-22 "hodnoty nesedi") */
+.tasks-all th, .tasks-all td { padding-left: 14px; }
+.tasks-all td[data-task] { color: var(--ink-3); }
 .tasks-all td.ok { color: var(--fr); font-weight: 700; }
 /* map and team not picked yet: dashed ghost chips (the Dashed Outline Rule) */
 .ghost-pick { display: inline-flex; gap: 6px; vertical-align: middle; }
