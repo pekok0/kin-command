@@ -204,6 +204,34 @@ function rankCard(m, prog, merits) {
     <details class="rk-all"><summary>Všechny hodnosti</summary><table class="data"><thead><tr><th>Hodnost</th><th>Podmínka</th><th>Smí</th></tr></thead><tbody>
       ${RANKS.map(([k, l, can]) => `<tr${k === cur[0] ? ' class="on"' : ""}><td><b>${l}</b></td><td>${{ rekrut: "povýšení z Hosta", operator: "5 akcí", veteran: "10 akcí, 5 tréninků, zásluhy", velitel: "rozhodne Commander" }[k]}</td><td>${can}</td></tr>`).join("")}</tbody></table></details></section>`;
 }
+// the member's tasks (specs/ukoly-clenu): Tracker and the first operation War Room sees itself, the rest the member
+// ticks on their own profile
+const taskDone = (x, done, trackerOk, prog) => x.check === "tracker" ? trackerOk : x.check === "ops" ? !!prog && prog.ops >= 1 : done.has(x.id);
+function tasksCard(m, done, trackerOk, prog) {
+  const mine = m.user_id === state.me.user_id, ok = D.ukoly.map(x => taskDone(x, done, trackerOk, prog));
+  return `<section class="block ukoly" id="ukoly"><h2>Úkoly <small>${ok.filter(Boolean).length} z ${ok.length}</small></h2><ul class="tasks">
+    ${D.ukoly.map((x, i) => `<li data-task="${esc(x.id)}"${ok[i] ? ' class="ok"' : ""}><span class="tk-mark" aria-hidden="true"></span>
+      <a href="${esc(x.url || x.href)}"${x.url ? ' target="_blank" rel="noopener"' : ""}>${esc(x.name)}</a>
+      ${!x.check && mine ? `<button type="button" class="act tk" data-task-tick="${esc(x.id)}" aria-pressed="${ok[i]}">${ok[i] ? "Hotovo" : "Mám hotové"}</button>` : ""}</li>`).join("")}</ul>
+    <p class="note"><a href="#/ukoly">Kdo co má hotové</a></p></section>`;
+}
+async function tickTask(b) {
+  b.disabled = true;
+  const id = b.dataset.taskTick, on = b.getAttribute("aria-pressed") !== "true";
+  const { error } = on ? await sb.from("tasks_done").insert({ task: id }) : await sb.from("tasks_done").delete().eq("user_id", state.me.user_id).eq("task", id);
+  if (error) { console.error(error); b.disabled = false; b.insertAdjacentHTML("afterend", '<p class="err">Nepodařilo se uložit.</p>'); return; }
+  render();
+}
+// everyone's tasks, the most missing first (specs/ukoly-clenu U5)
+function viewTasks(ms, done, trk, prog) {
+  const rows = ms.map(m => { const d = new Set(done.filter(r => r.user_id === m.user_id).map(r => r.task)), t = trk.some(r => r.user_id === m.user_id && r.status === "ok");
+    return { m, ok: D.ukoly.map(x => taskDone(x, d, t, prog[m.user_id])) }; })
+    .sort((a, b) => a.ok.filter(Boolean).length - b.ok.filter(Boolean).length || a.m.name.localeCompare(b.m.name));
+  return `<p class="crumb"><a href="#/hrac/${encodeURIComponent(state.me.discord_id)}">Profil</a> / Úkoly</p>
+    <header class="unit-head"><div><h1>Úkoly členů</h1></div></header>
+    <div class="matrix-wrap"><table class="data tasks-all" id="ukoly-all"><thead><tr><th>Člen</th>${D.ukoly.map((x, i) => `<th data-task="${esc(x.id)}">${esc(x.name)} <span class="num">${rows.filter(r => r.ok[i]).length}/${rows.length}</span></th>`).join("")}</tr></thead>
+    <tbody>${rows.map(r => `<tr><td>${memberLink(r.m)}</td>${r.ok.map((ok, i) => `<td data-task="${esc(D.ukoly[i].id)}"${ok ? ' class="ok"' : ""}>${ok ? "✓" : "–"}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+}
 async function addMerit(f) {
   const { error } = await sb.from("merits").insert({ user_id: f.dataset.uid, text: f.elements.text.value.trim() });
   if (error) { console.error(error); f.insertAdjacentHTML("beforeend", '<p class="err">Zásluhu se nepodařilo zapsat.</p>'); return; }
@@ -331,9 +359,7 @@ function viewRoster(s) {
   // the operation console (Petr 2026-10-21 "prehlednejsi a vychytanejsi ... tlacitka, notifikace, sestava"): who and what
   // with a live T- clock and the fill gauge, then the alert strip, my place and answer, the Commander's commands last
   const pct = total ? Math.round(filled / total * 100) : 0;
-  return `<div class="opcon"><div class="ros-head"><div class="op-id"><span class="op-lamp" aria-hidden="true"></span>${head}
-      <span class="lead">${esc(docName(s.swarm ? "swarm" : "defence"))} · ${sideOf(ev.strategy_id, "mapa zatím nevybraná")}</span>${ev.leader ? `<span class="lead">Vede: <b>${esc(ev.leader.name)}</b></span>` : ""}</div>
-    <div class="op-clock"><time datetime="${esc(ev.starts_at)}">${esc(fmtWhen(ev.starts_at))}</time><b class="tminus" data-t0="${esc(ev.starts_at)}">${tminus(ev.starts_at)}</b></div>
+  return `<div class="opcon"><div class="ros-head"><div class="op-id"><span class="op-lamp" aria-hidden="true"></span>${head}</div>
     <div class="op-fill"><span class="num">${filled} <small>/ ${total}</small></span><span class="gauge" style="--p:${pct}%" aria-hidden="true"></span><small>zapsaných</small></div></div>
     <div class="op-status">${miss}</div>
     <div class="op-me">${mine}${rsvpBar()}</div>
@@ -359,25 +385,39 @@ setInterval(() => document.querySelectorAll(".tminus[data-t0]").forEach(e => { e
 function akceBody() {
   const s = plan, ev = state.me && state.event;
   if (!sb || !state.me) return viewRoster(s);
-  const top = opCards() + trainingsSection(), nova = newPanel();
-  if (!ev || !s) return top + (state.evErr || ev ? `<section class="lobby">${viewRoster(s)}</section>` : "") + nova;
-  const read = s.swarm ? `Plán ke čtení: <a href="#/doktrina/swarm">${esc(docName("swarm"))} v Doktríně</a>`
-    : s.nomap ? "Karta role a nákup se ukážou, až Commander vybere mapu a tým."
-    : `Situace, větve a karty rolí: <a href="${planHref(s)}">${esc(sideLabel(s))} v Mapách</a>`;
-  return `${top}<section class="lobby" id="lobby"><p class="note planl">${read}</p>${viewRoster(s)}${s.swarm ? swarmMyKit() : s.nomap ? "" : buildOrder(s)}</section>${nova}`;
+  const nova = newPanel();
+  // the overview: founding on top, every open operation and training, the history under it (viewAkce)
+  if (!state.focusId) return nova + opCards() + trainingsSection();
+  if (!ev) return nova + (state.evErr ? `<section class="lobby">${viewRoster(s)}</section>` : "");
+  return nova + eventHero(ev, s) + `<section class="lobby" id="lobby">${viewRoster(s)}${!s ? "" : s.swarm ? swarmMyKit() : s.nomap ? "" : buildOrder(s)}</section>`;
+}
+// the operation's head (Petr 2026-10-22: "prehlednejsi nadpis ... doktrina urcite jde znazornit a vizualizovat lepe"):
+// what, when, how long to go, the doctrine as a plate, the map and team, who leads; x closes back to the overview
+const DOC_ICON = {
+  defence: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 41V19L24 7l17 12v22z"/><path d="M7 27h34M17 41V31h14v10M24 7v8"/></svg>',
+  swarm: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M5 9l13 13M43 9L30 22M24 44V31M10 22l8 0 0-8M38 22h-8v-8M19 37l5-6 5 6"/><circle cx="24" cy="25" r="4"/></svg>',
+};
+function eventHero(ev, s) {
+  const sw = ev.doctrine === "swarm", d = sw ? "swarm" : "defence", v = !sw && s && ev.variant && vById(s, ev.variant);
+  return `<header class="evhero"><a class="evx" href="#/akce" aria-label="Zavřít detail akce" title="Zavřít">${cross()}</a>
+    <div class="evh-when"><p class="evh-k">Operace</p><h1>${esc(fmtWhen(ev.starts_at))}</h1><b class="tminus" data-t0="${esc(ev.starts_at)}">${tminus(ev.starts_at)}</b></div>
+    <a class="docplate doc-${d}" href="${sw ? "#/doktrina/swarm" : "#/doktrina"}">${DOC_ICON[d]}<span><b>${esc(docName(d))}</b><small>${esc(docOf(d).short)}</small></span></a>
+    <p class="evh-m">${!ev.strategy_id ? (sw ? "Mapa podle hry" : "Mapa zatím nevybraná. Karta role a nákup se ukážou, až Commander vybere mapu a tým.")
+      : !sw && s && !s.nomap ? `<a href="${planHref(s)}">${sideOf(ev.strategy_id)}</a>${v ? ` · zóna ${esc(v.name)}` : ""}` : sideOf(ev.strategy_id)}${ev.leader ? ` · vede <b>${esc(ev.leader.name)}</b>` : ""}</p></header>`;
 }
 // every open operation as a card (specs/akce-v2 A2): when, how long to go, doctrine, map, how full, my place; the card
 // in focus is lit, a click shows its lobby below
 function opCards() {
-  if (!state.ops.length) return state.evErr ? "" : '<section class="block opl-sec"><h2>Operace</h2><p class="note">Teď není otevřená žádná operace.</p></section>';
+  // a failed load says so, never "none open" (Viktor UAT #003)
+  if (!state.ops.length) return `<section class="block opl-sec"><h2>Operace</h2>${state.evErr ? `<p class="err">${LOAD_ERR}</p>` : '<p class="note">Teď není otevřená žádná operace.</p>'}</section>`;
   return `<section class="block opl-sec"><h2>Operace</h2><div class="opl">${state.ops.map(ev => {
     const s = planOf(ev), total = s ? s.roster.reduce((n, g) => n + g.max, 0) : 0, n = ev.claims.length;
     const mine = ev.claims.find(c => c.user_id === state.me.user_id), said = (ev.rsvps.find(r => r.user_id === state.me.user_id) || {}).status;
-    const on = state.event && state.event.id === ev.id;
+    const on = state.focusId === ev.id;
     return `<a class="opc${on ? " on" : ""}" href="#/akce/${ev.id}"${on ? ' aria-current="true"' : ""}>
       <span class="opc-k">${esc(docName(ev.doctrine))}</span>
       <b class="opc-t">${esc(fmtWhen(ev.starts_at))}</b><span class="tminus" data-t0="${esc(ev.starts_at)}">${tminus(ev.starts_at)}</span>
-      <span class="opc-m">${ev.doctrine === "swarm" ? "mapa podle hry" : sideOf(ev.strategy_id, "mapa zatím nevybraná")}</span>
+      <span class="opc-m">${sideOf(ev.strategy_id, ev.doctrine === "swarm" ? "mapa podle hry" : "mapa zatím nevybraná")}</span>
       <span class="opc-g"><i style="width:${total ? Math.min(100, Math.round(100 * n / total)) : 0}%"></i></span><span class="opc-f"><b>${n}</b> / ${total} míst</span>
       <span class="opc-me">${mine ? `Máš místo: ${esc(mine.slot_label)}` : said ? `Odpověď: ${esc((RSVP.find(x => x[0] === said) || [, said])[1])}` : "Zatím bez odpovědi"}</span></a>`; }).join("")}</div></section>`;
 }
@@ -642,9 +682,9 @@ function newPanel() {
   const kinds = [["operace", "Operace", "velká akce klanu"], ["trenink", "Trénink", "pro všechny"], ["kurz", "Kurz", "omezený počet míst"]].filter(([k]) => k === "operace" ? op : tr);
   if (!kinds.length) return "";
   const k = kinds.some(x => x[0] === novaKind) ? novaKind : kinds[0][0];
-  return `<section class="block nova" id="nova"><h2>Nová akce</h2><div class="vbar seg" role="group" aria-label="Typ nové akce">${kinds.map(([id, l, sub]) =>
+  return `<details class="nova" id="nova"${state.novaFlash ? " open" : ""}><summary class="act">+ Nová akce</summary><div class="vbar seg" role="group" aria-label="Typ nové akce">${kinds.map(([id, l, sub]) =>
     `<button type="button" data-nova="${id}" aria-pressed="${id === k}"><b>${l}</b><small>${sub}</small></button>`).join("")}</div>
-    ${state.novaFlash ? `<p class="err ros-msg" role="alert">${esc(state.novaFlash)}</p>` : ""}${k === "operace" ? newEventForm() : newTrainingForm(k)}</section>`;
+    ${state.novaFlash ? `<p class="err ros-msg" role="alert">${esc(state.novaFlash)}</p>` : ""}${k === "operace" ? newEventForm() : newTrainingForm(k)}</details>`;
 }
 function newEventForm() {
   return `<form class="evf" data-form="new">
@@ -1013,7 +1053,7 @@ function homeEvent() {
   const mine = state.claims.find(c => c.user_id === state.me.user_id);
   const said = (state.rsvps || []).find(r => r.user_id === state.me.user_id);
   const status = mine ? `Máš místo: ${esc(mine.slot_label)}` : said ? `Tvoje odpověď: ${esc((RSVP.find(x => x[0] === said.status) || [, said.status])[1])}` : "Zatím bez odpovědi a bez místa: otevři sestavu";
-  return `<a class="cont evc" href="#/akce"><span class="big">Operace</span><span>${esc(fmtWhen(ev.starts_at))} · ${ev.doctrine === "swarm" ? "mapa podle hry" : sideOf(ev.strategy_id, "mapa zatím nevybraná")} · ${esc(docName(ev.doctrine))}<small>${status}</small></span></a>${more}${next}`;
+  return `<a class="cont evc" href="#/akce"><span class="big">Operace</span><span>${esc(fmtWhen(ev.starts_at))} · ${sideOf(ev.strategy_id, ev.doctrine === "swarm" ? "mapa podle hry" : "mapa zatím nevybraná")} · ${esc(docName(ev.doctrine))}<small>${status}</small></span></a>${more}${next}`;
 }
 
 // specs/mapy-v2 (Petr 2026-10-22): the 3 maps; a map's page picks doctrine, team and zone variant, then shows the
@@ -1506,7 +1546,7 @@ function viewVycvik() {
 }
 
 // ---------- historie (uzavřené akce, hráči; jen pro přihlášené členy, data chrání RLS) ----------
-const HIST = ["historie", "akce", "hrac", "pokryti"];
+const HIST = ["historie", "akce", "hrac", "pokryti", "ukoly"];
 const plural = (n, one, few, many) => `${n} ${n === 1 ? one : n >= 2 && n <= 4 ? few : many}`;
 // local calendar date (like fmtWhen), so a 00:30 event on the start day lands in the new season
 const seasonOf = iso => { const d = new Date(iso).toLocaleDateString("sv-SE"); let s = null; for (const x of D.seasons) if (x.start <= d) s = x; return s; };
@@ -1554,6 +1594,14 @@ async function loadHist(p) {
         .eq("active", true).eq("unlocks.season", s.id) : { data: [] };
       if (error) throw error;
       html = viewCoverage(s, data);
+    } else if (p[0] === "ukoly") {
+      const [ms, td, tr] = await Promise.all([sb.from("members").select("user_id, discord_id, name, avatar_url").eq("active", true),
+        sb.from("tasks_done").select("user_id, task"), sb.from("tracker").select("user_id, status")]);
+      for (const r of [ms, td, tr]) if (r.error) throw r.error;
+      // ponytail: one progress call per member (~20); a counts view when the clan outgrows it
+      const pr = await Promise.all(ms.data.map(m => sb.rpc("progress", { uid: m.user_id })));
+      const bad = pr.find(r => r.error); if (bad) throw bad.error;
+      html = viewTasks(ms.data, td.data, tr.data, Object.fromEntries(ms.data.map((m, i) => [m.user_id, Array.isArray(pr[i].data) ? pr[i].data[0] : null])));
     } else if (p[0] === "historie") {
       const { data, error } = await sb.from("events").select("id, strategy_id, doctrine, starts_at, variant, placement, claims(count)")
         .eq("status", "closed").eq("kind", "operace").order("starts_at", { ascending: false });  // a closed training is no played event
@@ -1576,21 +1624,25 @@ async function loadHist(p) {
       const { data: m, error } = await sb.from("members").select("user_id, discord_id, name, avatar_url, active, rank").eq("discord_id", p[1]).maybeSingle();
       if (error) throw error;
       const season = currentSeason();
-      const [cl, at, un, pr, me] = m ? await Promise.all([
+      const [cl, at, un, pr, me, td, tr] = m ? await Promise.all([
         sb.from("claims").select("slot_label, events!inner(id, strategy_id, starts_at, status)").eq("user_id", m.user_id).eq("events.status", "closed"),
         sb.from("attendance").select("event_id, attended").eq("user_id", m.user_id),  // visible to the Commander and the player only
         season ? sb.from("unlocks").select("item").eq("user_id", m.user_id).eq("season", season.id) : { data: [] },
         sb.rpc("progress", { uid: m.user_id }),  // counts only (019), others' attendance stays private
         sb.from("merits").select("id, text, created_at").eq("user_id", m.user_id).order("created_at"),
-      ]) : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }];
+        sb.from("tasks_done").select("task").eq("user_id", m.user_id),
+        sb.from("tracker").select("status").eq("user_id", m.user_id).maybeSingle(),
+      ]) : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: null }];
       if (cl.error) throw cl.error;
       if (at.error) throw at.error;
       if (un.error) throw un.error;
       if (pr.error) throw pr.error;
       if (me.error) throw me.error;
+      if (td.error) throw td.error;
+      if (tr.error) throw tr.error;
       // no attendance record = played (older events, or the viewer may not see it)
       const absent = new Set(at.data.filter(a => !a.attended).map(a => a.event_id));
-      html = m ? viewPlayer(m, cl.data.filter(r => !absent.has(r.events.id)), season, new Set(un.data.map(u => u.item)), Array.isArray(pr.data) ? pr.data[0] : null, me.data || []) : '<p class="note">Hráč nenalezen.</p>';
+      html = m ? viewPlayer(m, cl.data.filter(r => !absent.has(r.events.id)), season, new Set(un.data.map(u => u.item)), Array.isArray(pr.data) ? pr.data[0] : null, me.data || [], new Set(td.data.map(r => r.task)), !!tr.data && tr.data.status === "ok") : '<p class="note">Hráč nenalezen.</p>';
     }
     const t = el(); if (t) t.innerHTML = html;
   } catch (e) {
@@ -1635,8 +1687,8 @@ function viewHistory(evs) {
   const head = `<h2 class="hist-h">Odehrané akce</h2>`;
   if (!evs.length) return `${head}<p class="note">Zatím žádná uzavřená akce. Commander ji uzavře nahoře v Sestavě po zápase.</p>`;
   return head + bySeason(evs, e => e.starts_at).map(({ s, rows }) => `<section class="block"><h2>${esc(seasonName(s))}</h2>
-    <table class="data hist"><thead><tr><th>Datum</th><th>Mapa</th><th>Doktrína</th><th>Zóna</th><th class="num">Umístění</th><th class="num">Zapsáno</th></tr></thead><tbody>
-    ${rows.map(e => `<tr><td><a href="#/akce/${e.id}">${esc(fmtWhen(e.starts_at))}</a></td><td>${mapCell(e.strategy_id)}</td><td>${esc(docName(e.doctrine))}</td><td>${esc(variantName(e.strategy_id, e.variant))}</td><td class="num"><b>${place(e.placement)}</b></td><td class="num">${e.claims[0] ? e.claims[0].count : 0}</td></tr>`).join("")}
+    <table class="data hist"><thead><tr><th>Datum</th><th>Mapa</th><th>Doktrína</th><th class="num">Umístění</th><th class="num">Zapsáno</th></tr></thead><tbody>
+    ${rows.map(e => `<tr><td><a href="#/akce/${e.id}">${esc(fmtWhen(e.starts_at))}</a></td><td>${mapCell(e.strategy_id)}</td><td>${esc(docName(e.doctrine))}</td><td class="num"><b>${place(e.placement)}</b></td><td class="num">${e.claims[0] ? e.claims[0].count : 0}</td></tr>`).join("")}
     </tbody></table></section>`).join("");
 }
 
@@ -1668,7 +1720,7 @@ function unlockSection(m, season, have) {
     <ul class="cls">${rows.map(x => `<li><a href="${classHref(x.q, x.c)}"><b>${esc(x.c.name)}</b><span>${esc(x.st.item)}${x.top ? " · cíl" : ""}</span></a></li>`).join("")}</ul></section>`;
 }
 
-function viewPlayer(m, rows, season, have, prog, merits = []) {
+function viewPlayer(m, rows, season, have, prog, merits = [], done = new Set(), trackerOk = false) {
   const stats = list => {
     const roles = {};
     for (const r of list) { const role = r.slot_label; roles[role] = (roles[role] || 0) + 1; }
@@ -1680,7 +1732,7 @@ function viewPlayer(m, rows, season, have, prog, merits = []) {
   const sorted = [...rows].sort((a, b) => b.events.starts_at.localeCompare(a.events.starts_at));
   return `<p class="crumb"><a href="#/akce">Akce</a> / ${esc(m.name)}</p>
     <header class="unit-head"><img class="pavatar" src="${esc(m.avatar_url)}" alt=""><div><h1>${esc(m.name)}</h1><p>Člen KIN</p></div></header>
-    ${m.active ? rankCard(m, prog, merits) : ""}
+    ${m.active ? rankCard(m, prog, merits) + tasksCard(m, done, trackerOk, prog) : ""}
     <section class="block"><h2>Celkem</h2>${stats(rows)}</section>
     ${unlockSection(m, season, have)}
     ${bySeason(sorted, r => r.events.starts_at).map(({ s, rows: xs }) => `<section class="block"><h2>${esc(seasonName(s))}</h2>${stats(xs)}
@@ -1702,7 +1754,8 @@ function renderNav(active) {
 }
 
 function viewAkce() {
-  return `<header class="unit-head"><div><h1>Akce</h1><p>Tady se na akci zapisuješ a vidíš svůj nákup. Mapy a Doktrína jsou ke čtení.</p></div></header>
+  if (state.focusId) return `<p class="crumb"><a href="#/akce">Akce</a> / Operace</p><section class="sestava" id="sestava">${akceBody()}</section>`;
+  return `<header class="unit-head"><div><h1>Akce</h1></div></header>
     <section class="sestava" id="sestava">${akceBody()}</section>
     ${histShell(sb && state.me ? '<p class="note">Načítám odehrané akce…</p>' : "")}`;
 }
@@ -1776,13 +1829,13 @@ function render() {
     plan = planOf(state.event); if (plan && !plan.swarm) curVariant = state.event.variant || pickVariant(plan, qs);
     cur = plan && !plan.swarm && !plan.nomap ? plan : null;  // the build order's role chips trace on this plan
     html = viewAkce(); active = "akce"; title = "Akce · KIN";
-    if (sb && state.me) setTimeout(() => loadHist(["historie"]));
+    if (sb && state.me && !p[1]) setTimeout(() => loadHist(["historie"]));
   } else if (p[0] === "briefing") {
     active = "akce"; title = "Briefing · KIN";
     html = sb && state.me && state.me.is_commander ? '<p class="note">Načítám…</p>' : '<p class="note">Protokol briefingu je jen pro Commandera.</p>';
     if (sb && state.me && state.me.is_commander) setTimeout(loadBriefing);
   } else if (HIST.includes(p[0])) {
-    active = p[0] === "pokryti" ? "vybava" : "akce"; title = p[0] === "pokryti" ? "Pokrytí · KIN" : "Akce · KIN";
+    active = p[0] === "pokryti" ? "vybava" : p[0] === "ukoly" ? "" : "akce"; title = p[0] === "pokryti" ? "Pokrytí · KIN" : p[0] === "ukoly" ? "Úkoly · KIN" : "Akce · KIN";
     html = histShell(sb && state.me ? '<p class="note">Načítám…</p>' : histGate());
     if (sb && state.me) setTimeout(() => loadHist(p));
   }
@@ -1796,13 +1849,14 @@ function render() {
 }
 
 $app.addEventListener("click", e => {
-  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-kit],[data-role],[data-squad],[data-seat],[data-fx],[data-leadfor],[data-merit-del],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker],[data-nova]");
+  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-kit],[data-role],[data-squad],[data-seat],[data-fx],[data-leadfor],[data-merit-del],[data-task-tick],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker],[data-nova]");
   if (!t) return;
   if (t.dataset.trsvp) { const [id, st] = t.dataset.trsvp.split(":"); rsvpTraining(Number(id), st); return; }
   if (t.dataset.tclose) { t.disabled = true; const [id, st] = t.dataset.tclose.split(":"); closeTraining(Number(id), st); return; }
   if (t.dataset.role) { const [i, kit, d] = t.dataset.role.split(":"); setRole(Number(i), kit, Number(d)); return; }
   if (t.dataset.squad) { setSquad(t.dataset.squad); return; }
   if (t.dataset.leadfor) { const [uid, on] = t.dataset.leadfor.split(":"); giveLead(uid, on === "1"); return; }
+  if (t.dataset.taskTick) { tickTask(t); return; }
   if (t.dataset.meritDel) { sb.from("merits").delete().eq("id", t.dataset.meritDel).then(({ error }) => { if (error) console.error(error); render(); }); return; }
   if (t.dataset.fx) { const [gid, what, arg] = t.dataset.fx.split(":"); setFortress(gid, what, arg); return; }
   if (t.dataset.seat) { const [kit, v, d] = t.dataset.seat.split(":"); setSeat(kit, Number(v), Number(d)); return; }

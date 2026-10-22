@@ -394,7 +394,6 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .opc-me { font-size: 14px; color: var(--ink-3); }
 .opc.on .opc-me { color: var(--ink-2); }
 .lobby { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--rule); }
-.nova { margin-top: 30px; }
 .nova .seg { margin-top: 10px; }
 .nova .evf { margin-top: 16px; }
 
@@ -591,6 +590,28 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .tmark { display: inline-block; width: .8em; height: .95em; margin-left: .35em; vertical-align: -.1em; background: var(--tc);
   clip-path: polygon(50% 0, 100% 18%, 100% 58%, 50% 100%, 0 58%, 0 18%); box-shadow: 0 0 10px var(--tc); }
 
+/* the operation's own page (Petr 2026-10-22): a head with when, how long, the doctrine plate and the map; x closes it */
+.evhero { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 14px 24px; align-items: center; margin: 8px 0 22px;
+  padding: 20px 64px 20px 22px; background: var(--brackets), var(--plate-bg); box-shadow: var(--plate-lift), 0 0 0 1px oklch(0.86 0.15 205 / 0.35); }
+.evh-k { font: 700 14px/1 Oxanium, var(--cond); letter-spacing: .24em; text-transform: uppercase; color: var(--fr); }
+.evhero h1 { margin-top: 6px; font-size: clamp(30px, 2vw + 22px, 52px); text-transform: uppercase; }
+.evhero .tminus { display: block; margin-top: 6px; font: 700 26px/1 Oxanium, var(--cond); letter-spacing: .06em; color: var(--fr); text-shadow: 0 0 18px var(--fr-glow); }
+.evh-m { grid-column: 1 / -1; color: var(--ink-2); }
+.evx { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid var(--rule); color: var(--ink-2); }
+.evx:hover { border-color: var(--fr); color: var(--fr); }
+.docplate { display: flex; align-items: center; gap: 14px; padding: 12px 18px 12px 12px; border: 1px solid var(--fr); background: var(--fr-fill); color: var(--ink); text-decoration: none; box-shadow: 0 0 26px -12px var(--fr-glow); }
+.docplate svg { width: 52px; height: 52px; fill: none; stroke: var(--fr); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 6px var(--fr-glow)); }
+.docplate b { display: block; font: 700 24px/1 Oxanium, var(--cond); letter-spacing: .12em; text-transform: uppercase; }
+.docplate small { display: block; margin-top: 4px; color: var(--ink-2); font-size: 14px; }
+.docplate.doc-swarm { border-color: var(--un); background: var(--un-fill); box-shadow: 0 0 26px -12px var(--un); }
+.docplate.doc-swarm svg { stroke: var(--un); filter: drop-shadow(0 0 6px var(--un)); }
+@media (max-width: 640px) { .evhero { grid-template-columns: 1fr; padding-right: 22px; } .evhero .evh-when { padding-right: 44px; } }
+.nova { margin: 0 0 20px; }
+.nova > summary { display: inline-flex; list-style: none; cursor: pointer; border-color: var(--fr); color: var(--fr); }
+.nova > summary::-webkit-details-marker { display: none; }
+.nova[open] { padding: 14px 16px 16px; background: var(--brackets), var(--plate-bg); box-shadow: var(--plate-lift); }
+.nova[open] > summary { margin-bottom: 4px; }
+
 /* ranks on the profile (specs/hodnosti): the badge, progress bars to the next, merits */
 .rk-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; color: var(--ink-2); }
 .rk-badge { font: 700 22px/1 Oxanium, var(--cond); letter-spacing: .12em; text-transform: uppercase; padding: 8px 12px 7px; border: 1px solid var(--fr); color: var(--fr); background: var(--fr-fill); box-shadow: 0 0 18px -8px var(--fr-glow); }
@@ -607,6 +628,20 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .merits li { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--rule-soft); }
 .merits small { margin-left: auto; color: var(--ink-3); }
 .rank .merit { margin-top: 10px; }
+/* member tasks (specs/ukoly-clenu): a mark, the task as a link, the tick on my own profile */
+.ukoly h2 small { margin-left: 10px; font: 600 15px/1 var(--cond); letter-spacing: .08em; color: var(--ink-3); }
+.tasks { list-style: none; margin: 8px 0 0; padding: 0; max-width: 640px; }
+.tasks li { display: grid; grid-template-columns: 22px 1fr auto; gap: 12px; align-items: center; min-height: 48px; padding: 4px 0; border-bottom: 1px solid var(--rule); }
+.tk-mark { width: 18px; height: 18px; border: 2px solid var(--ink-3); }
+.tasks li.ok .tk-mark { border-color: var(--fr); background: var(--fr) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8l3 3 7-7' fill='none' stroke='%23051018' stroke-width='2.4'/%3E%3C/svg%3E") center / 14px no-repeat; box-shadow: 0 0 12px var(--fr-glow); }
+.tasks li.ok a { color: var(--ink-2); }
+.tk[aria-pressed="true"] { border-color: var(--fr); color: var(--fr); }
+.unit-head + .matrix-wrap { margin-top: 18px; }
+.tasks-all th { white-space: normal; min-width: 110px; font-size: 13px; vertical-align: bottom; }
+.tasks-all th .num { display: block; margin-top: 6px; text-align: left; color: var(--fr); }
+.tasks-all td:first-child { white-space: nowrap; }
+.tasks-all td[data-task] { text-align: center; color: var(--ink-3); }
+.tasks-all td.ok { color: var(--fr); font-weight: 700; }
 .rk-all { margin-top: 16px; }
 .rk-all tr.on td { color: var(--fr); }
 
@@ -829,30 +864,15 @@ body::after {
 }
 :focus-visible { outline: 2px solid var(--fr); outline-offset: 2px; box-shadow: 0 0 0 4px oklch(0.86 0.15 205 / 0.2); }
 
-/* the operations map behind everything (Petr 2026-10-21: not a sweep, "neco lepsiho a vic cool"): sectors, our units
-   pinging, hostiles blinking, planned moves marching toward the Hot Zone, one slow scan band; decoration only */
+/* the battle behind everything (Petr 2026-10-22, specs/pozadi-bitva): docs/battle.js draws it on the canvas; one slow
+   scan band over it; decoration only */
 .ops { position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: .42; overflow: hidden; }
-.ops svg { width: 100%; height: 100%; display: block; }
-.ops .lbl text { font: 600 18px var(--cond); letter-spacing: .1em; fill: oklch(0.86 0.15 205 / 0.55); }
-.ops .u rect, .ops .u path, .ops .u ellipse { fill: oklch(0.86 0.15 205 / 0.10); stroke: oklch(0.86 0.15 205 / 0.75); stroke-width: 2; }
-.ops .u path { fill: none; }
-.ops .ping { fill: none; stroke: oklch(0.86 0.15 205 / 0.6); stroke-width: 1.5; transform-box: fill-box; transform-origin: center;
-  animation: ops-ping 4.2s var(--ease) infinite; animation-delay: var(--d, 0s); }
-@keyframes ops-ping { 0% { transform: scale(0.6); opacity: .9; } 70%, 100% { transform: scale(2.4); opacity: 0; } }
-.ops .h rect { fill: oklch(0.72 0.19 25 / 0.12); stroke: oklch(0.72 0.19 25 / 0.7); stroke-width: 2; animation: ops-blink 3.4s steps(2, end) infinite; animation-delay: var(--d, 0s); }
-@keyframes ops-blink { 0%, 60% { opacity: 1; } 61%, 100% { opacity: .35; } }
-.ops .mv { fill: none; stroke: oklch(0.86 0.15 205 / 0.5); stroke-width: 2; stroke-dasharray: 10 12; animation: ops-march 2.6s linear infinite; animation-delay: var(--d, 0s); }
-.ops marker path { fill: oklch(0.86 0.15 205 / 0.6); }
-@keyframes ops-march { to { stroke-dashoffset: -44; } }
-.ops .hz circle { fill: oklch(0.86 0.15 205 / 0.04); stroke: oklch(0.86 0.15 205 / 0.45); stroke-width: 2; stroke-dasharray: 18 12; }
-.ops .hz .hz-ring { fill: none; stroke-dasharray: none; transform-box: fill-box; transform-origin: center; animation: ops-zone 6s var(--ease) infinite; }
-@keyframes ops-zone { 0% { transform: scale(0.85); opacity: .7; } 100% { transform: scale(1.3); opacity: 0; } }
-.ops .hz text { font: 700 20px var(--cond); letter-spacing: .2em; text-anchor: middle; fill: oklch(0.86 0.15 205 / 0.6); }
+.ops canvas { width: 100%; height: 100%; display: block; }
 .ops::after { content: ""; position: absolute; left: 0; right: 0; top: -30%; height: 30%;
   background: linear-gradient(180deg, transparent, oklch(0.86 0.15 205 / 0.07) 70%, oklch(0.86 0.15 205 / 0.16) 98%, transparent);
   animation: ops-scan 13s linear infinite; }
 @keyframes ops-scan { to { transform: translateY(440%); } }
-@media (max-width: 720px) { .ops { opacity: .38; } .ops .lbl { display: none; } }
+@media (max-width: 720px) { .ops { opacity: .38; } }
 
 /* bar: a console strip, gold seam below, a cyan light line under it */
 .bar { background: linear-gradient(180deg, oklch(0.16 0.04 252 / 0.92), var(--bar-bg)); backdrop-filter: blur(10px) saturate(1.3);
@@ -1030,22 +1050,7 @@ FIRST VIEWPORT: Akce: title, squads as separate lit plates (core on a solid brac
 FORM: brief-pinned by Petr 2026-10-21 ("futuristicky design war room, tmavy s velkym kontrastem, prvky animovane a interaktivni"), seed 94cb211f, assigned index set aside for the pinned brief.
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
 -->
-<div class="ops" aria-hidden="true"><svg viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
-  <defs><marker id="ops-ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker></defs>
-  <g class="lbl"><text x="100" y="30">A</text><text x="300" y="30">B</text><text x="500" y="30">C</text><text x="700" y="30">D</text><text x="900" y="30">E</text><text x="1100" y="30">F</text><text x="1300" y="30">G</text><text x="1500" y="30">H</text>
-    <text x="14" y="106">1</text><text x="14" y="306">2</text><text x="14" y="506">3</text><text x="14" y="706">4</text><text x="14" y="906">5</text></g>
-  <g class="hz"><circle cx="1010" cy="430" r="132"/><circle class="hz-ring" cx="1010" cy="430" r="132"/><text x="1010" y="284">HOT ZONE</text></g>
-  <path class="mv" d="M300 700 C 470 640, 640 560, 880 470" marker-end="url(#ops-ah)"/>
-  <path class="mv" style="--d:-4s" d="M520 860 C 690 760, 820 640, 930 540" marker-end="url(#ops-ah)"/>
-  <path class="mv" style="--d:-2s" d="M240 330 C 480 300, 700 340, 870 400" marker-end="url(#ops-ah)"/>
-  <g class="u" transform="translate(300 700)"><circle class="ping" r="34"/><rect x="-24" y="-16" width="48" height="32"/><path d="M-24 -16L24 16M24 -16L-24 16"/></g>
-  <g class="u" style="--d:-1.2s" transform="translate(520 860)"><circle class="ping" r="34"/><rect x="-24" y="-16" width="48" height="32"/><path d="M-24 -16L24 16M24 -16L-24 16"/></g>
-  <g class="u" style="--d:-2.4s" transform="translate(240 330)"><circle class="ping" r="34"/><rect x="-24" y="-16" width="48" height="32"/><path d="M-24 -16L24 16M24 -16L-24 16"/></g>
-  <g class="u arm" style="--d:-3.1s" transform="translate(160 540)"><circle class="ping" r="34"/><rect x="-24" y="-16" width="48" height="32"/><ellipse cx="0" cy="0" rx="14" ry="7"/></g>
-  <g class="h" transform="translate(1240 320)"><rect x="-17" y="-17" width="34" height="34" transform="rotate(45)"/></g>
-  <g class="h" style="--d:-1.7s" transform="translate(1330 560)"><rect x="-17" y="-17" width="34" height="34" transform="rotate(45)"/></g>
-  <g class="h" style="--d:-0.6s" transform="translate(1180 760)"><rect x="-17" y="-17" width="34" height="34" transform="rotate(45)"/></g>
-</svg></div>
+<div class="ops" aria-hidden="true"><canvas id="battle"></canvas></div>
 <header class="bar"><div class="wrap">
   <a class="brand" href="#/" aria-label="Kinetic Solutions War Room"><span class="brand-crest"><img class="emblem" src="znacka/kin-ikona.svg" alt="" width="30" height="30"><svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="18.5"/><path d="M20 1.5 A18.5 18.5 0 0 1 38.5 20"/></svg></span><span class="brand-t"><b>Kinetic Solutions</b><small>War Room</small></span></a>
   <nav id="nav" aria-label="Hlavní"></nav>
@@ -1057,5 +1062,6 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok" crossorigin="anonymous"></script>
 <script src="config.js"></script>
 <script src="app.js"></script>
+<script src="battle.js"></script>
 </body>
 </html>
