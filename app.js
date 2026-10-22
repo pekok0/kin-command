@@ -311,8 +311,9 @@ function swarmMyKit() {
   const k = D.doktrina.swarm, myc = state.claims.find(c => c.user_id === state.me.user_id);
   const slot = myc && plan.roster.flatMap(g => g.slots).find(x => x.key === myc.slot_key);
   const r = slot && k.slots.find(r => r.id === slot.kit);
-  return `<section class="block" id="swarm-kit"><h2>Tvůj nákup</h2>${r && r.own_kit ? "" : kitBase(k)}
-    ${r ? kitRole(slot.seat ? { ...r, ...r.seats[slot.seat] } : r) : '<p class="note">Zapiš se do slotu a ukážu ti nákup tvé role. Nákup všech rolí je v <a href="#/doktrina/swarm">Doktríně</a>.</p>'}</section>`;
+  const [cq, cc] = r && !r.own_kit ? classById(r.class) : [], skip = cc ? myKit(cc).names : new Set();
+  return `<section class="block" id="swarm-kit"><h2>Tvůj nákup</h2>${cc ? loadoutCard(cq, cc, "h3") : ""}${r && r.own_kit ? "" : kitBase(k, skip)}
+    ${r ? kitRole(slot.seat ? { ...r, ...r.seats[slot.seat] } : r, skip) : '<p class="note">Zapiš se do slotu a ukážu ti nákup tvé role. Nákup všech rolí je v <a href="#/doktrina/swarm">Doktríně</a>.</p>'}</section>`;
 }
 
 // realtime and tab-return re-render the block: keep what the Commander is typing into a form
@@ -769,7 +770,6 @@ const SQ = id => D.squads.find(q => q.id === id);
 const classOf = (q, id) => q.classes.find(c => c.id === id);
 const classById = id => { for (const q of D.squads) { const c = classOf(q, id); if (c) return [q, c]; } return []; };
 const classHref = (q, c) => `#/squad/${q.id}/${c.id}`;
-let kmode = (() => { try { return localStorage.getItem("wrd.kitmode") === "ideal" ? "ideal" : "min"; } catch { return "min"; } })();
 
 // APP-6 friendly unit symbols, squad echelon dot above the frame
 function sym(kind, cls = "") {
@@ -903,7 +903,7 @@ function viewHome() {
       <li><span><b>Přihlas se přes Discord</b> (vpravo nahoře). Pustí tě to dál od role Rekrut na serveru Kinetic Solutions.</span></li>
       <li><span><a href="#/akce">Akce</a>: před akcí dej <b>Přijdu</b> a zaber si místo v <b>Sestavě</b>, ať hrajeme cokoli. Hned pod tím je tvůj nákup a odehrané akce po sezónách.</span></li>
       <li><span><a href="#/mapy">Mapy</a>: plán každé mapy a <b>karta tvé role</b> (co koupit, čím jedeš, co děláš v každé fázi). Nech si ji otevřenou na mobilu nebo druhém monitoru.</span></li>
-      <li><span><a href="#/vybava">Výbava</a>: celá sestava tvé sub-classy, minimum po wipu i ideál. Co máš odemčené, bere Central Command z WARDOGS Trackeru. Kolik nás co umí, je v <a href="#/pokryti">Pokrytí</a>.</span></li>
+      <li><span><a href="#/vybava">Výbava</a>: tvůj loadout pro každou sub-classu: co koupit a kolik kusů, podle toho, co máš odemčené (WARDOGS Tracker). Kolik nás co umí, je v <a href="#/pokryti">Pokrytí</a>.</span></li>
       <li><span><a href="#/doktrina">Doktrína</a>: jak klan hraje (${esc(docName("defence"))}, ${esc(docName("swarm"))}) a Výcvik.</span></li>
     </ol></details>
     <section class="block" aria-labelledby="h-str"><h2 id="h-str">Mapy</h2>${sheetList()}
@@ -1006,32 +1006,78 @@ function priceLine(price, qty) {
   if (qty === "?") return `${usd(price)} / ks, počet <span class="unk">?</span>`;
   return qty > 1 ? `${usd(price)} / ks · celkem ${usd(price * qty)}` : usd(price);
 }
-function shopList(s, r) {
-  if (!r.gear.length) return `<p class="note" style="margin-top:0">${r.class ? "Nic navíc." : "Nic předepsaného."}</p>`;
-  const k = r.extras_kit, part = k.partial ? ' <span class="unk">+ ?</span>' : "";
-  const um = k.unlocks_min.map(u => `<span class="ref">${unlockText(u)}</span>`).join("");
-  const ui = k.unlocks_ideal.map(u => `<span class="ref">${unlockText(u)}</span>`).join("");
-  const tiles = r.gear.map(g => {
-    const opt = !g.item, name = g.item || g.ideal, unlock = opt ? g.ideal_unlock : g.unlock;
-    const std = g.std ? `<div class="alt">${itemIcon(g.std_icon, "sm")}<span>Mezistupeň: <b>${esc(g.std)}</b> · ${usd(g.std_price)}${g.std_unlock ? ` · odemknout ${unlockText(g.std_unlock)}` : ""}</span></div>` : "";
-    const alt = std + (g.item && g.ideal && g.ideal !== g.item
-      ? `<div class="alt">${itemIcon(g.ideal_icon, "sm")}<span>Ideál: <b>${esc(g.ideal)}</b> · ${usd(g.ideal_price)}${g.ideal_unlock ? ` · odemknout ${unlockText(g.ideal_unlock)}` : ""}</span></div>`
-      : g.item && g.qty !== "?" && g.ideal_qty !== g.qty ? `<div class="alt"><span>Ideál: <b>${esc(g.ideal_qty)}×</b> · celkem ${usd(g.ideal_cost)}</span></div>` : "");
-    return `<li class="tile${opt ? " opt" : ""}">${itemIcon(opt ? g.ideal_icon : g.icon)}<div class="tx">
-      <div class="nm"><span class="qty">${g.qty === "?" ? '<span class="unk">?</span>' : g.qty + "×"}</span><span>${esc(name)}</span></div>
-      <div class="pr">${opt ? "Volitelně, když máš odemčeno · " : ""}${priceLine(opt ? g.ideal_price : g.price, g.qty)}${unlock ? ` · odemknout <b>${unlockText(unlock)}</b>` : ""}</div>
-      ${g.note ? `<div class="nt">${esc(g.note)}</div>` : ""}${alt}</div></li>`;
-  }).join("");
-  return `<div class="shop-sum"><span>${r.sum || (r.class ? "Navíc za život" : "Celkem za život")}</span><b>${usd(k.min)}${part}</b>${k.ideal !== k.min ? `<span>ideál</span><b>${usd(k.ideal)}${part}</b>` : ""}${um ? `<span>odemkni</span>${um}` : ""}</div>
-    <ul class="shop">${tiles}</ul>${ui && ui !== um ? `<div class="unlocks">Pro ideál: ${ui}</div>` : ""}`;
+// a plan's or a SWARM role's own item (vybava-zebricky v2, no MIN / IDEAL): its upgrade once I unlocked it, else the
+// base item with the upgrade as the goal; an upgrade-only item shows when unlocked or free, else as a goal
+const owned = n => !!(haveSet && haveSet.has(n));
+function pickGear(g) {
+  const up = g.ideal && g.ideal !== g.item ? g.ideal : null;
+  if (up && (g.ideal_unlock ? owned(up) : !g.item)) return { name: up, icon: g.ideal_icon, qty: g.ideal_qty ?? g.qty, price: g.ideal_price, cost: g.ideal_cost, unlock: g.ideal_unlock };
+  if (!g.item) return { goal: up, icon: g.ideal_icon, price: g.ideal_price, unlock: g.ideal_unlock };
+  return { name: g.item, icon: g.icon, qty: g.qty, qmax: !up && g.ideal_qty > g.qty ? g.ideal_qty : null, price: g.price, cost: g.cost,
+    unlock: g.unlock, goal: up && g.ideal_unlock ? up : null };
+}
+const extrasCost = (r, skip) => r.gear.map(pickGear).filter(p => p.name && !(skip && skip.has(p.name))).reduce((a, p) => a + (p.cost || 0), 0);
+function shopList(s, r, skip = null) {
+  const picks = r.gear.map(g => [g, pickGear(g)]).filter(([, p]) => !(p.name && skip && skip.has(p.name)));
+  if (!picks.length) return `<p class="note" style="margin-top:0">${r.class ? "Nic navíc." : "Nic předepsaného."}</p>`;
+  const part = picks.some(([, p]) => p.name && p.qty === "?") ? ' <span class="unk">+ ?</span>' : "";
+  const tiles = picks.map(([g, p]) => p.name ? `<li class="tile">${itemIcon(p.icon)}<div class="tx">
+      <div class="nm"><span class="qty">${p.qty === "?" ? '<span class="unk">?</span>' : p.qmax ? `${p.qty}–${p.qmax}×` : p.qty + "×"}</span><span>${esc(p.name)}</span></div>
+      <div class="pr">${priceLine(p.price, p.qty)}${p.unlock && !owned(p.name) ? ` · odemknout <b>${unlockText(p.unlock)}</b>` : ""}</div>
+      ${g.note ? `<div class="nt">${esc(g.note)}</div>` : ""}${p.goal ? `<div class="alt">${itemIcon(g.ideal_icon, "sm")}<span>Až odemkneš: <b>${esc(p.goal)}</b> · ${unlockText(g.ideal_unlock)}</span></div>` : ""}</div></li>`
+    : `<li class="tile opt">${itemIcon(p.icon)}<div class="tx"><div class="nm"><span>${esc(p.goal)}</span></div>
+      <div class="pr">Volitelně, až odemkneš <b>${unlockText(p.unlock)}</b> · ${usd(p.price)}</div>${g.note ? `<div class="nt">${esc(g.note)}</div>` : ""}</div></li>`).join("");
+  return `<div class="shop-sum"><span>${r.sum || (r.class ? "Navíc za život" : "Celkem za život")}</span><b>${usd(extrasCost(r, skip))}${part}</b></div>
+    <ul class="shop">${tiles}</ul>`;
+}
+
+// my loadout of a sub-class (vybava-zebricky v2, Petr 2026-10-22): the best ladder step I unlocked in every slot; my
+// primary brings its best unlocked magazine and the rounds of its calibre (AP once unlocked, if the clan's Munice ladder
+// goes there); the card shows it like the game does, the ladders below show what I have vs what I should have
+const MAGS = 3;  // ponytail: spare magazines per primary as the S1 screenshots had them; per class when Petr wants
+const mineIdx = lad => lad.steps.map(st => !st.unlock || owned(st.item)).lastIndexOf(true);
+const pieceCost = (x, qty) => x.price == null ? 0 : Math.round(x.price * qty / (x.per || 1));
+// the Munice ladder of a class follows my primary: same counts and reasons, rounds of my weapon's calibre
+function municeFor(lad, gun) {
+  return gun && gun.ammo && gun.ammo.length ? { ...lad, steps: lad.steps.slice(0, gun.ammo.length).map((st, i) => ({ ...st, ...gun.ammo[i], qty: st.qty, cost: pieceCost(gun.ammo[i], st.qty) })) } : lad;
+}
+function myKit(c) {
+  const lads = c.ladders || [], pick = lad => lad && lad.steps[mineIdx(lad)];
+  const slots = Object.fromEntries(Object.keys(SLOT_LABEL).map(k => [k, pick(lads.find(l => l.slot === k))]));
+  const gun = slots.slot1, store = [];
+  const mag = gun && gun.mags && gun.mags[gun.mags.map(m => !m.unlock || owned(m.item)).lastIndexOf(true)];
+  if (mag) store.push({ ...mag, qty: MAGS, cost: pieceCost(mag, MAGS) });
+  for (const lad of lads.filter(l => l.slot === "storage")) {
+    const st = pick(lad.group === "Munice" ? municeFor(lad, gun) : lad);
+    if (st) store.push(st);
+  }
+  const all = [...Object.values(slots).filter(Boolean), ...store];
+  return { slots, store, names: new Set(all.map(x => x.item)), cost: all.reduce((a, x) => a + (x.cost || 0), 0) };
+}
+const loadoutCost = c => myKit(c).cost;
+function loadoutCard(q, c, h = "h2") {
+  const k = myKit(c), cell = key => { const st = k.slots[key];
+    return `<div class="slot${st ? "" : " empty"}"><span class="sl">${SLOT_LABEL[key]}</span>${st ? `${itemIcon(st.icon)}<span class="sn">${esc(st.item)}</span>${st.cost ? `<span class="pr">${usd(st.cost)}</span>` : ""}` : key === "slot2" ? '<span class="ph">Sidearm</span>' : ""}</div>`; };
+  const quick = c.quick.filter(n => k.names.has(n));
+  return `<article class="loadout" id="${esc(c.id)}">
+    <header class="lo-head"><div><${h} class="lo-name"><a href="${classHref(q, c)}">${esc(c.name)}</a></${h}><p>${esc(c.job)}</p>
+      <p class="src">${trk && trk.status === "ok" ? "Co koupit: nejlepší z toho, co máš odemčené a klan doporučuje." : "Startovní loadout. Propoj WARDOGS Tracker ve <a href=\"#/vybava\">Výbavě</a> a uvidíš svůj."}</p></div></header>
+    <div class="lo-grid">
+      <div><h3>Equipment</h3>${["slot1", "slot2", "slot3"].map(cell).join("")}
+        <h3>Gear</h3><div class="lo-gear">${["helmet", "armor", "vest"].map(cell).join("")}</div></div>
+      <div><h3>Storage</h3><div class="lo-gear">${["backpack", "traversal"].map(cell).join("")}</div>
+        <h3>V batohu</h3>${k.store.length ? `<ul class="lo-store">${k.store.map(x => `<li>${itemIcon(x.icon, "sm")}<span class="q">${x.qty}${x.cost ? `<span class="pr">${usd(x.cost)}</span>` : ""}</span><span class="n">${esc(x.item)}</span></li>`).join("")}</ul>` : '<p class="note">Nic.</p>'}
+        ${quick.length ? `<h3>Rychlé sloty</h3><ol class="lo-quick">${quick.map((n, i) => `<li><span class="kb">${(i + 4) % 10}</span>${esc(n)}</li>`).join("")}</ol>` : ""}</div>
+    </div>
+    <footer class="lo-sum"><span>Za život</span><b>${usd(k.cost)}</b></footer></article>`;
 }
 
 function roleBlock(s, r) {
-  const part = r.kit.partial ? ' <span class="unk">+ ?</span>' : "";
-  const strip = r.gear.map(g => `<li${g.item ? "" : ' class="opt"'}>${itemIcon(g.item ? g.icon : g.ideal_icon)}<span class="q">${g.qty === "?" ? "?" : g.qty + "×"}</span><span class="n">${esc(g.item || g.ideal)}${g.item ? "" : " (ideál)"}</span></li>`).join("");
+  const part = r.gear.some(g => g.qty === "?") ? ' <span class="unk">+ ?</span>' : "", [, cc] = classById(r.class);
+  const strip = r.gear.map(pickGear).map(p => `<li${p.name ? "" : ' class="opt"'}>${itemIcon(p.icon)}<span class="q">${p.name ? (p.qty === "?" ? "?" : p.qty + "×") : ""}</span><span class="n">${esc(p.name || p.goal)}${p.name ? "" : " (až odemkneš)"}</span></li>`).join("");
   return `<article class="rb"><header><a class="rid big" href="${roleHref(s, r)}">${esc(r.id)}</a>
     <div class="rb-t"><a class="rn" href="${roleHref(s, r)}">${esc(r.name)}</a><p>${esc(r.transport)}</p>${r.class ? (([cq, cc]) => `<p><a class="ref" href="${classHref(cq, cc)}">${esc(cc.name)}</a></p>`)(classById(r.class)) : ""}</div>
-    <div class="rb-sum">${usd(r.kit.min)}${part}${r.kit.ideal !== r.kit.min ? `<small>ideál ${usd(r.kit.ideal)}</small>` : ""}</div></header>
+    <div class="rb-sum">${usd((cc ? loadoutCost(cc) : 0) + extrasCost(r))}${part}</div></header>
     ${strip ? `<ul class="strip">${strip}</ul>` : `<p class="note">${r.class ? "Jen sestava sub-classy." : "Nic předepsaného."}</p>`}</article>`;
 }
 
@@ -1047,10 +1093,10 @@ function viewRole(s, r) {
       <button type="button" class="me-btn" data-me="${s.id}/${esc(r.id)}" aria-pressed="${mine}">${mine ? "Tvoje role" : "To jsem já"}</button></header>
     ${variantBar(s)}
     <section class="block"><h2>Doprava</h2><p class="transport">${esc(r.transport)}</p></section>
-    ${(() => { const [cq, cc] = classById(r.class), part = r.kit.partial ? ' <span class="unk">+ ?</span>' : "";
-      return `<section class="block"><h2>Nákup na spawnu</h2>${cc ? `<div class="shop-sum"><span>Celkem za život</span><b>${usd(r.kit.min)}${part}</b><span>ideál</span><b>${usd(r.kit.ideal)}${part}</b></div>
-        <p class="note" style="margin:0 0 4px">Sestava <a href="${classHref(cq, cc)}">${esc(cc.name)}</a> (platí na všech mapách) + co role potřebuje na téhle mapě.</p>
-        ${modeBar()}${classCard(cq, cc, kmode)}<h2 class="block">Navíc pro tuto roli</h2>` : ""}${shopList(s, r)}<p class="gnote">${esc(s.gear_note)}</p></section>`; })()}
+    ${(() => { const [, cc] = classById(r.class), part = r.gear.some(g => g.qty === "?") ? ' <span class="unk">+ ?</span>' : "";
+      return `<section class="block"><h2>Nákup na spawnu</h2>${cc ? `<div class="shop-sum"><span>Celkem za život</span><b>${usd(loadoutCost(cc) + extrasCost(r))}${part}</b></div>
+        <p class="note" style="margin:0 0 4px">Tvůj loadout sub-classy (platí na všech mapách) + co role potřebuje na téhle mapě.</p>
+        ${loadoutCard(...classById(cc.id))}<h2 class="block">Navíc pro tuto roli</h2>` : ""}${shopList(s, r)}<p class="gnote">${esc(s.gear_note)}</p></section>`; })()}
     <section class="block"><h2>Kroky</h2><ol class="steps">
       ${r.steps.filter(inV).map(st => { const p = phaseOf(s, st.phase); return `<li><div class="ph"><span class="pl">PL ${esc(p.id)}</span><b>${esc(p.name)}</b>${vtag(s, st)}</div><p>${esc(st.text)}</p></li>`; }).join("")}
       ${r.after ? `<li class="after"><div class="ph"><b>Trvale</b></div><p>${esc(r.after)}</p></li>` : ""}</ol></section>
@@ -1093,14 +1139,14 @@ function viewDefence(k) {
 }
 
 // SWARM kits: the base once, each role only what it buys on top (Viktor #002); in Doktrina all, in Akce mine
-const kitBase = s => `<div class="sq" id="kit-base"><h3>Základ pro všechny</h3><p>Kupuje každý, ať hraje cokoliv. U role je jen to, co se kupuje navíc. Zbraň, brnění, munice a obvazy tu nejsou: ty si bereš podle sestavy své sub-classy ve <a href="#/vybava">Výbavě</a> (MINIMUM po wipu, IDEÁL).</p>${shopList(null, { gear: s.base.gear, extras_kit: s.base.kit, sum: "Základ za život" })}</div>`;
-const kitRole = r => `<div class="sq" id="kit-${esc(r.id)}"><h3>${esc(r.name)} <small>${esc(r.count)}</small></h3><p>${esc(r.goal)}</p>${shopList(null, { gear: r.extra, extras_kit: r.extra_kit, class: true })}</div>`;
+const kitBase = (s, skip) => `<div class="sq" id="kit-base"><h3>Základ SWARM pro všechny</h3><p>Kupuje každý, ať hraje cokoliv. U role je jen to, co se kupuje navíc. Zbraň, brnění, munici a léčení bereš z loadoutu sub-classy své role (ve <a href="#/vybava">Výbavě</a>)${skip ? "; co už v loadoutu máš, tu znovu není" : ""}.</p>${shopList(null, { gear: s.base.gear, sum: "Základ za život" }, skip)}</div>`;
+const kitRole = (r, skip) => `<div class="sq" id="kit-${esc(r.id)}"><h3>${esc(r.name)} <small>${esc(r.count)}</small></h3><p>${esc(r.goal)}</p>${r.class ? (([q, c]) => `<p class="note">Loadout: <a href="${classHref(q, c)}">${esc(c.name)}</a></p>`)(classById(r.class)) : ""}${shopList(null, { gear: r.extra, class: true }, skip)}</div>`;
 
 // the SWARM tab (Petr 2026-10-18): how the swarm plays and what each role buys; signing up is in Akce since 2026-10-19
 function viewSwarm(k) {
   const s = k.swarm;
   return `
-    <section class="block" id="swarm-kit"><h2>Role a nákup</h2>${kitBase(s)}${s.slots.map(kitRole).join("")}</section>
+    <section class="block" id="swarm-kit"><h2>Role a nákup</h2>${kitBase(s)}${s.slots.map(r => kitRole(r)).join("")}</section>
     <section class="block" id="swarm"><div class="t-row"><h2>Jádro</h2><span class="tag draft" title="Jádro je Commanderovo, podrobnosti navrhl štáb a potvrdí Commander">Návrh</span></div><p>${esc(s.tagline)}</p>${bullets(s.points)}</section>
     <section class="block"><h2>Principy</h2>${procList(s.principles)}</section>
     <section class="block"><h2>Velení a komunikace</h2>${bullets(s.command)}</section>
@@ -1128,12 +1174,6 @@ function viewDoktrina(tab) {
 // ---------- squads + loadouts ----------
 const SLOT_LABEL = { slot1: "[1]", slot2: "[2]", slot3: "[3]", helmet: "Helmet", armor: "Armor", vest: "Tac-Vest", backpack: "Backpack", traversal: "Traversal" };
 
-// gear entry as it looks in the given mode, or null when absent there
-function inMode(g, mode) {
-  if (mode === "min") return g.item ? { name: g.item, icon: g.icon, qty: g.qty, cost: g.cost, unlock: g.unlock } : null;
-  const qty = g.ideal_qty ?? g.qty;
-  return qty ? { name: g.ideal || g.item, icon: g.ideal_icon, qty, cost: g.ideal_cost, unlock: g.ideal_unlock } : null;
-}
 // ---- "co mám odemčeno": per member and season; a wipe starts a new season with an empty list ----
 const currentSeason = () => seasonOf(new Date().toISOString());
 let haveSet = null;      // items I ticked in haveSeason; null = logged out / not loaded
@@ -1148,7 +1188,7 @@ async function loadUnlocks() {
 }
 // a re-render replaces the focused control: put keyboard focus back on its twin
 function keepFocus(fn) {
-  const a = document.activeElement, k = a && ["data-tracker", "data-kitmode", "data-rsvp", "data-trsvp", "data-me", "data-swarm", "data-support"].find(x => a.hasAttribute(x));
+  const a = document.activeElement, k = a && ["data-tracker", "data-rsvp", "data-trsvp", "data-me", "data-swarm", "data-support"].find(x => a.hasAttribute(x));
   const sel = k && `[${k}="${CSS.escape(a.getAttribute(k))}"]`, i = sel ? [...document.querySelectorAll(sel)].indexOf(a) : -1;
   fn();
   if (sel) document.querySelectorAll(sel)[i]?.focus({ preventScroll: true });
@@ -1216,36 +1256,6 @@ document.addEventListener("submit", e => {
   syncTracker(profile).catch(err => console.error(err));
 });
 
-function slotCell(c, key, mode) {
-  const g = c.gear.find(x => x.slot === key), e = g && inMode(g, mode);
-  return `<div class="slot${e ? "" : " empty"}"><span class="sl">${SLOT_LABEL[key]}</span>${e ? `${itemIcon(e.icon)}<span class="sn">${esc(e.name)}</span>${e.unlock ? `<span class="su">${unlockText(e.unlock)}</span>` : ""}${g.std ? `<span class="su">mezistupeň ${esc(g.std)}${g.std_unlock ? ` · ${unlockText(g.std_unlock)}` : ""}</span>` : ""}${e.cost != null ? `<span class="pr">${usd(e.cost)}</span>` : ""}` : key === "slot2" ? '<span class="ph">Sidearm</span>' : ""}</div>`;
-}
-function modeBar() {
-  return `<div class="vbar" role="group" aria-label="Varianta výbavy">${[["min", "Minimum", "hned po wipu"], ["ideal", "Ideál", "až máš odemčeno"]].map(([id, l, s]) =>
-    `<button type="button" data-kitmode="${id}" aria-pressed="${kmode === id}"><b>${l}</b><small>${s}</small></button>`).join("")}</div>`;
-}
-function classCard(q, c, mode, h = "h2") {
-  const k = c.kit, inm = c.gear.map(g => inMode(g, mode));
-  const store = c.gear.map((g, i) => g.slot === "storage" && inm[i]).filter(Boolean);
-  const names = new Set(inm.filter(Boolean).map(e => e.name));
-  const quick = c.quick.filter(n => names.has(n));
-  const unlocks = (mode === "min" ? k.unlocks_min : k.unlocks_ideal).map(u => `<span class="ref">${unlockText(u)}</span>`).join("");
-  const target = mode === "min" ? ["MINIMA", "MINIMUM"] : ["IDEÁLU", "IDEÁL"];
-  const need = haveSet && [...new Set(inm.filter(e => e && e.unlock).map(e => e.name))].filter(n => !haveSet.has(n));
-  const needLine = !need ? "" : (need.length
-    ? `<p class="need">Do ${target[0]} ti chybí: ${need.map(esc).join(", ")}</p>`
-    : `<p class="need ok">Na ${target[1]} máš všechno odemčené.</p>`);
-  return `<article class="loadout" id="${esc(c.id)}">
-    <header class="lo-head"><div><${h} class="lo-name"><a href="${classHref(q, c)}">${esc(c.name)}</a></${h}><p>${esc(c.job)}</p><p class="src">${c.screenshot ? "Ideál podle screenshotu ze hry (Season 1, 1. 10.)" : esc("Bez screenshotu - návrh z herních dat")}</p>${needLine}</div>${c.status === "NAVRH" ? '<span class="tag draft" title="Návrh, Commander ho zatím nevyhlásil">Návrh</span>' : ""}</header>
-    <div class="lo-grid">
-      <div><h3>Equipment</h3>${["slot1", "slot2", "slot3"].map(s => slotCell(c, s, mode)).join("")}
-        <h3>Gear</h3><div class="lo-gear">${["helmet", "armor", "vest"].map(s => slotCell(c, s, mode)).join("")}</div></div>
-      <div><h3>Storage</h3><div class="lo-gear">${["backpack", "traversal"].map(s => slotCell(c, s, mode)).join("")}</div>
-        <h3>V batohu</h3>${store.length ? `<ul class="lo-store">${store.map(e => `<li>${itemIcon(e.icon, "sm")}<span class="q">${e.qty}${e.cost != null ? `<span class="pr">${usd(e.cost)}</span>` : ""}</span><span class="n">${esc(e.name)}</span></li>`).join("")}</ul>` : '<p class="note">Nic.</p>'}
-        ${quick.length ? `<h3>Rychlé sloty</h3><ol class="lo-quick">${quick.map((n, i) => `<li><span class="kb">${(i + 4) % 10}</span>${esc(n)}</li>`).join("")}</ol>` : ""}</div>
-    </div>
-    <footer class="lo-sum"><span>Za život</span><b>${usd(mode === "min" ? k.min : k.ideal)}</b><span>váha bez munice a supplies</span><b>${(mode === "min" ? k.weight_min : k.weight_ideal).toLocaleString("cs-CZ")} kg</b>${unlocks ? `<span>odemkni</span>${unlocks}` : ""}</footer></article>`;
-}
 function viewSquads() {
   return `<header class="unit-head"><div><h1>Výbava</h1><p>Tvůj loadout pro každou sub-class, podle toho, co máš odemčené</p></div></header>
     <p class="note">Každá sub-class ukazuje tvůj loadout podle toho, co máš ve hře odemčené. Kolik nás co má: <a class="act" href="#/pokryti">Pokrytí rolí</a></p>
@@ -1257,7 +1267,7 @@ function viewSquadPage(q) {
   return `<p class="crumb"><a href="#/vybava">Výbava</a> / ${esc(q.name)}</p>
     <header class="unit-head">${sym(q.symbol, "lg")}<div><h1>${esc(q.name)}</h1><p>${q.classes.length} sub-class · platí pro všechny mapy</p></div></header>
     <p class="goal">${esc(q.goal)}</p><ul class="bullets block" style="margin-top:16px">${q.points.map(x => `<li>${esc(x)}</li>`).join("")}</ul>
-    ${modeBar()}${q.classes.map(c => classCard(q, c, kmode)).join("")}`;
+    ${q.classes.map(c => loadoutCard(q, c)).join("")}`;
 }
 // ---------- ladders (hub/specs/vybava-zebricky): best step per level range, mine and the next one ----------
 const SRC = { A: "A", B: "B", C: "C", ODVOZENO: "odvozeno" };
@@ -1278,15 +1288,15 @@ function ladderBlock(lad, lv) {
 function ladderSection(c) {
   if (!c.ladders || !c.ladders.length) return "";
   const lv = trk && trk.levels || null;
-  return `<section class="block lads-sec"><h2>Tvůj loadout</h2>
+  return `<section class="block lads-sec"><h2>Co máš a co máš mít</h2>
     <p class="note">Co klan doporučuje, od startu po cíl (meta Season 2, rešerše 22. 10.). <b>Tvůj</b> = nejlepší, co máš odemčené. <b>Odemkni</b> = level máš, chybí koupit. <b>Další</b> = kam míříš.${lv ? "" : ` Propoj WARDOGS Tracker ve <a href="#/vybava">Výbavě</a> a uvidíš, co máš.`} Zdroj: A data nebo oficiální, B víc hráčů, C jeden zdroj; číslo = kolik zdrojů.</p>
-    <div class="lads">${c.ladders.map(lad => ladderBlock(lad, lv)).join("")}</div></section>`;
+    <div class="lads">${c.ladders.map(lad => ladderBlock(lad.group === "Munice" ? municeFor(lad, myKit(c).slots.slot1) : lad, lv)).join("")}</div></section>`;
 }
 
 function viewClass(q, c) {
   const uses = D.strategies.map(s => [s, s.roles.filter(r => r.class === c.id)]).filter(([, rs]) => rs.length);
   return `<p class="crumb"><a href="#/vybava">Výbava</a> / <a href="#/squad/${q.id}">${esc(q.name)}</a> / ${esc(c.name)}</p>
-    <header class="unit-head"><div><h1>${esc(c.name)}</h1><p>${esc(c.job)}</p></div></header>${ladderSection(c)}
+    ${loadoutCard(q, c, "h1")}${ladderSection(c)}
     ${uses.length ? `<section class="block"><h2>Role v plánech</h2><ul class="uses">${uses.map(([s, rs]) => `<li>${esc(sideLabel(s))}: ${rs.map(r => roleLink(s, r)).join(" ")}</li>`).join("")}</ul></section>` : ""}`;
 }
 
@@ -1398,10 +1408,9 @@ async function loadHist(p) {
   }
 }
 
-// items a sub-class needs unlocked to be played in the given mode (MINIMUM / IDEAL)
-const unlockNeeds = (c, mode) => [...new Set(c.gear.map(g => inMode(g, mode)).filter(e => e && e.unlock).map(e => e.name))];
-
-// coverage: who has which unlock this season, and how many can play each sub-class at MINIMUM / IDEAL
+// coverage: who has which unlock this season, and how many of us reached each sub-class's goal
+// the ladder that tells a sub-class apart: its weapon, or slot [3] when the weapon ladder is just the start rifle
+const keyLadder = c => { const w = c.ladders.find(l => l.slot === "slot1"); return w && w.steps.length > 1 ? w : c.ladders.find(l => l.slot === "slot3") || w || c.ladders[0]; };
 function viewCoverage(season, members) {
   const head = `<p class="crumb"><a href="#/vybava">Výbava</a> / Pokrytí</p>
     <header class="unit-head"><div><h1>Pokrytí rolí</h1><p>${esc(season ? season.name : "Žádná sezóna")} · podle WARDOGS Trackeru</p></div></header>`;
@@ -1412,9 +1421,8 @@ function viewCoverage(season, members) {
     users.push(have);
     for (const n of have) (byItem[n] = byItem[n] || []).push(m);
   }
-  const ready = list => users.filter(have => list.every(n => have.has(n))).length;
   const items = [];
-  for (const q of D.squads) for (const c of q.classes) for (const mode of ["min", "ideal"]) for (const n of unlockNeeds(c, mode)) if (!items.includes(n)) items.push(n);
+  for (const q of D.squads) for (const c of q.classes) for (const lad of c.ladders) for (const st of lad.steps) if (st.unlock && !items.includes(st.item)) items.push(st.item);
   // vehicles and other extras the plans add to roles (MH-6, Lakota, Ural, Verba) need unlocks too
   for (const s of D.strategies) for (const r of s.roles) for (const g of r.gear) {
     if (g.item && g.unlock && !items.includes(g.item)) items.push(g.item);
@@ -1422,8 +1430,9 @@ function viewCoverage(season, members) {
   }
   return `${head}
     <p class="note">Členů s daty: <b>${users.length}</b>. Kdo nemá propojený ${TRK_LINK}, v počtech chybí (propojení je ve <a href="#/vybava">Výbavě</a>).</p>
-    <section class="block"><h2>Sub-classy</h2><table class="data cov"><thead><tr><th>Sub-class</th><th class="num">Mají MINIMUM</th><th class="num">Mají IDEÁL</th></tr></thead><tbody>
-    ${D.squads.map(q => q.classes.map(c => `<tr><td><a href="${classHref(q, c)}">${esc(q.name)} · ${esc(c.name)}</a></td><td class="num"><b>${ready(unlockNeeds(c, "min"))}</b></td><td class="num">${ready(unlockNeeds(c, "ideal"))}</td></tr>`).join("")).join("")}
+    <section class="block"><h2>Sub-classy</h2><p class="note">Cíl hlavního žebříčku sub-classy (zbraň, u rolí s jedinou zbraní slot [3]) a kolik z nás ho má.</p><table class="data cov"><thead><tr><th>Sub-class</th><th>Cíl</th><th class="num">Mají</th></tr></thead><tbody>
+    ${D.squads.map(q => q.classes.map(c => { const top = keyLadder(c).steps.at(-1);
+      return `<tr><td><a href="${classHref(q, c)}">${esc(q.name)} · ${esc(c.name)}</a></td><td>${esc(top.item)}</td><td class="num"><b>${top.unlock ? users.filter(h => h.has(top.item)).length : users.length}</b></td></tr>`; }).join("")).join("")}
     </tbody></table></section>
     <section class="block"><h2>Kdo má odemčeno</h2><p class="note">Předměty, které se musí ve hře odemknout, a kdo z nás je už má (podle WARDOGS Trackeru).</p><table class="data cov"><thead><tr><th>Předmět</th><th class="num">Mají</th><th>Kdo</th></tr></thead><tbody>
     ${items.map(n => { const ms = byItem[n] || []; return `<tr><td>${esc(n)}</td><td class="num"><b>${ms.length}</b></td><td>${ms.map(memberLink).join(" ")}</td></tr>`; }).join("")}
@@ -1460,12 +1469,12 @@ function unlockSection(m, season, have) {
   if (!season || !m.active) return "";
   const own = state.me && state.me.user_id === m.user_id;
   if (!have.size) return `<section class="block"><h2>Odemčeno · ${esc(season.name)}</h2><p class="note">Zatím žádná data z WARDOGS Trackeru.${own ? ' Propoj ho ve <a href="#/vybava">Výbavě</a>.' : ""}</p></section>`;
-  const rows = D.squads.flatMap(q => q.classes.map(c => ({ q, c, min: unlockNeeds(c, "min").every(n => have.has(n)), ideal: unlockNeeds(c, "ideal").every(n => have.has(n)) })));
-  // MINIMUM and IDEAL kits share no unlock items: either one means the player can field the sub-class
-  const ready = rows.filter(x => x.min || x.ideal);
+  // the best step of each sub-class's key ladder this player unlocked (vybava-zebricky v2: everyone can play every class)
+  const rows = D.squads.flatMap(q => q.classes.map(c => { const lad = keyLadder(c), i = lad.steps.map(st => !st.unlock || have.has(st.item)).lastIndexOf(true);
+    return { q, c, st: lad.steps[i], top: i === lad.steps.length - 1 }; })).filter(x => x.st);
   return `<section class="block"><h2>Odemčeno · ${esc(season.name)}</h2>
-    <p class="lede">Může hrát <b>${ready.length}</b> z ${rows.length} sub-class · MINIMUM ${rows.filter(x => x.min).length} · IDEÁL ${rows.filter(x => x.ideal).length}</p>
-    ${ready.length ? `<ul class="cls">${ready.map(x => `<li><a href="${classHref(x.q, x.c)}"><b>${esc(x.c.name)}</b><span>${esc(x.q.name)} · ${x.ideal ? "IDEÁL" : "MINIMUM"}</span></a></li>`).join("")}</ul>` : ""}</section>`;
+    <p class="lede">Odemčeno <b>${have.size}</b> předmětů z klanového seznamu · u ${rows.filter(x => x.top).length} z ${D.squads.reduce((a, q) => a + q.classes.length, 0)} sub-class má cíl hlavního žebříčku</p>
+    <ul class="cls">${rows.map(x => `<li><a href="${classHref(x.q, x.c)}"><b>${esc(x.c.name)}</b><span>${esc(x.st.item)}${x.top ? " · cíl" : ""}</span></a></li>`).join("")}</ul></section>`;
 }
 
 function viewPlayer(m, rows, season, have) {
@@ -1588,7 +1597,7 @@ function render() {
 }
 
 $app.addEventListener("click", e => {
-  const t = e.target.closest("[data-trace],[data-untrace],[data-pick],[data-me],[data-variant],[data-kitmode],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-kit],[data-swarm],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker]");
+  const t = e.target.closest("[data-trace],[data-untrace],[data-pick],[data-me],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-kit],[data-swarm],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker]");
   if (!t) return;
   if (t.dataset.trsvp) { const [id, st] = t.dataset.trsvp.split(":"); rsvpTraining(Number(id), st); return; }
   if (t.dataset.tclose) { t.disabled = true; const [id, st] = t.dataset.tclose.split(":"); closeTraining(Number(id), st); return; }
@@ -1621,11 +1630,7 @@ $app.addEventListener("click", e => {
   else if ("untrace" in t.dataset) { trace = null; applyTrace(); }
   else if (t.dataset.pick) { me.set(t.dataset.pick); const [sid, rid] = t.dataset.pick.split("/"); location.hash = `#/s/${sid}/role/${rid}`; }
   else if (t.dataset.me) { me.set(me.get() === t.dataset.me ? null : t.dataset.me); rerenderKeep(); }
-  else if (t.dataset.kitmode) {
-    kmode = t.dataset.kitmode;
-    try { localStorage.setItem("wrd.kitmode", kmode); } catch { /* storage blocked: mode lasts until reload */ }
-    rerenderKeep();
-  }
+
 });
 // Back/Forward return to where the reader was: the scroll position lives in the history entry (Viktor #023)
 let saveY;
