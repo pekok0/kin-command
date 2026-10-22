@@ -68,9 +68,9 @@ async function onAuth(session) {
   state.me = data; state.error = null;
   // unlocks need the seasons from the content, so they load after it (both at once = haveSet never set, Viktor UAT)
   if (!was) loadContent()
-    .then(() => loadUnlocks().catch(e => { console.error(e); haveSet = null; }))
+    .then(() => Promise.all([loadUnlocks().catch(e => { console.error(e); haveSet = null; }), loadTracker().catch(e => console.error(e))]))
     // history pages and loadout cards wait for the login to know what to load / which boxes to tick
-    .then(() => { if (onHistRoute() || onCardRoute()) { const y = scrollY; render(); scrollTo(0, y); } },
+    .then(() => { if (onHistRoute() || onCardRoute()) { const y = scrollY; render(); scrollTo(0, y); } autoSyncTracker(); },
       () => { state.error = "Obsah se nenačetl. Zkus stránku načíst znovu."; state.checking = false; renderWho(); render(); });
   renderWho(); loadEvent(); subscribe();
 }
@@ -903,7 +903,7 @@ function viewHome() {
       <li><span><b>Přihlas se přes Discord</b> (vpravo nahoře). Pustí tě to dál od role Rekrut na serveru Kinetic Solutions.</span></li>
       <li><span><a href="#/akce">Akce</a>: před akcí dej <b>Přijdu</b> a zaber si místo v <b>Sestavě</b>, ať hrajeme cokoli. Hned pod tím je tvůj nákup a odehrané akce po sezónách.</span></li>
       <li><span><a href="#/mapy">Mapy</a>: plán každé mapy a <b>karta tvé role</b> (co koupit, čím jedeš, co děláš v každé fázi). Nech si ji otevřenou na mobilu nebo druhém monitoru.</span></li>
-      <li><span><a href="#/vybava">Výbava</a>: celá sestava tvé sub-classy, minimum po wipu i ideál. Zaškrtni, co máš odemčené. Kolik nás co umí, je v <a href="#/pokryti">Pokrytí</a>.</span></li>
+      <li><span><a href="#/vybava">Výbava</a>: celá sestava tvé sub-classy, minimum po wipu i ideál. Co máš odemčené, bere Central Command z WARDOGS Trackeru. Kolik nás co umí, je v <a href="#/pokryti">Pokrytí</a>.</span></li>
       <li><span><a href="#/doktrina">Doktrína</a>: jak klan hraje (${esc(docName("defence"))}, ${esc(docName("swarm"))}) a Výcvik.</span></li>
     </ol></details>
     <section class="block" aria-labelledby="h-str"><h2 id="h-str">Mapy</h2>${sheetList()}
@@ -1018,7 +1018,7 @@ function shopList(s, r) {
       ? `<div class="alt">${itemIcon(g.ideal_icon, "sm")}<span>Ideál: <b>${esc(g.ideal)}</b> · ${usd(g.ideal_price)}${g.ideal_unlock ? ` · odemknout ${unlockText(g.ideal_unlock)}` : ""}</span></div>`
       : g.item && g.qty !== "?" && g.ideal_qty !== g.qty ? `<div class="alt"><span>Ideál: <b>${esc(g.ideal_qty)}×</b> · celkem ${usd(g.ideal_cost)}</span></div>` : "");
     return `<li class="tile${opt ? " opt" : ""}">${itemIcon(opt ? g.ideal_icon : g.icon)}<div class="tx">
-      <div class="nm"><span class="qty">${g.qty === "?" ? '<span class="unk">?</span>' : g.qty + "×"}</span><span>${esc(name)}</span>${haveBox({ name, unlock })}</div>
+      <div class="nm"><span class="qty">${g.qty === "?" ? '<span class="unk">?</span>' : g.qty + "×"}</span><span>${esc(name)}</span></div>
       <div class="pr">${opt ? "Volitelně, když máš odemčeno · " : ""}${priceLine(opt ? g.ideal_price : g.price, g.qty)}${unlock ? ` · odemknout <b>${unlockText(unlock)}</b>` : ""}</div>
       ${g.note ? `<div class="nt">${esc(g.note)}</div>` : ""}${alt}</div></li>`;
   }).join("");
@@ -1137,7 +1137,7 @@ function inMode(g, mode) {
 // ---- "co mám odemčeno": per member and season; a wipe starts a new season with an empty list ----
 const currentSeason = () => seasonOf(new Date().toISOString());
 let haveSet = null;      // items I ticked in haveSeason; null = logged out / not loaded
-let haveSeason = null, haveErr = null;
+let haveSeason = null;
 async function loadUnlocks() {
   const s = currentSeason(), uid = state.me && state.me.user_id;
   if (!sb || !uid || !s) { haveSet = null; return; }
@@ -1148,104 +1148,77 @@ async function loadUnlocks() {
 }
 // a re-render replaces the focused control: put keyboard focus back on its twin
 function keepFocus(fn) {
-  const a = document.activeElement, k = a && ["data-unlock", "data-kitmode", "data-rsvp", "data-trsvp", "data-me", "data-swarm", "data-support"].find(x => a.hasAttribute(x));
+  const a = document.activeElement, k = a && ["data-tracker", "data-kitmode", "data-rsvp", "data-trsvp", "data-me", "data-swarm", "data-support"].find(x => a.hasAttribute(x));
   const sel = k && `[${k}="${CSS.escape(a.getAttribute(k))}"]`, i = sel ? [...document.querySelectorAll(sel)].indexOf(a) : -1;
   fn();
   if (sel) document.querySelectorAll(sel)[i]?.focus({ preventScroll: true });
 }
 const rerenderKeep = () => { const restore = keepForms(); keepFocus(() => { const y = scrollY; render(); scrollTo(0, y); }); restore(); };
-async function setUnlock(item, has) {
-  if (currentSeason().id !== haveSeason) {  // the page stayed open over a season start (wipe)
-    await loadUnlocks(); haveErr = "Začala nová sezóna, seznam je prázdný. Zaškrtni znovu, co už máš."; rerenderKeep(); return;
-  }
-  const { error } = has
-    ? await sb.from("unlocks").insert({ user_id: state.me.user_id, season: haveSeason, item })
-    : await sb.from("unlocks").delete().eq("user_id", state.me.user_id).eq("season", haveSeason).eq("item", item);
-  if (error && error.code !== "23505") throw error;  // 23505 = already ticked in another tab
-  if (has) haveSet.add(item); else haveSet.delete(item);
-  haveErr = null;
-  rerenderKeep();
-}
-const haveBox = e => e.unlock && haveSet
-  ? `<label class="have" title="Mám odemčeno (${esc(currentSeason().name)})"><input type="checkbox" data-unlock="${esc(e.name)}"${haveSet.has(e.name) ? " checked" : ""}>mám</label>` : "";
-
-// ---------- WARDOGS Tracker (specs/odemceno v2): "mam" and role levels from wardogstracker.gg, on a click ----------
-// The member's own browser asks (CORS open, no key); only numbers and our own item names reach the page and the database.
-const TRACKER = "https://wardogstracker.gg/api/v1";
-const ROLES = [["assault", "Assault"], ["medic", "Medic"], ["support", "Support"], ["recon", "Recon"], ["driver", "Driver"], ["pilot", "Pilot"]];
-let trk = null, trkBusy = false;  // trk = {msg} | {err} | {help}, plus {levels, synced} once the profile was read
-// Discord lookup is opt-in on the Tracker (Petr 2026-10-22: linked, still 404), so the member can give their profile link
-// once; the SteamID stays in this browser only. Someone else's link would only tick that player's items on my own rows.
-const TRK_STEAM = "kin-trk-steam";
-const steamOf = s => (String(s).match(/7656\d{13}/) || [])[0] || null;
-const savedSteam = () => { try { return steamOf(localStorage.getItem(TRK_STEAM)); } catch { return null; } };
-async function trackerGet(path) {
-  const r = await fetch(TRACKER + path, { signal: AbortSignal.timeout(8000) });
-  if (r.status === 404 || r.status === 429) return { status: r.status, retry: Number(r.headers.get("Retry-After")) || 60 };
-  if (!r.ok) throw new Error(`tracker ${r.status}`);
-  return { status: r.status, json: await r.json() };
-}
-async function importTracker(steam) {
-  if (currentSeason().id !== haveSeason) await loadUnlocks();  // the page stayed open over a wipe
-  const p = await trackerGet(steam ? `/players/${steam}` : `/players/by-discord/${encodeURIComponent(state.me.discord_id)}`);
-  if (p.status === 404) return steam ? { help: true, err: "Profil z odkazu Tracker nenašel, nebo je soukromý. Zkontroluj odkaz." } : { help: true };
-  if (p.status === 429) return { err: `Tracker teď nebere další dotazy, zkus to za ${p.retry} s.` };
-  const pl = p.json.player, st = pl && pl.stats;
-  if (!pl || typeof pl.steamId !== "string") throw new Error("tracker: unexpected player shape");
-  if (!st) return { err: "Na Trackeru ještě nemáš synchronizované statistiky. Synchronizuj je tam a zkus to znovu." };
-  // track names as knowledge/db after build.py TRACK_NAMES, so a ladder step's unlock reads them directly
-  const levels = [["WARDOG", Number(st.wardogLevel) || 0], ...ROLES.map(([k, n]) => [n, Number(st.roles && st.roles[k] && st.roles[k].level) || 0])];
-  const synced = new Date(st.syncedAt);
-  if (isNaN(synced)) throw new Error("tracker: unexpected syncedAt");
-  // after a wipe the Tracker keeps the old season until the member plays and syncs again (spec decision 4)
-  if (seasonOf(st.syncedAt).id !== haveSeason) return { levels, synced, err: "Data na Trackeru jsou z minulé sezóny, synchronizuj je tam." };
-  const u = await trackerGet(`/players/${encodeURIComponent(pl.steamId)}/unlocks`);
-  const items = u.json && u.json.unlocks && u.json.unlocks.items;
-  if (!Array.isArray(items)) return { levels, synced, err: "Tracker odemčené předměty neukázal (máš je tam skryté?). Zaškrtni je ručně." };
-  const names = new Set(items.map(i => D.unlock_ids[String(i.gameId).toLowerCase()]).filter(Boolean));
-  const add = [...names].filter(n => !haveSet.has(n));  // only adds: what the member ticked by hand stays (T4)
-  if (add.length) {
-    const { error } = await sb.from("unlocks").upsert(add.map(item => ({ user_id: state.me.user_id, season: haveSeason, item })),
-      { onConflict: "user_id,season,item", ignoreDuplicates: true });
-    if (error) return { levels, synced, err: saveErr(error) };
-    await loadUnlocks();
-  }
-  return { levels, synced, msg: `Přidáno ${add.length}, už zaškrtnuto ${names.size - add.length}.` };
-}
-function runTracker(btn, steam) {
-  btn.disabled = true; trkBusy = true;
-  importTracker(steam).catch(e => { console.error(e); return { err: "Tracker teď neodpovídá, zaškrtni ručně." }; })
-    .then(r => { trk = r; trkBusy = false; rerenderKeep(); document.querySelector("[data-tracker]")?.focus({ preventScroll: true }); });
-}
+// ---------- WARDOGS Tracker (hub/specs/vybava-zebricky v2, migration 015) ----------
+// The database syncs every member from wardogstracker.gg every few minutes and keeps the last result (Petr 2026-10-22:
+// no "mam" ticks). The page reads my row, asks for a fresh sync when it is older than 10 minutes (the database allows one
+// a minute) and links my Tracker profile when the Tracker does not find me by Discord (that lookup is opt-in there).
+const TRACKS = ["WARDOG", "Assault", "Medic", "Support", "Recon", "Driver", "Pilot"];
 const TRK_LINK = '<a href="https://wardogstracker.gg" target="_blank" rel="noopener">WARDOGS Tracker</a>';
+const TRK_SYNC = "https://wardogstracker.gg/api/wardogs/connect?redirect=/";
+let trk = null, trkBusy = false, trkErr = null;  // trk = my row of public.tracker
+async function loadTracker() {
+  const uid = state.me && state.me.user_id;
+  if (!sb || !uid) { trk = null; return; }
+  const { data, error } = await sb.from("tracker").select("steam_id, levels, synced_at, fetched_at, status").eq("user_id", uid).maybeSingle();
+  if (error) throw error;
+  if (state.me && state.me.user_id === uid) trk = data;
+}
+async function syncTracker(profile) {
+  if (trkBusy) return;
+  trkBusy = true; trkErr = null; rerenderKeep();
+  const { error } = profile ? await sb.rpc("tracker_link", { profile }) : await sb.rpc("tracker_sync_me");
+  if (error) { console.error(error); trkErr = "Synchronizace se teď nepovedla, zkusíme to za pár minut sami."; }
+  await Promise.all([loadTracker(), loadUnlocks()]).catch(e => console.error(e));
+  trkBusy = false; rerenderKeep();
+}
+function autoSyncTracker() {
+  if (!state.me || trkBusy || (trk && trk.status === "not_found")) return;  // not found by Discord: the cron retries daily
+  if (!trk || !trk.fetched_at || Date.now() - new Date(trk.fetched_at) > 10 * 60e3) syncTracker().catch(e => console.error(e));
+}
+const ago = iso => { const m = Math.round((Date.now() - new Date(iso)) / 60e3); return m < 1 ? "právě teď" : m < 90 ? `před ${m} min` : fmtWhen(iso); };
+function trackerSays(r) {
+  const profile = r.steam_id ? `<a href="https://wardogstracker.gg/profile/${esc(r.steam_id)}" target="_blank" rel="noopener">svém profilu</a>` : "profilu";
+  return {
+    not_synced: `Na Trackeru ještě nemáš synchronizované statistiky. Na ${profile} klikni na Update my stats.`,
+    old_season: `Data na Trackeru jsou z minulé sezóny. Na ${profile} klikni na Update my stats.`,
+    hidden: "Tracker odemčené předměty neukázal. Nemáš je v nastavení profilu skryté?",
+    limited: "Tracker teď nebere další dotazy, zkusíme to za pár minut sami.",
+    error: "Tracker teď neodpovídá, zkusíme to za pár minut sami.",
+  }[r.status] || "";
+}
 function trackerBox() {
   if (!state.me || !haveSet) return "";
-  const r = trk || {};
-  return `<div class="trk"><button type="button" class="act" data-tracker${trkBusy ? " disabled" : ""}>${trkBusy ? "Načítám…" : "Načíst z WARDOGS Trackeru"}</button>
-    <p class="note">Zaškrtne „mám“ u všeho, co máš ve hře odemčené, a ukáže levely rolí. Nic neodškrtne. Data: ${TRK_LINK} (neoficiální web komunity).</p>
-    ${r.levels ? `<p class="trk-lv">${r.levels.map(([n, l]) => `<span>${n} <b>${l}</b></span>`).join("")}<span class="ref">sync ${esc(fmtWhen(r.synced.toISOString()))}</span></p>` : ""}
-    ${r.msg ? `<p class="need ok">${esc(r.msg)}</p>` : r.err ? `<p class="need err">${esc(r.err)}</p>` : ""}
-    ${r.help ? `<div class="trk-help"><p><b>Tracker tě podle Discordu nenašel.</b> Hledání podle Discordu tam funguje, jen když ho hráč sám povolí. Jde to i bez něj:</p><ol>
-      <li><a href="https://wardogstracker.gg/api/wardogs/connect?redirect=/" target="_blank" rel="noopener">Přihlas se na Trackeru přes Steam a synchronizuj statistiky</a> (asi 10 s).</li>
+  const r = trk || {}, lv = r.levels ? TRACKS.filter(n => n in r.levels).map(n => [n, Number(r.levels[n]) || 0]) : [];
+  const says = trkErr ? esc(trkErr) : trackerSays(r);
+  return `<div class="trk"><button type="button" class="act" data-tracker${trkBusy ? " disabled" : ""}>${trkBusy ? "Synchronizuji…" : "Synchronizovat teď"}</button>
+    <p class="note">Co máš ve hře odemčené a levely rolí bere Central Command z ${TRK_LINK} (neoficiální web komunity) sám, každých pár minut.${r.fetched_at ? ` Naposledy ${esc(ago(r.fetched_at))}.` : ""} Když si něco odemkneš, klikni na Trackeru na Update my stats.</p>
+    ${lv.length ? `<p class="trk-lv">${lv.map(([n, l]) => `<span>${n} <b>${l}</b></span>`).join("")}${r.synced_at ? `<span class="ref">na Trackeru ${esc(fmtWhen(r.synced_at))}</span>` : ""}</p>` : ""}
+    ${says ? `<p class="need err">${says}</p>` : ""}
+    ${r.steam_id ? "" : `<div class="trk-help"><p><b>Propoj svůj profil na Trackeru</b> (stačí jednou)${r.status === "not_found" ? ", podle Discordu tě Tracker nenašel" : ""}:</p><ol>
+      <li><a href="${TRK_SYNC}" target="_blank" rel="noopener">Přihlas se na Trackeru přes Steam a synchronizuj statistiky</a> (asi 10 s).</li>
       <li>Otevři na Trackeru svůj profil a zkopíruj adresu stránky (tvar wardogstracker.gg/profile/7656…).</li>
       <li>Vlož ji sem a potvrď:</li></ol>
-      <form class="trk-form" data-trkform><input name="profile" inputmode="url" autocomplete="off" placeholder="https://wardogstracker.gg/profile/7656…" aria-label="Odkaz na tvůj profil na WARDOGS Trackeru"><button type="submit" class="act">Načíst z profilu</button></form>
-      <p class="note">Prohlížeč si odkaz pamatuje, příště stačí tlačítko nahoře.</p></div>` : ""}</div>`;
+      <form class="trk-form" data-trkform><input name="profile" inputmode="url" autocomplete="off" placeholder="https://wardogstracker.gg/profile/7656…" aria-label="Odkaz na tvůj profil na WARDOGS Trackeru"><button type="submit" class="act">Propojit</button></form>
+      <p class="note">Pak už se všechno synchronizuje samo.</p></div>`}</div>`;
 }
 document.addEventListener("submit", e => {
   const f = e.target.closest("form[data-trkform]");
   if (!f) return;
   e.preventDefault();
-  if (trkBusy) return;
-  const steam = steamOf(f.elements.profile.value);
-  if (!steam) { trk = { ...trk, help: true, err: "Tohle není odkaz na profil na Trackeru (v adrese je 17místné číslo začínající 7656)." }; rerenderKeep(); return; }
-  try { localStorage.setItem(TRK_STEAM, steam); } catch { /* storage blocked: works for this click */ }
-  runTracker(f.querySelector("button"), steam);
+  const profile = f.elements.profile.value.trim();
+  if (!/7656\d{13}/.test(profile)) { trkErr = "Tohle není odkaz na profil na Trackeru (v adrese je 17místné číslo začínající 7656)."; rerenderKeep(); return; }
+  syncTracker(profile).catch(err => console.error(err));
 });
 
 function slotCell(c, key, mode) {
   const g = c.gear.find(x => x.slot === key), e = g && inMode(g, mode);
-  return `<div class="slot${e ? "" : " empty"}"><span class="sl">${SLOT_LABEL[key]}</span>${e ? `${itemIcon(e.icon)}<span class="sn">${esc(e.name)}</span>${e.unlock ? `<span class="su">${unlockText(e.unlock)}</span>` : ""}${g.std ? `<span class="su">mezistupeň ${esc(g.std)}${g.std_unlock ? ` · ${unlockText(g.std_unlock)}` : ""}</span>` : ""}${haveBox(e)}${e.cost != null ? `<span class="pr">${usd(e.cost)}</span>` : ""}` : key === "slot2" ? '<span class="ph">Sidearm</span>' : ""}</div>`;
+  return `<div class="slot${e ? "" : " empty"}"><span class="sl">${SLOT_LABEL[key]}</span>${e ? `${itemIcon(e.icon)}<span class="sn">${esc(e.name)}</span>${e.unlock ? `<span class="su">${unlockText(e.unlock)}</span>` : ""}${g.std ? `<span class="su">mezistupeň ${esc(g.std)}${g.std_unlock ? ` · ${unlockText(g.std_unlock)}` : ""}</span>` : ""}${e.cost != null ? `<span class="pr">${usd(e.cost)}</span>` : ""}` : key === "slot2" ? '<span class="ph">Sidearm</span>' : ""}</div>`;
 }
 function modeBar() {
   return `<div class="vbar" role="group" aria-label="Varianta výbavy">${[["min", "Minimum", "hned po wipu"], ["ideal", "Ideál", "až máš odemčeno"]].map(([id, l, s]) =>
@@ -1259,7 +1232,7 @@ function classCard(q, c, mode, h = "h2") {
   const unlocks = (mode === "min" ? k.unlocks_min : k.unlocks_ideal).map(u => `<span class="ref">${unlockText(u)}</span>`).join("");
   const target = mode === "min" ? ["MINIMA", "MINIMUM"] : ["IDEÁLU", "IDEÁL"];
   const need = haveSet && [...new Set(inm.filter(e => e && e.unlock).map(e => e.name))].filter(n => !haveSet.has(n));
-  const needLine = (haveErr && haveSet ? `<p class="need err">${esc(haveErr)}</p>` : "") + (!need ? "" : need.length
+  const needLine = !need ? "" : (need.length
     ? `<p class="need">Do ${target[0]} ti chybí: ${need.map(esc).join(", ")}</p>`
     : `<p class="need ok">Na ${target[1]} máš všechno odemčené.</p>`);
   return `<article class="loadout" id="${esc(c.id)}">
@@ -1268,17 +1241,17 @@ function classCard(q, c, mode, h = "h2") {
       <div><h3>Equipment</h3>${["slot1", "slot2", "slot3"].map(s => slotCell(c, s, mode)).join("")}
         <h3>Gear</h3><div class="lo-gear">${["helmet", "armor", "vest"].map(s => slotCell(c, s, mode)).join("")}</div></div>
       <div><h3>Storage</h3><div class="lo-gear">${["backpack", "traversal"].map(s => slotCell(c, s, mode)).join("")}</div>
-        <h3>V batohu</h3>${store.length ? `<ul class="lo-store">${store.map(e => `<li>${itemIcon(e.icon, "sm")}<span class="q">${e.qty}${e.cost != null ? `<span class="pr">${usd(e.cost)}</span>` : ""}</span><span class="n">${esc(e.name)}${haveBox(e)}</span></li>`).join("")}</ul>` : '<p class="note">Nic.</p>'}
+        <h3>V batohu</h3>${store.length ? `<ul class="lo-store">${store.map(e => `<li>${itemIcon(e.icon, "sm")}<span class="q">${e.qty}${e.cost != null ? `<span class="pr">${usd(e.cost)}</span>` : ""}</span><span class="n">${esc(e.name)}</span></li>`).join("")}</ul>` : '<p class="note">Nic.</p>'}
         ${quick.length ? `<h3>Rychlé sloty</h3><ol class="lo-quick">${quick.map((n, i) => `<li><span class="kb">${(i + 4) % 10}</span>${esc(n)}</li>`).join("")}</ol>` : ""}</div>
     </div>
     <footer class="lo-sum"><span>Za život</span><b>${usd(mode === "min" ? k.min : k.ideal)}</b><span>váha bez munice a supplies</span><b>${(mode === "min" ? k.weight_min : k.weight_ideal).toLocaleString("cs-CZ")} kg</b>${unlocks ? `<span>odemkni</span>${unlocks}` : ""}</footer></article>`;
 }
 function viewSquads() {
-  return `<header class="unit-head"><div><h1>Výbava</h1><p>Sestavy sub-class pro všechny mapy: minimum po wipu i ideál</p></div></header>
-    <p class="note">Přihlášený člen si u předmětů zaškrtne, co má odemčené. Kolik nás co má: <a class="act" href="#/pokryti">Pokrytí rolí</a></p>
+  return `<header class="unit-head"><div><h1>Výbava</h1><p>Tvůj loadout pro každou sub-class, podle toho, co máš odemčené</p></div></header>
+    <p class="note">Každá sub-class ukazuje tvůj loadout podle toho, co máš ve hře odemčené. Kolik nás co má: <a class="act" href="#/pokryti">Pokrytí rolí</a></p>
     ${trackerBox()}
     ${D.squads.map(q => `<section class="block"><h2><a href="#/squad/${q.id}">${esc(q.name)}</a></h2><p class="goal">${esc(q.goal)}</p>
-      <ul class="cls">${q.classes.map(c => `<li><a href="${classHref(q, c)}"><b>${esc(c.name)}</b><span>${usd(c.kit.min)} · ideál ${usd(c.kit.ideal)}</span></a></li>`).join("")}</ul></section>`).join("")}`;
+      <ul class="cls">${q.classes.map(c => `<li><a href="${classHref(q, c)}"><b>${esc(c.name)}</b></a></li>`).join("")}</ul></section>`).join("")}`;
 }
 function viewSquadPage(q) {
   return `<p class="crumb"><a href="#/vybava">Výbava</a> / ${esc(q.name)}</p>
@@ -1288,31 +1261,32 @@ function viewSquadPage(q) {
 }
 // ---------- ladders (hub/specs/vybava-zebricky): best step per level range, mine and the next one ----------
 const SRC = { A: "A", B: "B", C: "C", ODVOZENO: "odvozeno" };
-// a step is within reach when it needs no unlock, I ticked "mám", or my level from the Tracker reaches it
-const canHave = (st, lv) => !st.unlock || !!(haveSet && haveSet.has(st.item)) || !!(lv && (lv[st.unlock.track] || 0) >= st.unlock.level);
+// mine = the best step I really unlocked (or that needs no unlock); "Odemkni" = my level is there, the purchase is not;
+// "Další" = the first step my level does not reach yet
 function ladderBlock(lad, lv) {
-  const can = lad.steps.map(st => canHave(st, lv));
-  const known = !!lv || lad.steps.some(st => st.unlock && haveSet && haveSet.has(st.item));
-  const mine = known ? can.lastIndexOf(true) : -1, next = known ? can.indexOf(false, mine + 1) : -1;
+  const have = lad.steps.map(st => !st.unlock || !!(haveSet && haveSet.has(st.item)));
+  const reach = lad.steps.map(st => !st.unlock || !!(lv && (lv[st.unlock.track] || 0) >= st.unlock.level));
+  const mine = have.lastIndexOf(true), next = reach.indexOf(false, mine + 1);
   const nu = next >= 0 && lad.steps[next].unlock;
   return `<div class="lad"><div class="lad-h"><span class="sl">${lad.group ? esc(lad.group) : SLOT_LABEL[lad.slot]}</span>${nu ? `<span class="lad-next">Další: od ${esc(nu.track)} ${nu.level}</span>` : ""}</div>
-    <ol class="lad-steps">${lad.steps.map((st, i) => `<li class="st${i === mine ? " mine" : ""}${i === next ? " next" : ""}${known && !can[i] ? " locked" : ""}">
+    <ol class="lad-steps">${lad.steps.map((st, i) => { const can = i > mine && reach[i] && !have[i];
+      return `<li class="st${i === mine ? " mine" : ""}${can ? " can" : ""}${i === next ? " next" : ""}${i > mine && !reach[i] ? " locked" : ""}">
       ${itemIcon(st.icon)}<span class="st-n">${esc(st.item)}</span><span class="st-u">${st.unlock ? `${esc(st.unlock.track)} ${st.unlock.level} · ${usd(st.unlock.cash)}` : "hned"}</span>
-      <span class="st-src" title="Síla zdroje · počet zdrojů">${SRC[st.source]} · ${st.n}</span>${i === mine ? '<span class="st-tag">Tvůj</span>' : ""}${haveBox({ name: st.item, unlock: st.unlock })}</li>`).join("")}</ol>
+      <span class="st-src" title="Síla zdroje · počet zdrojů">${SRC[st.source]} · ${st.n}</span>${i === mine ? '<span class="st-tag">Tvůj</span>' : can ? `<span class="st-tag can" title="Máš level, chybí odemknout za ${usd(st.unlock.cash)}">Odemkni</span>` : ""}</li>`; }).join("")}</ol>
     <details class="lad-why"><summary>Proč</summary><dl>${lad.steps.map(st => `<dt>${esc(st.item)}</dt><dd>${esc(st.why)}</dd>`).join("")}</dl>${lad.note ? `<p class="note">${esc(lad.note)}</p>` : ""}</details></div>`;
 }
 function ladderSection(c) {
   if (!c.ladders || !c.ladders.length) return "";
-  const lv = trk && trk.levels ? Object.fromEntries(trk.levels) : null;
-  return `<section class="block lads-sec"><h2>Žebříček podle levelu</h2>
-    <p class="note">Návrh z mety Season 2 (rešerše 22. 10.): u každého slotu nejlepší volba pro rozsah levelů, od startu po cíl. ${lv ? "<b>Tvůj</b> je nejlepší krok, který už můžeš mít, <b>Další</b> je cíl." : `Načti levely z WARDOGS Trackeru ve <a href="#/vybava">Výbavě</a> a uvidíš, kde jsi.`} Zdroj: A data nebo oficiální, B víc hráčů, C jeden zdroj; číslo = kolik zdrojů.</p>
+  const lv = trk && trk.levels || null;
+  return `<section class="block lads-sec"><h2>Tvůj loadout</h2>
+    <p class="note">Co klan doporučuje, od startu po cíl (meta Season 2, rešerše 22. 10.). <b>Tvůj</b> = nejlepší, co máš odemčené. <b>Odemkni</b> = level máš, chybí koupit. <b>Další</b> = kam míříš.${lv ? "" : ` Propoj WARDOGS Tracker ve <a href="#/vybava">Výbavě</a> a uvidíš, co máš.`} Zdroj: A data nebo oficiální, B víc hráčů, C jeden zdroj; číslo = kolik zdrojů.</p>
     <div class="lads">${c.ladders.map(lad => ladderBlock(lad, lv)).join("")}</div></section>`;
 }
 
 function viewClass(q, c) {
   const uses = D.strategies.map(s => [s, s.roles.filter(r => r.class === c.id)]).filter(([, rs]) => rs.length);
   return `<p class="crumb"><a href="#/vybava">Výbava</a> / <a href="#/squad/${q.id}">${esc(q.name)}</a> / ${esc(c.name)}</p>
-    ${modeBar()}${classCard(q, c, kmode, "h1")}${ladderSection(c)}
+    <header class="unit-head"><div><h1>${esc(c.name)}</h1><p>${esc(c.job)}</p></div></header>${ladderSection(c)}
     ${uses.length ? `<section class="block"><h2>Role v plánech</h2><ul class="uses">${uses.map(([s, rs]) => `<li>${esc(sideLabel(s))}: ${rs.map(r => roleLink(s, r)).join(" ")}</li>`).join("")}</ul></section>` : ""}`;
 }
 
@@ -1430,7 +1404,7 @@ const unlockNeeds = (c, mode) => [...new Set(c.gear.map(g => inMode(g, mode)).fi
 // coverage: who has which unlock this season, and how many can play each sub-class at MINIMUM / IDEAL
 function viewCoverage(season, members) {
   const head = `<p class="crumb"><a href="#/vybava">Výbava</a> / Pokrytí</p>
-    <header class="unit-head"><div><h1>Pokrytí rolí</h1><p>${esc(season ? season.name : "Žádná sezóna")} · podle toho, co si členové zaškrtli u sestav</p></div></header>`;
+    <header class="unit-head"><div><h1>Pokrytí rolí</h1><p>${esc(season ? season.name : "Žádná sezóna")} · podle WARDOGS Trackeru</p></div></header>`;
   // item names come from members' rows: a null-prototype map, so "constructor" or "__proto__" cannot break it
   const byItem = Object.create(null), users = [];
   for (const m of members) {
@@ -1447,11 +1421,11 @@ function viewCoverage(season, members) {
     if (g.ideal && g.ideal_unlock && !items.includes(g.ideal)) items.push(g.ideal);
   }
   return `${head}
-    <p class="note">Členů, kteří něco zaškrtli: <b>${users.length}</b>. Kdo nic nezaškrtl, v počtech chybí. Zaškrtnutí jde načíst z ${TRK_LINK} ve <a href="#/vybava">Výbavě</a>.</p>
+    <p class="note">Členů s daty: <b>${users.length}</b>. Kdo nemá propojený ${TRK_LINK}, v počtech chybí (propojení je ve <a href="#/vybava">Výbavě</a>).</p>
     <section class="block"><h2>Sub-classy</h2><table class="data cov"><thead><tr><th>Sub-class</th><th class="num">Mají MINIMUM</th><th class="num">Mají IDEÁL</th></tr></thead><tbody>
     ${D.squads.map(q => q.classes.map(c => `<tr><td><a href="${classHref(q, c)}">${esc(q.name)} · ${esc(c.name)}</a></td><td class="num"><b>${ready(unlockNeeds(c, "min"))}</b></td><td class="num">${ready(unlockNeeds(c, "ideal"))}</td></tr>`).join("")).join("")}
     </tbody></table></section>
-    <section class="block"><h2>Kdo má odemčeno</h2><p class="note">Předměty, které se musí ve hře odemknout, a kdo z nás je už má (podle zaškrtnutí „mám“).</p><table class="data cov"><thead><tr><th>Předmět</th><th class="num">Mají</th><th>Kdo</th></tr></thead><tbody>
+    <section class="block"><h2>Kdo má odemčeno</h2><p class="note">Předměty, které se musí ve hře odemknout, a kdo z nás je už má (podle WARDOGS Trackeru).</p><table class="data cov"><thead><tr><th>Předmět</th><th class="num">Mají</th><th>Kdo</th></tr></thead><tbody>
     ${items.map(n => { const ms = byItem[n] || []; return `<tr><td>${esc(n)}</td><td class="num"><b>${ms.length}</b></td><td>${ms.map(memberLink).join(" ")}</td></tr>`; }).join("")}
     </tbody></table></section>`;
 }
@@ -1485,7 +1459,7 @@ function viewEvent(ev, claims, absent = new Set()) {
 function unlockSection(m, season, have) {
   if (!season || !m.active) return "";
   const own = state.me && state.me.user_id === m.user_id;
-  if (!have.size) return `<section class="block"><h2>Odemčeno · ${esc(season.name)}</h2><p class="note">Zatím nic nezaškrtnuto.${own ? ' Zaškrtni, co máš odemčené, ve <a href="#/vybava">Výbavě</a>.' : ""}</p></section>`;
+  if (!have.size) return `<section class="block"><h2>Odemčeno · ${esc(season.name)}</h2><p class="note">Zatím žádná data z WARDOGS Trackeru.${own ? ' Propoj ho ve <a href="#/vybava">Výbavě</a>.' : ""}</p></section>`;
   const rows = D.squads.flatMap(q => q.classes.map(c => ({ q, c, min: unlockNeeds(c, "min").every(n => have.has(n)), ideal: unlockNeeds(c, "ideal").every(n => have.has(n)) })));
   // MINIMUM and IDEAL kits share no unlock items: either one means the player can field the sub-class
   const ready = rows.filter(x => x.min || x.ideal);
@@ -1614,7 +1588,7 @@ function render() {
 }
 
 $app.addEventListener("click", e => {
-  const t = e.target.closest("[data-trace],[data-untrace],[data-pick],[data-me],[data-variant],[data-kitmode],[data-claim],[data-unclaim],[data-rsvp],[data-unlock],[data-cancel],[data-kit],[data-swarm],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker]");
+  const t = e.target.closest("[data-trace],[data-untrace],[data-pick],[data-me],[data-variant],[data-kitmode],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-kit],[data-swarm],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker]");
   if (!t) return;
   if (t.dataset.trsvp) { const [id, st] = t.dataset.trsvp.split(":"); rsvpTraining(Number(id), st); return; }
   if (t.dataset.tclose) { t.disabled = true; const [id, st] = t.dataset.tclose.split(":"); closeTraining(Number(id), st); return; }
@@ -1627,14 +1601,7 @@ $app.addEventListener("click", e => {
   if (t.dataset.kit) { document.getElementById("kit-" + t.dataset.kit)?.scrollIntoView(); return; }
   if (t.dataset.rsvp) { setRsvp(t.dataset.rsvp); return; }
   if (t.dataset.cancel !== undefined) { cancelEvent(t); return; }
-  if (t.dataset.tracker !== undefined) { runTracker(t, savedSteam()); return; }
-  if (t.dataset.unlock !== undefined) {
-    t.disabled = true;  // no second toggle while saving; render() builds a fresh box from haveSet
-    const item = t.dataset.unlock;  // disabled box loses focus before keepFocus sees it: put it back (Viktor #027)
-    setUnlock(item, t.checked).catch(err => { haveErr = saveErr(err); rerenderKeep(); })
-      .finally(() => document.querySelector(`[data-unlock="${CSS.escape(item)}"]`)?.focus({ preventScroll: true }));
-    return;
-  }
+  if (t.dataset.tracker !== undefined) { syncTracker().catch(e => console.error(e)); return; }
   if (t.dataset.claim || t.dataset.unclaim) {
     // the roster re-renders: put focus back on my slot, else on the same row, not on <body> (Viktor UAT #006)
     const i = [...document.querySelectorAll(".ros li")].indexOf(t.closest("li"));
@@ -1664,7 +1631,6 @@ $app.addEventListener("click", e => {
 let saveY;
 addEventListener("scroll", () => { clearTimeout(saveY); saveY = setTimeout(() => history.replaceState({ y: scrollY }, ""), 150); }, { passive: true });
 addEventListener("hashchange", () => {
-  haveErr = null;  // an unlock error belongs to the page it happened on (Viktor #026)
   render();
   const y = history.state && history.state.y;
   if (y) window.scrollTo(0, y);
