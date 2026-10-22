@@ -1053,7 +1053,7 @@ function homeEvent() {
   const mine = state.claims.find(c => c.user_id === state.me.user_id);
   const said = (state.rsvps || []).find(r => r.user_id === state.me.user_id);
   const status = mine ? `Máš místo: ${esc(mine.slot_label)}` : said ? `Tvoje odpověď: ${esc((RSVP.find(x => x[0] === said.status) || [, said.status])[1])}` : "Zatím bez odpovědi a bez místa: otevři sestavu";
-  return `<a class="cont evc" href="#/akce"><span class="big">Operace</span><span>${esc(fmtWhen(ev.starts_at))} · ${sideOf(ev.strategy_id, ev.doctrine === "swarm" ? "mapa podle hry" : "mapa zatím nevybraná")} · ${esc(docName(ev.doctrine))}<small>${status}</small></span></a>${more}${next}`;
+  return `<a class="cont evc" href="#/akce/${ev.id}"><span class="big">Operace</span><span>${esc(fmtWhen(ev.starts_at))} · ${sideOf(ev.strategy_id, ev.doctrine === "swarm" ? "mapa podle hry" : "mapa zatím nevybraná")} · ${esc(docName(ev.doctrine))}<small>${status}</small></span></a>${more}${next}`;
 }
 
 // specs/mapy-v2 (Petr 2026-10-22): the 3 maps; a map's page picks doctrine, team and zone variant, then shows the
@@ -1199,8 +1199,6 @@ function viewVetve(s) {
     <section class="block narrow"><h2>Spouštěče: stane se kdykoli, reaguj hned</h2>${rxList(s, s.triggers.filter(inV))}</section>
     <section class="block narrow"><h2>Větve: když se situace vyvine</h2>${rxList(s, s.branches.filter(inV))}</section>`;
 }
-
-function kitCell(price, qty) { return price == null ? '<span class="dash">-</span>' : qty === "?" ? `${usd(price)} <span class="unk">× ?</span>` : usd(price * qty); }
 
 function itemIcon(src, cls = "") {
   return src ? `<img class="item ${cls}" src="${esc(src)}" alt="" loading="lazy">` : `<span class="item none ${cls}" aria-hidden="true"></span>`;
