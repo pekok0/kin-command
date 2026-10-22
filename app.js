@@ -208,17 +208,18 @@ function rankCard(m, prog, merits) {
 // ticks on their own profile
 const taskDone = (x, done, trackerOk, prog) => x.check === "tracker" ? trackerOk : x.check === "ops" ? !!prog && prog.ops >= 1 : done.has(x.id);
 function tasksCard(m, done, trackerOk, prog) {
-  const mine = m.user_id === state.me.user_id, ok = D.ukoly.map(x => taskDone(x, done, trackerOk, prog));
+  // the member ticks own tasks, the Commander confirms anyone's (backlog 6c, 021)
+  const can = m.user_id === state.me.user_id || state.me.is_commander, ok = D.ukoly.map(x => taskDone(x, done, trackerOk, prog));
   return `<section class="block ukoly" id="ukoly"><h2>Úkoly <small>${ok.filter(Boolean).length} z ${ok.length}</small></h2><ul class="tasks">
     ${D.ukoly.map((x, i) => `<li data-task="${esc(x.id)}"${ok[i] ? ' class="ok"' : ""}><span class="tk-mark" aria-hidden="true"></span>
       <a href="${esc(x.url || x.href)}"${x.url ? ' target="_blank" rel="noopener"' : ""}>${esc(x.name)}</a>
-      ${!x.check && mine ? `<button type="button" class="act tk" data-task-tick="${esc(x.id)}" aria-pressed="${ok[i]}">${ok[i] ? "Hotovo" : "Mám hotové"}</button>` : ""}</li>`).join("")}</ul>
+      ${!x.check && can ? `<button type="button" class="act tk" data-task-tick="${esc(x.id)}" data-uid="${esc(m.user_id)}" aria-pressed="${ok[i]}">${ok[i] ? "Hotovo" : "Mám hotové"}</button>` : ""}</li>`).join("")}</ul>
     <p class="note"><a href="#/ukoly">Kdo co má hotové</a></p></section>`;
 }
 async function tickTask(b) {
   b.disabled = true;
-  const id = b.dataset.taskTick, on = b.getAttribute("aria-pressed") !== "true";
-  const { error } = on ? await sb.from("tasks_done").insert({ task: id }) : await sb.from("tasks_done").delete().eq("user_id", state.me.user_id).eq("task", id);
+  const id = b.dataset.taskTick, uid = b.dataset.uid, on = b.getAttribute("aria-pressed") !== "true";
+  const { error } = on ? await sb.from("tasks_done").insert({ user_id: uid, task: id }) : await sb.from("tasks_done").delete().eq("user_id", uid).eq("task", id);
   if (error) { console.error(error); b.disabled = false; b.insertAdjacentHTML("afterend", '<p class="err">Nepodařilo se uložit.</p>'); return; }
   render();
 }
@@ -242,8 +243,9 @@ function slotRow(x, c, sq) {
   const mine = c && c.user_id === state.me.user_id;
   const who = c ? `<img src="${esc(c.members.avatar_url)}" alt="" loading="lazy"><span class="nm">${esc(c.members.name)}</span>${sq && c.lead ? '<span class="slb" title="Squad leader">SL</span>' : ""}` : '<span class="free">volné</span>';
   const act = mine ? `data-unclaim="${esc(c.user_id)}" title="Odhlásit se"` : c ? "disabled" : `data-claim="${esc(x.key)}"`;
-  const kick = c && !mine && state.me.is_commander
-    ? `<button type="button" class="kick" data-unclaim="${esc(c.user_id)}" aria-label="Odhlásit ${esc(c.members.name)}">${cross()}</button>` : "";
+  // an x on my own place too (UAT C-03: on a phone "click your slot to leave" was invisible); the Commander's on anyone's
+  const kick = c && (mine || state.me.is_commander)
+    ? `<button type="button" class="kick" data-unclaim="${esc(c.user_id)}" aria-label="${mine ? "Odhlásit se z místa" : `Odhlásit ${esc(c.members.name)}`}" title="${mine ? "Odhlásit se z místa" : ""}">${cross()}</button>` : "";
   // the badge, one per squad (011): Operator and up on their own row, the Commander on anyone's (specs/hodnosti H2)
   const cmd = state.me.is_commander, can = cmd || rankAt(state.me, "operator");
   const lead = !sq || !c ? "" : mine ? (c.lead ? '<button type="button" class="act lead" data-lead="0">Předat SL</button>'
@@ -609,8 +611,12 @@ function syncMyRole() {
 }
 
 async function unclaim(userId) {
+  const s = planOf(state.event), c = userId === state.me.user_id && state.claims.find(c => c.user_id === userId);
+  const slot = c && s && s.roster.flatMap(g => g.slots).find(x => x.key === c.slot_key);
   const { error } = await sb.from("claims").delete().eq("event_id", state.event.id).eq("user_id", userId);
   state.flash = !error ? null : error.code === "42501" ? "Akce už je uzavřená." : saveErr(error);
+  // leaving my place drops "Moje role" that came from it (UAT C-04); a role picked by hand elsewhere stays
+  if (!error && slot?.role && me.get() === `${s.id}/${slot.role}`) { me.set(null); renderNav(navActive); }
   await loadEvent();
 }
 
@@ -1105,7 +1111,7 @@ function homeMe() {
   const r = trk || {}, lv = r.levels ? TRACKS.filter(n => n in r.levels).map(n => `<span>${n} <b>${Number(r.levels[n]) || 0}</b></span>`).join("") : "";
   const mine = me.get(), [sid, rid] = (mine || "/").split("/"), ms = S(sid), mr = ms && roleOf(ms, rid);
   return `<section class="hp-mod hp-me"><h2>Ty</h2><a class="hp-who" href="#/hrac/${esc(state.me.discord_id)}"><img src="${esc(state.me.avatar_url)}" alt=""><b>${esc(state.me.name)}</b><span>Tvůj profil</span></a>
-    ${r.status === "ok" ? `<p class="trk-lv">${lv}</p><a class="act" href="#/vybava">Tvůj loadout ve Výbavě</a>`
+    ${trk === undefined ? "" : r.status === "ok" ? `<p class="trk-lv">${lv}</p><a class="act" href="#/vybava">Tvůj loadout ve Výbavě</a>`
       : '<p class="need">Nemáš propojený WARDOGS Tracker: bez něj ti Výbava neukáže, co máš.</p><a class="act" href="#/vybava">Propojit Tracker</a>'}
     ${mr ? `<a class="cont" href="${roleHref(ms, mr)}"><span class="big">${esc(mr.id)}</span><span>Tvoje role na akci<small>${esc(mr.name)} · ${esc(sideLabel(ms))}</small></span></a>` : ""}</section>`;
 }
@@ -1421,7 +1427,7 @@ const rerenderKeep = () => { const restore = keepForms(); keepFocus(() => { cons
 const TRACKS = ["WARDOG", "Assault", "Medic", "Support", "Recon", "Driver", "Pilot"];
 const TRK_LINK = '<a href="https://wardogstracker.gg" target="_blank" rel="noopener">WARDOGS Tracker</a>';
 const TRK_SYNC = "https://wardogstracker.gg/api/wardogs/connect?redirect=/";
-let trk = null, trkBusy = false, trkErr = null;  // trk = my row of public.tracker
+let trk, trkBusy = false, trkErr = null;  // trk = my row of public.tracker; undefined while it loads (UAT C-02), null = none
 async function loadTracker() {
   const uid = state.me && state.me.user_id;
   if (!sb || !uid) { trk = null; return; }
