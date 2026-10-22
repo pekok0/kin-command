@@ -597,7 +597,9 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .sqtools { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .sqadd { border-color: var(--fr); color: var(--fr); }
 .seatt { margin-top: 8px; font-size: 13px; }
-.sqtools .act, .seatt { min-height: 44px; }  /* a finger on a phone (WCAG 2.5.5) */
+.sqtools .act, .seatt { min-height: 44px; }
+.rx-off { flex: none; width: 44px; height: 44px; margin-left: 4px; border: 1px solid var(--rule); background: none; color: var(--ink-3); font-size: 20px; cursor: pointer; }
+.rx-off:hover { color: var(--ho); border-color: var(--ho); }  /* a finger on a phone (WCAG 2.5.5) */
 .seatt[aria-pressed="false"] { opacity: .75; }
 
 /* the event rail (Petr 2026-10-22): lit tiles under the nav on every page but Akce and home; scrolls sideways when many */

@@ -198,8 +198,24 @@ function slotRow(x, c, sq) {
 function rosterGroup(g, by) {
   const n = g.slots.filter(x => by[x.key]).length;
   return `<div class="rg"><div class="pg-head">${sym(g.symbol, "sm")}<div><b>${esc(g.name)}</b><small>${esc(g.squad)}</small></div><span class="num">${n}/${g.max}</span></div>
-    <ul>${g.slots.map(x => slotRow(x, by[x.key])).join("")}</ul></div>`;
+    <ul>${g.slots.map(x => slotRow(x, by[x.key]).replace(/<\/li>$/, roleOffBtn(g, x, by) + "</li>")).join("")}</ul>${fortressTools(g, by)}</div>`;
 }
+// a free plan role: the Commander switches it off right on its row (the row says what it is, no extra words)
+const roleOffBtn = (g, x, by) => state.me.is_commander && plan && plan.base && x.role && !by[x.key]
+  ? `<button type="button" class="rx-off" data-fx="${g.id}:off:${esc(x.role)}" aria-label="Vypnout roli ${esc(x.role)}" title="Vypnout roli">×</button>` : "";
+function fortressTools(g, by) {
+  const base = plan && plan.base && plan.base.find(b => b.id === g.id);
+  if (!state.me.is_commander || !base) return "";
+  const free = g.slots.filter(x => !x.role), last = free[free.length - 1], label = (base.slots.find(x => !x.role) || {}).label || "člen";
+  const off = base.slots.filter(x => x.role && !g.slots.some(y => y.key === x.key));
+  return `<div class="sqtools">
+    <span class="sqp">${esc(label)} <b>${free.length}</b><span class="swctl">
+      <button type="button" class="act" data-fx="${g.id}:extra:-1" aria-label="${esc(g.name)}: ubrat ${esc(label)}"${!free.length || by[last.key] ? " disabled" : ""}>−</button>
+      <button type="button" class="act" data-fx="${g.id}:extra:1" aria-label="${esc(g.name)}: přidat ${esc(label)}"${free.length >= 10 ? " disabled" : ""}>+</button></span></span>
+    ${off.map(x => `<button type="button" class="act sqadd" data-fx="${g.id}:on:${esc(x.role)}">+ ${esc(x.role)}</button>`).join("")}
+    <button type="button" class="act sqdrop" data-fx="${g.id}:hide:1"${groupFilled(g, by) ? ' disabled title="Ve skupině někdo je"' : ""}>Skrýt skupinu</button></div>`;
+}
+const groupFilled = (g, by) => g.slots.filter(x => by[x.key]).length;
 
 // the squad part of a slot key (SW-Q2-SW3 -> Q2), as the unique index claims_one_lead counts it (011): a badge on a
 // place the page does not show (dropped by "-", forged key) still leads its squad (OWASP 2026-10-21 L1)
@@ -268,7 +284,7 @@ function viewRoster(s) {
   const filled = state.claims.filter(c => s.roster.some(g => g.slots.some(x => x.key === c.slot_key))).length;
   const total = s.roster.reduce((n, g) => n + g.max, 0);
   // without builders and logistics there is no FOB and no supplies: show the plan's fill order still open
-  const missing = (s.fill_order || []).filter(id => !by[id]).map(id => roleOf(s, id)).filter(Boolean);
+  const missing = (s.fill_order || []).filter(id => !by[id] && s.roster.some(g => g.slots.some(x => x.key === id))).map(id => roleOf(s, id)).filter(Boolean);
   // first 6 only: glanceable at a briefing and fewer chips to hit by mistake on a phone (a tap moves your slot)
   // my slot's shopping list one tap away (denbler 2026-10-19 "at si kazdy hned najde svoje"): SWARM below in Akce,
   // Top defence on my role card of the map
@@ -293,7 +309,9 @@ function viewRoster(s) {
     <div class="op-me">${mine}${rsvpBar()}</div>
     ${state.me.is_commander ? `<div class="op-cmd" role="group" aria-label="Příkazy Commandera">${mapTeamForm(ev)}${closeEventForm(s)}<a class="act" href="#/briefing">Protokol briefingu</a>${cancel}</div>` : ""}</div>
     ${msg}
-    <div class="ros${s.swarm ? " swarm" : ""}">${s.roster.map(g => g.sq ? squadCard(g, by) : g.vehicles ? podporaCard(g, by) : rosterGroup(g, by)).join("")}</div>`;
+    <div class="ros${s.swarm ? " swarm" : ""}">${s.roster.map(g => g.sq ? squadCard(g, by) : g.vehicles ? podporaCard(g, by) : rosterGroup(g, by)).join("")}</div>
+    ${s.base && state.me.is_commander && s.base.length > s.roster.length ? `<div class="sqtools hidden-g">Skryté: ${s.base.filter(b => !s.roster.some(g => g.id === b.id)).map(b =>
+      `<button type="button" class="act sqadd" data-fx="${b.id}:hide:0">+ ${esc(b.name)}</button>`).join("")}</div>` : ""}`;
 }
 
 // "T-01:12:05" before the start, "+00:14" after it; one interval ticks every clock on the page
@@ -540,7 +558,7 @@ function slBar(n) {
 // the Commander shapes the roster (specs/akce-v2 A6); the database refuses a shape outside the rules (017 roster_ok)
 // ponytail: a sign-up racing a "-" can land on the dropped place and stays unseen until its owner picks again; DB trigger if it bites
 async function writeRoster(change) {
-  const ev = state.event, r = JSON.parse(JSON.stringify(rosterOf(ev)));
+  const ev = state.event, r = JSON.parse(JSON.stringify(ev.doctrine === "swarm" ? rosterOf(ev) : ev.roster || { groups: {} }));
   change(r);
   const { data, error } = await sb.from("events").update({ roster: r }).eq("id", ev.id).select("id");
   state.flash = error ? saveErr(error) : !data.length ? "Sestavu se nepodařilo uložit: akce už není otevřená, nebo nemáš práva Commandera." : null;
@@ -552,6 +570,13 @@ const setSquad = op => writeRoster(r => { const t = D.doktrina.swarm.sestava;
 const setSupport = (ti, d) => writeRoster(r => { const p = D.doktrina.swarm.sestava.podpora[ti], list = r.vehicles[p.kit] = r.vehicles[p.kit] || [];
   if (d > 0) list.push(p.open); else list.pop(); });
 const setSeat = (kit, v, d) => writeRoster(r => { r.vehicles[kit][v] += d; });
+function setFortress(gid, what, arg) {
+  return writeRoster(r => { const c = r.groups[gid] = r.groups[gid] || {}, base = plan.base.find(b => b.id === gid);
+    if (what === "extra") c.extra = (c.extra ?? base.slots.filter(x => !x.role).length) + Number(arg);
+    else if (what === "hide") { if (arg === "1") c.hide = true; else delete c.hide; }
+    else { const off = new Set(c.off || []); if (what === "off") off.add(arg); else off.delete(arg); c.off = [...off]; if (!c.off.length) delete c.off; }
+    if (!Object.keys(c).length) delete r.groups[gid]; });
+}
 
 // the SL badge on my own row (S4-S5); one per squad: the unique index claims_one_lead refuses a second (23505)
 async function takeLead(on) {
@@ -795,7 +820,20 @@ const swarmPlan = ev => ({ id: "swarm", swarm: true, roster: swarmRoster(D.doktr
 // when the map comes; role cards, zones and the map's plan wait for the map and team
 const fortressPlan = () => { const s = D.strategies[0];
   return { id: "fortress", nomap: true, roster: s.roster, fill_order: s.fill_order, roles: s.roles, variants: [] }; };
-const planOf = ev => !ev ? null : ev.doctrine === "swarm" ? swarmPlan(ev) : !ev.strategy_id ? fortressPlan() : S(ev.strategy_id) || null;
+// FORTRESS (Petr 2026-10-22, specs/akce-v2 A8): a hidden group is gone, a role switched off is gone, the free places
+// ("člen", "stavitel") as many as set; the plan object stays untouched (Mapy read it)
+function shapedRoster(roster, r) {
+  const gs = r && r.groups;
+  if (!gs) return roster;
+  return roster.map(g => { const c = gs[g.id] || {};
+    if (c.hide) return null;
+    const free = g.slots.filter(x => !x.role), label = free.length ? free[0].label : "člen", n = c.extra ?? free.length;
+    const slots = [...g.slots.filter(x => x.role && !(c.off || []).includes(x.role)), ...Array.from({ length: n }, (_, i) => ({ key: `${g.id}+${i + 1}`, label, role: null }))];
+    return { ...g, max: slots.length, slots };
+  }).filter(Boolean);
+}
+const fortressOf = (s, ev) => s && { ...s, roster: shapedRoster(s.roster, ev.roster), base: s.roster };
+const planOf = ev => !ev ? null : ev.doctrine === "swarm" ? swarmPlan(ev) : fortressOf(!ev.strategy_id ? fortressPlan() : S(ev.strategy_id), ev);
 // doctrine names live in the content (Petr 2026-10-19: FORTRESS, SWARM); events store "defence" / "swarm"
 const docOf = d => d === "swarm" ? D.doktrina.swarm : D.doktrina.defence;
 const docName = d => docOf(d).title;
@@ -1289,7 +1327,7 @@ async function loadUnlocks() {
 }
 // a re-render replaces the focused control: put keyboard focus back on its twin
 function keepFocus(fn) {
-  const a = document.activeElement, k = a && ["data-tracker", "data-nova", "data-rsvp", "data-trsvp", "data-role", "data-squad", "data-seat", "data-support"].find(x => a.hasAttribute(x));
+  const a = document.activeElement, k = a && ["data-tracker", "data-nova", "data-rsvp", "data-trsvp", "data-role", "data-squad", "data-seat", "data-fx", "data-support"].find(x => a.hasAttribute(x));
   const sel = k && `[${k}="${CSS.escape(a.getAttribute(k))}"]`, i = sel ? [...document.querySelectorAll(sel)].indexOf(a) : -1;
   fn();
   if (sel) document.querySelectorAll(sel)[i]?.focus({ preventScroll: true });
@@ -1710,12 +1748,13 @@ function render() {
 }
 
 $app.addEventListener("click", e => {
-  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-kit],[data-role],[data-squad],[data-seat],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker],[data-nova]");
+  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-kit],[data-role],[data-squad],[data-seat],[data-fx],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker],[data-nova]");
   if (!t) return;
   if (t.dataset.trsvp) { const [id, st] = t.dataset.trsvp.split(":"); rsvpTraining(Number(id), st); return; }
   if (t.dataset.tclose) { t.disabled = true; const [id, st] = t.dataset.tclose.split(":"); closeTraining(Number(id), st); return; }
   if (t.dataset.role) { const [i, kit, d] = t.dataset.role.split(":"); setRole(Number(i), kit, Number(d)); return; }
   if (t.dataset.squad) { setSquad(t.dataset.squad); return; }
+  if (t.dataset.fx) { const [gid, what, arg] = t.dataset.fx.split(":"); setFortress(gid, what, arg); return; }
   if (t.dataset.seat) { const [kit, v, d] = t.dataset.seat.split(":"); setSeat(kit, Number(v), Number(d)); return; }
   if (t.dataset.support) { const [i, d] = t.dataset.support.split(":").map(Number); setSupport(i, d); return; }
   if (t.dataset.lead) {  // the button flips between "Povedu squad" and "Předat SL": keep focus on my row
