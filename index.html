@@ -235,8 +235,6 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .cont small { display: block; color: var(--ink-2); font: 500 15px/1.3 var(--sans); text-transform: none; letter-spacing: 0; }
 .home-ev { margin-top: 20px; }
 .start .proc li { max-width: 80ch; }
-.ros-head .lead { color: var(--ink-2); font: 600 15px/1 var(--cond); letter-spacing: .06em; text-transform: uppercase; }
-.ros-head .lead b { color: var(--ink); text-transform: none; letter-spacing: 0; }
 /* specs/akce-mapa-tym: the in-game team as a badge, its colour (--tc from content/tymy.toml) on the square and the
    border only; the name keeps the surrounding ink (Valkyra red as text on navy is under the DESIGN.md contrast) */
 .team { display: inline-block; padding: .1em .3em 0; border: 1px solid var(--tc); white-space: nowrap; }
@@ -942,12 +940,8 @@ h1 { text-shadow: 0 0 28px oklch(0.86 0.15 205 / 0.18); }
 .opcon .ros-head { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px 28px; margin: 0 0 12px; padding-bottom: 12px; border-bottom: 1px solid var(--rule-soft); }
 .op-id { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; min-width: 0; }
 .op-id h2 { margin: 0; font-size: 26px; letter-spacing: .08em; text-shadow: 0 0 18px oklch(0.86 0.15 205 / 0.3); }
-.op-id .lead { font: 600 15px/1.2 var(--cond); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
 .op-lamp { width: 10px; height: 10px; border-radius: 50%; background: var(--fr); box-shadow: 0 0 0 3px oklch(0.86 0.15 205 / 0.2), 0 0 14px var(--fr-glow); animation: op-lamp 2s ease-in-out infinite; }
 @keyframes op-lamp { 50% { box-shadow: 0 0 0 6px oklch(0.86 0.15 205 / 0.08), 0 0 22px var(--fr-glow); } }
-.op-clock { display: grid; justify-items: end; gap: 2px; }
-.op-clock time { font: 600 14px/1 var(--cond); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
-.op-clock .tminus { font: 700 30px/1 var(--cond); letter-spacing: .04em; color: var(--fr); text-shadow: 0 0 18px var(--fr-glow); font-variant-numeric: tabular-nums; }
 .op-fill { display: grid; grid-template-columns: auto; justify-items: end; gap: 4px; min-width: 120px; }
 .op-fill .num { font: 700 30px/1 var(--cond); }
 .op-fill .num small { font-size: 16px; color: var(--ink-3); }
@@ -986,8 +980,7 @@ h1 { text-shadow: 0 0 28px oklch(0.86 0.15 205 / 0.18); }
   .opcon { padding: 14px 12px 12px; }
   .opcon .ros-head { grid-template-columns: 1fr 1fr; }
   .op-id { grid-column: 1 / -1; }
-  .op-clock { justify-items: start; }
-  .op-clock .tminus, .op-fill .num { font-size: 26px; }
+  .op-fill .num { font-size: 26px; }
   .op-me .rsvp { margin-left: 0; }
   .op-me .rsvp .rc { text-align: left; }
   .op-cmd .evcancel { margin-left: 0; }

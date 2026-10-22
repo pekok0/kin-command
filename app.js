@@ -334,7 +334,7 @@ function viewRoster(s) {
   if (!state.me) return `${head}<p class="note">Sestava je jen pro členy KIN. <button type="button" class="act" data-login>Přihlásit přes Discord</button></p>`;
   const ev = state.event;
   if (!ev) return state.evErr ? `${head}${msg}`
-    : `${head}<p class="note">Žádná akce není otevřená. Založí ji Commander.</p>${msg}`;
+    : `${head}<p class="note">Žádná akce není otevřená.</p>${msg}`;
   const cancel = state.me.is_commander ? cancelEventForm() : "";
   // the map form too: picking a known map or "zatím nevím" keeps the sign-ups, cancelling drops them (threat model N1)
   if (!s) return `${head}<p class="note">Otevřená akce (${esc(fmtWhen(ev.starts_at))}) je pro mapu ${esc(ev.strategy_id)}, kterou War Room nezná.</p>${msg}${state.me.is_commander ? mapTeamForm(ev) : ""}${cancel}`;
@@ -738,7 +738,7 @@ const trCount = tr => tr.capacity ? `${goers(tr)} / ${esc(tr.capacity)}` : Strin
 
 function trainingsSection() {
   const list = state.trainings.length ? `<ul class="trl">${state.trainings.map(trainingRow).join("")}</ul>`
-    : '<p class="note">Teď není vypsaný žádný trénink ani kurz. Vypisují je důstojníci.</p>';
+    : '<p class="note">Teď není vypsaný žádný trénink ani kurz.</p>';
   const msg = state.trFlash ? `<p class="err ros-msg" role="alert">${esc(state.trFlash)}</p>` : "";
   return `<section class="block" id="treninky"><h2>Tréninky a kurzy</h2>${msg}${list}</section>`;
 }
@@ -1081,7 +1081,7 @@ function viewMapDetail(m, qs) {
     <header class="unit-head"><div><h1>${esc(m)}</h1><p>Vyber doktrínu, tým a variantu kontaktní zóny. Plán se ukáže podle tvých voleb.</p></div></header>${steps}`;
   if (!v) return head + `<p class="note mapnext">Dál vyber ${!d ? "doktrínu" : !x ? "tým" : "variantu zóny"}.</p>`;
   if (d === "swarm") return head + `${variantPanel(x)}<section class="block"><h2>${esc(docName("swarm"))} na této mapě</h2><p>${esc(D.doktrina.swarm.tagline)}</p>${bullets(D.doktrina.swarm.points)}
-    <p class="note">${esc(docName("swarm"))} nemá plán pro jednotlivé mapy: zóna nahoře, postupy, role a nákup v <a href="#/doktrina/swarm">Doktríně</a>.</p></section>`;
+    <p class="note">${esc(docName("swarm"))} hraje na všech mapách stejně: <a href="#/doktrina/swarm">plán v Doktríně</a>.</p></section>`;
   const tabs = [["platno", "Plátno"], ["situace", "Situace"], ["vetve", "Větve a spouštěče"]];
   return head + `<nav class="tabs" aria-label="Plán">${tabs.map(([k, l]) => `<a href="${mapHref(m, { d, t: teamKey(x), v, tab: k === "platno" ? null : k })}"${k === tab ? ' aria-current="page"' : ""}>${l}</a>`).join("")}</nav>
     ${x.status === "DRAFT" ? '<p class="note"><span class="tag draft">Draft</span> Plán zatím není vyhlášený za platný.</p>' : ""}
@@ -1239,6 +1239,10 @@ function shopList(s, r, skip = null) {
 // primary brings its best unlocked magazine and the rounds of its calibre (AP once unlocked, if the clan's Munice ladder
 // goes there); the card shows it like the game does, the ladders below show what I have vs what I should have
 const MAGS = 3;  // ponytail: spare magazines per primary as the S1 screenshots had them; per class when Petr wants
+// the sidearm (Petr 2026-10-22): 2 spare magazines and FMJ for both; a revolver (Judge, no magazines) 12 rounds.
+// ponytail: counts are a proposal for Petr; into zebricky.toml when he wants them per class
+const SIDE_MAGS = 2, SIDE_ROUNDS = 12;
+const bestMag = w => w && w.mags && w.mags[w.mags.map(m => !m.unlock || owned(m.item)).lastIndexOf(true)];
 const mineIdx = lad => lad.steps.map(st => !st.unlock || owned(st.item)).lastIndexOf(true);
 const pieceCost = (x, qty) => x.price == null ? 0 : Math.round(x.price * qty / (x.per || 1));
 // the Munice ladder of a class follows my primary: same counts and reasons, rounds of my weapon's calibre
@@ -1252,10 +1256,12 @@ const GRADE = { ok: "Cíl klanu", mid: "Lze lépe", low: "Slabé" };
 function myKit(c) {
   const lads = c.ladders || [], entry = lad => { const i = mineIdx(lad); return { lad, st: lad.steps[i] || null, i, g: grade(lad, i), top: lad.steps.at(-1) }; };
   const slots = Object.fromEntries(Object.keys(SLOT_LABEL).map(k => [k, (l => l && entry(l))(lads.find(l => l.slot === k))]));
-  const gun = slots.slot1 && slots.slot1.st, store = [];
-  const mag = gun && gun.mags && gun.mags[gun.mags.map(m => !m.unlock || owned(m.item)).lastIndexOf(true)];
+  const gun = slots.slot1 && slots.slot1.st, side = slots.slot2 && slots.slot2.st, store = [];
+  const mag = bestMag(gun), sideMag = bestMag(side), sideFmj = side && side.ammo && side.ammo[0];
   if (mag) store.push({ st: { ...mag, qty: MAGS, cost: pieceCost(mag, MAGS) }, g: null });
+  if (sideMag) store.push({ st: { ...sideMag, qty: SIDE_MAGS, cost: pieceCost(sideMag, SIDE_MAGS) }, g: null });
   for (const lad of lads.filter(l => l.slot === "storage")) store.push(entry(lad.group === "Munice" ? municeFor(lad, gun) : lad));
+  if (sideFmj) { const qty = sideMag ? SIDE_MAGS * sideMag.capacity : SIDE_ROUNDS; store.push({ st: { ...sideFmj, qty, cost: pieceCost(sideFmj, qty) }, g: null }); }
   const all = [...Object.values(slots).filter(Boolean), ...store];
   const have = all.filter(e => e.st);
   // a verdict only on real data: without the Tracker every slot would look red for nothing
@@ -1480,7 +1486,7 @@ document.addEventListener("submit", e => {
 
 function viewSquads() {
   return `<header class="unit-head"><div><h1>Výbava</h1><p>Tvůj loadout pro každou sub-class, podle toho, co máš odemčené</p></div></header>
-    <p class="note">Každá sub-class ukazuje tvůj loadout podle toho, co máš ve hře odemčené. Kolik nás co má: <a class="act" href="#/pokryti">Pokrytí rolí</a></p>
+    <p class="note">Kolik nás co má: <a class="act" href="#/pokryti">Pokrytí rolí</a></p>
     ${trackerBox()}
     ${D.squads.map(q => `<section class="block"><h2><a href="#/squad/${q.id}">${esc(q.name)}</a></h2><p class="goal">${esc(q.goal)}</p>
       <ul class="cls">${q.classes.map(c => `<li><a href="${classHref(q, c)}"><b>${esc(c.name)}</b></a></li>`).join("")}</ul></section>`).join("")}`;
@@ -1673,11 +1679,11 @@ function viewCoverage(season, members) {
   }
   return `${head}
     <p class="note">Členů s daty: <b>${users.length}</b>. Kdo nemá propojený ${TRK_LINK}, v počtech chybí (propojení je ve <a href="#/vybava">Výbavě</a>).</p>
-    <section class="block"><h2>Sub-classy</h2><p class="note">Cíl hlavního žebříčku sub-classy (zbraň, u rolí s jedinou zbraní slot [3]) a kolik z nás ho má.</p><table class="data cov"><thead><tr><th>Sub-class</th><th>Cíl</th><th class="num">Mají</th></tr></thead><tbody>
+    <section class="block"><h2>Sub-classy</h2><table class="data cov"><thead><tr><th>Sub-class</th><th>Cíl</th><th class="num">Mají</th></tr></thead><tbody>
     ${D.squads.map(q => q.classes.map(c => { const top = keyLadder(c).steps.at(-1);
       return `<tr><td><a href="${classHref(q, c)}">${esc(q.name)} · ${esc(c.name)}</a></td><td>${esc(top.item)}</td><td class="num"><b>${top.unlock ? users.filter(h => h.has(top.item)).length : users.length}</b></td></tr>`; }).join("")).join("")}
     </tbody></table></section>
-    <section class="block"><h2>Kdo má odemčeno</h2><p class="note">Předměty, které se musí ve hře odemknout, a kdo z nás je už má (podle WARDOGS Trackeru).</p><table class="data cov"><thead><tr><th>Předmět</th><th class="num">Mají</th><th>Kdo</th></tr></thead><tbody>
+    <section class="block"><h2>Kdo má odemčeno</h2><table class="data cov"><thead><tr><th>Předmět</th><th class="num">Mají</th><th>Kdo</th></tr></thead><tbody>
     ${items.map(n => { const ms = byItem[n] || []; return `<tr><td>${esc(n)}</td><td class="num"><b>${ms.length}</b></td><td>${ms.map(memberLink).join(" ")}</td></tr>`; }).join("")}
     </tbody></table></section>`;
 }
@@ -1685,7 +1691,7 @@ function viewCoverage(season, members) {
 function viewHistory(evs) {
   // part of Akce since 2026-10-19 (rozhodnuti 8): the open event above, played ones below by season
   const head = `<h2 class="hist-h">Odehrané akce</h2>`;
-  if (!evs.length) return `${head}<p class="note">Zatím žádná uzavřená akce. Commander ji uzavře nahoře v Sestavě po zápase.</p>`;
+  if (!evs.length) return `${head}<p class="note">Zatím žádná uzavřená akce.</p>`;
   return head + bySeason(evs, e => e.starts_at).map(({ s, rows }) => `<section class="block"><h2>${esc(seasonName(s))}</h2>
     <table class="data hist"><thead><tr><th>Datum</th><th>Mapa</th><th>Doktrína</th><th class="num">Umístění</th><th class="num">Zapsáno</th></tr></thead><tbody>
     ${rows.map(e => `<tr><td><a href="#/akce/${e.id}">${esc(fmtWhen(e.starts_at))}</a></td><td>${mapCell(e.strategy_id)}</td><td>${esc(docName(e.doctrine))}</td><td class="num"><b>${place(e.placement)}</b></td><td class="num">${e.claims[0] ? e.claims[0].count : 0}</td></tr>`).join("")}
@@ -1716,7 +1722,7 @@ function unlockSection(m, season, have) {
   const rows = D.squads.flatMap(q => q.classes.map(c => { const lad = keyLadder(c), i = lad.steps.map(st => !st.unlock || have.has(st.item)).lastIndexOf(true);
     return { q, c, st: lad.steps[i], top: i === lad.steps.length - 1 }; })).filter(x => x.st);
   return `<section class="block"><h2>Odemčeno · ${esc(season.name)}</h2>
-    <p class="lede">Odemčeno <b>${have.size}</b> předmětů z klanového seznamu · u ${rows.filter(x => x.top).length} z ${D.squads.reduce((a, q) => a + q.classes.length, 0)} sub-class má cíl hlavního žebříčku</p>
+    <p class="lede">Odemčené předměty z klanového seznamu: <b>${have.size}</b> · u ${rows.filter(x => x.top).length} z ${D.squads.reduce((a, q) => a + q.classes.length, 0)} sub-class má cíl hlavního žebříčku</p>
     <ul class="cls">${rows.map(x => `<li><a href="${classHref(x.q, x.c)}"><b>${esc(x.c.name)}</b><span>${esc(x.st.item)}${x.top ? " · cíl" : ""}</span></a></li>`).join("")}</ul></section>`;
 }
 
