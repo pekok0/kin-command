@@ -256,7 +256,7 @@ function viewRoster(s) {
     : `${head}<p class="note">Žádná akce není otevřená. Založí ji Commander.</p>${msg}`;
   const cancel = state.me.is_commander ? cancelEventForm() : "";
   // the map form too: picking a known map or "zatím nevím" keeps the sign-ups, cancelling drops them (threat model N1)
-  if (!s) return `${head}<p class="note">Otevřená akce (${esc(fmtWhen(ev.starts_at))}) je pro mapu ${esc(ev.strategy_id)}, kterou Central Command nezná.</p>${msg}${state.me.is_commander ? mapTeamForm(ev) : ""}${cancel}`;
+  if (!s) return `${head}<p class="note">Otevřená akce (${esc(fmtWhen(ev.starts_at))}) je pro mapu ${esc(ev.strategy_id)}, kterou War Room nezná.</p>${msg}${state.me.is_commander ? mapTeamForm(ev) : ""}${cancel}`;
   const by = Object.fromEntries(state.claims.map(c => [c.slot_key, c]));
   const filled = state.claims.filter(c => s.roster.some(g => g.slots.some(x => x.key === c.slot_key))).length;
   const total = s.roster.reduce((n, g) => n + g.max, 0);
@@ -983,7 +983,7 @@ function viewHome() {
   const groups = [...new Set((D.odkazy || []).map(x => x.group))];
   return `
     <div class="home-head"><div class="crest-hud"><img class="crest" src="znacka/kin-emblem.svg" alt="Emblém Kinetic Solutions" width="150" height="150">${HUD}</div>
-      <div><p class="hp-k">Kinetic Solutions · KIN</p><h1>Central Command</h1>
+      <div><p class="hp-k">Kinetic Solutions · KIN</p><h1>War Room</h1>
       <p class="lede">Velitelské centrum klanu: akce, plány map, výbava a doktrína na jednom místě.</p></div></div>
     <div class="hp-grid">
       <section class="hp-mod hp-ev"><h2>Další akce</h2><div id="home-ev">${homeEvent()}</div></section>
@@ -1330,7 +1330,7 @@ function trackerBox() {
   const r = trk || {}, lv = r.levels ? TRACKS.filter(n => n in r.levels).map(n => [n, Number(r.levels[n]) || 0]) : [];
   const says = trkErr ? esc(trkErr) : trackerSays(r);
   return `<div class="trk"><button type="button" class="act" data-tracker${trkBusy ? " disabled" : ""}>${trkBusy ? "Synchronizuji…" : "Synchronizovat teď"}</button>
-    <p class="note">Co máš ve hře odemčené a levely rolí bere Central Command z ${TRK_LINK} (neoficiální web komunity) sám, každých pár minut.${r.fetched_at ? ` Naposledy ${esc(ago(r.fetched_at))}.` : ""} Když si něco odemkneš, klikni na Trackeru na Update my stats.</p>
+    <p class="note">Co máš ve hře odemčené a levely rolí bere War Room z ${TRK_LINK} (neoficiální web komunity) sám, každých pár minut.${r.fetched_at ? ` Naposledy ${esc(ago(r.fetched_at))}.` : ""} Když si něco odemkneš, klikni na Trackeru na Update my stats.</p>
     ${lv.length ? `<p class="trk-lv">${lv.map(([n, l]) => `<span>${n} <b>${l}</b></span>`).join("")}${r.synced_at ? `<span class="ref">na Trackeru ${esc(fmtWhen(r.synced_at))}</span>` : ""}</p>` : ""}
     ${says ? `<p class="need err">${says}</p>` : ""}
     ${r.steam_id ? "" : `<div class="trk-help"><p><b>Propoj svůj profil na Trackeru</b> (stačí jednou)${r.status === "not_found" ? ", podle Discordu tě Tracker nenašel" : ""}:</p><ol>
@@ -1635,7 +1635,7 @@ function viewGate() {
     : state.checking ? "Ověřuji přihlášení…" : null;
   return `<section class="gate">
     <img src="znacka/kin-emblem.svg" alt="Emblém Kinetic Solutions" width="200" height="200">
-    <h1>Central Command</h1>
+    <h1>War Room</h1>
     <p class="lede">Plány, role a výcvik klanu Kinetic Solutions. Jen pro členy: přihlas se přes Discord, dovnitř tě to pustí od role Rekrut.</p>
     ${state.error ? `<p class="err">${esc(state.error)}</p>` : ""}
     ${wait ? `<p class="note">${esc(wait)}</p>` : '<button type="button" class="act big" data-login>Přihlásit přes Discord</button>'}
@@ -1645,7 +1645,7 @@ function viewGate() {
 function render() {
   if (!D.strategies) {
     $app.innerHTML = viewGate();
-    document.title = "KIN Central Command";
+    document.title = "KIN War Room";
     document.getElementById("nav").innerHTML = "";
     return;
   }
@@ -1656,7 +1656,7 @@ function render() {
   }
   const p = h.split("/").filter(Boolean);
   if (p[0] === "historie") { location.replace("#/akce"); return; }  // links in Discord debrief threads
-  let html, active = null, title = "KIN Central Command";
+  let html, active = null, title = "KIN War Room";
   cur = null; trace = null; plan = null;
   if (p[0] !== "akce") { state.focusId = null; focusEvent(); }  // elsewhere the nearest operation (home card, bar, Moje role)
   if (p[0] === "s" && S(p[1])) {

@@ -7,17 +7,19 @@
 <!-- specs/zamek, OWASP C8: scripts only from this site and the pinned supabase-js on jsDelivr -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://cdn.discordapp.com; font-src 'self'; connect-src 'self' https://gjvefmsnpmjkbvqtmwbz.supabase.co wss://gjvefmsnpmjkbvqtmwbz.supabase.co; object-src 'none'; base-uri 'none'; form-action 'self'">
 <meta name="theme-color" content="#0f1e3b">
-<title>KIN Central Command</title>
+<title>KIN War Room</title>
 <link rel="icon" href="znacka/kin-ikona.svg" type="image/svg+xml">
 <link rel="icon" href="znacka/favicon-32.png" sizes="32x32" type="image/png">
 <meta property="og:type" content="website">
-<meta property="og:title" content="KIN Central Command">
+<meta property="og:title" content="Kinetic Solutions · War Room">
 <meta property="og:description" content="Plány, role a výcvik klanu Kinetic Solutions ve WARDOGS.">
 <meta property="og:image" content="https://pekok0.github.io/kin-command/znacka/og-1200x630.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <style>
+@font-face { font-family: Oxanium; font-weight: 600; font-display: swap; src: url(fonts/oxanium-latin-600-normal.woff2) format("woff2"); }
+@font-face { font-family: Oxanium; font-weight: 700; font-display: swap; src: url(fonts/oxanium-latin-700-normal.woff2) format("woff2"); }
 @font-face { font-family: Barlow; font-weight: 500; font-display: swap; src: url(fonts/barlow-latin-500-normal.woff2) format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
 @font-face { font-family: Barlow; font-weight: 500; font-display: swap; src: url(fonts/barlow-latin-ext-500-normal.woff2) format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
 @font-face { font-family: Barlow; font-weight: 600; font-display: swap; src: url(fonts/barlow-latin-600-normal.woff2) format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
@@ -88,8 +90,20 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .bar .wrap { display: flex; align-items: center; gap: 24px; min-height: 56px; }
 .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; margin-right: auto; }
 .brand .emblem { display: block; flex: none; }
-.mark { font: 700 15px/1 var(--cond); letter-spacing: .12em; color: var(--ground); background: var(--gold); border: 1.5px solid var(--gold); padding: 6px 7px 5px 9px; }
-.brand span:last-child { font: 600 15px/1 var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); }
+/* the brand (Petr 2026-10-22): the crest in a thin turning ring, the clan's name as an Oxanium wordmark, War Room under it */
+.brand-crest { position: relative; display: grid; place-items: center; width: 40px; height: 40px; flex: none; }
+.brand-crest svg { position: absolute; inset: 0; overflow: visible; }
+.brand-crest circle, .brand-crest path { fill: none; stroke: var(--fr); vector-effect: non-scaling-stroke; }
+.brand-crest circle { stroke-opacity: .25; stroke-dasharray: 1.5 3.5; }
+.brand-crest path { stroke-width: 2; filter: drop-shadow(0 0 4px var(--fr-glow)); transform-origin: 20px 20px; animation: hud-spin 14s linear infinite; }
+.brand-t { display: grid; gap: 3px; }
+.brand-t b { font: 700 19px/1 Oxanium, var(--cond); letter-spacing: .14em; text-transform: uppercase; white-space: nowrap;
+  background: linear-gradient(180deg, var(--ink) 30%, oklch(0.86 0.15 205)); -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 10px oklch(0.86 0.15 205 / 0.35)); }
+.brand-t small { font: 600 11px/1 Oxanium, var(--cond); letter-spacing: .42em; text-transform: uppercase; color: var(--fr); }
+/* a phone: the name on two lines next to the crest, so sound and logout still fit the row */
+@media (max-width: 520px) { .brand-t b { font-size: 13px; line-height: 1.05; letter-spacing: .1em; white-space: normal; max-width: 11.5ch; } .brand-t small { font-size: 8px; letter-spacing: .3em; } .brand { gap: 8px; } }
+@media (prefers-reduced-motion: reduce) { .brand-crest path { animation: none; } }
 .bar nav { display: flex; gap: 4px; flex-wrap: wrap; }
 .bar nav a { font: 600 15px/1 var(--cond); letter-spacing: .05em; text-transform: uppercase; text-decoration: none; color: var(--ink-2); padding: 9px 10px 8px; }
 .bar nav a:hover, .bar nav a[aria-current] { color: var(--ink); background: var(--panel-2); }
@@ -743,7 +757,6 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
   .matrix tbody th b { display: block; font-size: 15px; overflow-wrap: anywhere; }
   main { padding-top: 20px; }
   .bar .wrap { gap: 10px; min-height: 52px; }
-  .brand span:last-child { display: none; }
   .bar nav a { padding: 8px 6px 7px; font-size: 14px; }
   /* five items since 2026-10-19 (specs/akce-flow A8): the nav gets its own full-width row, nothing hidden sideways
      (with 8 items it scrolled sideways and "Moje role" kept falling out of view, Viktor #005 #024) */
@@ -1004,7 +1017,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
   <g class="h" style="--d:-0.6s" transform="translate(1180 760)"><rect x="-17" y="-17" width="34" height="34" transform="rotate(45)"/></g>
 </svg></div>
 <header class="bar"><div class="wrap">
-  <a class="brand" href="#/"><img class="emblem" src="znacka/kin-ikona.svg" alt="" width="30" height="30"><span class="mark">KIN</span><span>Central Command</span></a>
+  <a class="brand" href="#/" aria-label="Kinetic Solutions War Room"><span class="brand-crest"><img class="emblem" src="znacka/kin-ikona.svg" alt="" width="30" height="30"><svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="18.5"/><path d="M20 1.5 A18.5 18.5 0 0 1 38.5 20"/></svg></span><span class="brand-t"><b>Kinetic Solutions</b><small>War Room</small></span></a>
   <nav id="nav" aria-label="Hlavní"></nav>
   <button type="button" id="snd" class="snd" aria-pressed="true" aria-label="Zvuky sestavy" title="Zvuky sestavy"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6h3l4-3v10l-4-3H2z"/><path class="on" d="M11 5.5c1 .8 1 4.2 0 5M13 3.5c2 1.8 2 7.2 0 9"/><path class="off" d="M11 6l4 4M15 6l-4 4"/></svg></button>
   <div id="who" class="who" aria-live="polite"></div>
