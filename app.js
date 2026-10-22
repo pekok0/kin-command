@@ -239,10 +239,17 @@ async function addMerit(f) {
   render();
 }
 
+// command slots of the FORTRESS plans by key, like slot_rank in the database (022, specs/velitelske-sloty)
+const slotRank = k => k === "CMD" ? "veteran" : /^AS[0-9]+-V$/.test(k) ? "operator" : null;
 function slotRow(x, c, sq) {
   const mine = c && c.user_id === state.me.user_id;
-  const who = c ? `<img src="${esc(c.members.avatar_url)}" alt="" loading="lazy"><span class="nm">${esc(c.members.name)}</span>${sq && c.lead ? '<span class="slb" title="Squad leader">SL</span>' : ""}` : '<span class="free">volné</span>';
-  const act = mine ? `data-unclaim="${esc(c.user_id)}" title="Odhlásit se"` : c ? "disabled" : `data-claim="${esc(x.key)}"`;
+  const need = slotRank(x.key), locked = !c && need && !state.me.is_commander && !rankAt(state.me, need);
+  // V4: the Commander moves someone already in the operation onto a free command slot (it stands for "volné" there)
+  const others = !c && need && state.me.is_commander ? state.claims.filter(o => o.slot_key !== x.key) : [];
+  const moveto = others.length ? `<select class="moveto" data-moveto="${esc(x.key)}" aria-label="Dosadit na ${esc(x.label)}"><option value="">Dosadit</option>${others.map(o => `<option value="${esc(o.user_id)}">${esc(o.members.name)}</option>`).join("")}</select>` : "";
+  const who = c ? `<img src="${esc(c.members.avatar_url)}" alt="" loading="lazy"><span class="nm">${esc(c.members.name)}</span>${sq && c.lead ? '<span class="slb" title="Squad leader">SL</span>' : ""}`
+    : moveto ? "" : `<span class="free">${locked ? (need === "veteran" ? "od Veterána" : "od Operátora") : "volné"}</span>`;
+  const act = mine ? `data-unclaim="${esc(c.user_id)}" title="Odhlásit se"` : c || locked ? "disabled" : `data-claim="${esc(x.key)}"`;
   // an x on my own place too (UAT C-03: on a phone "click your slot to leave" was invisible); the Commander's on anyone's
   const kick = c && (mine || state.me.is_commander)
     ? `<button type="button" class="kick" data-unclaim="${esc(c.user_id)}" aria-label="${mine ? "Odhlásit se z místa" : `Odhlásit ${esc(c.members.name)}`}" title="${mine ? "Odhlásit se z místa" : ""}">${cross()}</button>` : "";
@@ -252,7 +259,7 @@ function slotRow(x, c, sq) {
       : sq.led || !can ? "" : '<button type="button" class="act lead" data-lead="1">Povedu squad</button>')
     : !cmd ? "" : c.lead ? `<button type="button" class="act lead" data-leadfor="${esc(c.user_id)}:0">Sundat SL</button>`
     : sq.led ? "" : `<button type="button" class="act lead" data-leadfor="${esc(c.user_id)}:1">Dát SL</button>`;
-  return `<li data-key="${esc(x.key)}"${mine ? ' class="is-me"' : ""}><button type="button" class="rslot" ${act}><span class="lbl">${x.role ? `<span class="rid">${esc(x.role)}</span>` : ""}${esc(x.label)}</span>${who}</button>${lead}${kick}</li>`;
+  return `<li data-key="${esc(x.key)}"${mine ? ' class="is-me"' : ""}><button type="button" class="rslot" ${act}><span class="lbl">${x.role ? `<span class="rid">${esc(x.role)}</span>` : ""}${esc(x.label)}</span>${who}</button>${lead}${moveto}${kick}</li>`;
 }
 
 function rosterGroup(g, by) {
@@ -356,7 +363,9 @@ function viewRoster(s) {
     : myr ? `<p class="mine-kit">Máš místo: <b>${esc(myr.id)} · ${esc(mys.g.name)}</b>${s.nomap ? "" : ` <a class="kitl" href="${roleHref(s, myr)}">Tvoje karta: nákup a kroky</a>`}</p>` : "";
   const miss = s.swarm ? slBar(filled)
     : missing.length
-    ? `<p class="miss">Chybí: ${missing.slice(0, 6).map(r => `<button type="button" class="rid" data-claim="${esc(r.id)}" title="${esc(r.id)} – ${esc(r.name)}">${esc(r.id)}</button>`).join(" ")}${missing.length > 6 ? ` <span class="more">a dalších ${missing.length - 6}</span>` : ""}</p>`
+    ? `<p class="miss">Chybí: ${missing.slice(0, 6).map(r => (n => !n || state.me.is_commander || rankAt(state.me, n)  // a command slot above my rank: named, not offered (022)
+      ? `<button type="button" class="rid" data-claim="${esc(r.id)}" title="${esc(r.id)} – ${esc(r.name)}">${esc(r.id)}</button>`
+      : `<span class="rid" title="${esc(r.id)} – ${esc(r.name)}, ${n === "veteran" ? "od Veterána" : "od Operátora"}">${esc(r.id)}</span>`)(slotRank(r.id))).join(" ")}${missing.length > 6 ? ` <span class="more">a dalších ${missing.length - 6}</span>` : ""}</p>`
     : '<p class="miss ok">Všechny role z plánu obsazené.</p>';
   // the operation console (Petr 2026-10-21 "prehlednejsi a vychytanejsi ... tlacitka, notifikace, sestava"): who and what
   // with a live T- clock and the fill gauge, then the alert strip, my place and answer, the Commander's commands last
@@ -590,7 +599,8 @@ async function claim(key) {
   if (error && error.code === "23505") {
     const c = state.claims.find(c => c.slot_key === key);
     state.flash = `Slot už obsadil ${c ? c.members.name : "někdo jiný"}.`;
-  } else if (error) state.flash = error.code === "42501" ? "Akce už je uzavřená." : saveErr(error);
+  } else if (error) state.flash = error.code !== "42501" ? saveErr(error)  // 022: a command slot above my rank (rank changed meanwhile)
+    : slotRank(key) ? `${slot.label}: až ${slotRank(key) === "veteran" ? "od Veterána" : "od Operátora"}.` : "Akce už je uzavřená.";
   else {
     if (!state.evErr) state.flash = null;  // saved, but the reload failed: keep the outage message
     if (slot.role && !s.nomap) { me.set(`${s.id}/${slot.role}`); renderNav(navActive); }  // "Moje role" needs a map's card
@@ -655,6 +665,15 @@ function setFortress(gid, what, arg) {
 }
 
 // the Commander puts the badge on someone else (019 claims_lead_commander; only the badge on another's row)
+// the Commander moves a member's place onto a command slot (022: the database lets him change only that on another's row)
+async function moveTo(uid, key) {
+  const g = plan.roster.find(g => g.slots.some(x => x.key === key)), slot = g.slots.find(x => x.key === key);
+  const { data, error } = await sb.from("claims").update({ slot_key: key, slot_label: `${g.name} · ${slot.label}` })
+    .eq("event_id", state.event.id).eq("user_id", uid).select("slot_key");
+  state.flash = error ? (error.code === "23505" ? "Místo už někdo obsadil." : saveErr(error)) : !data.length ? "Přesun se nepodařilo uložit: akce už není otevřená." : null;
+  await loadEvent();
+  renderRoster();
+}
 async function giveLead(uid, on) {
   const { data, error } = await sb.from("claims").update({ lead: on }).eq("event_id", state.event.id).eq("user_id", uid).select("slot_key");
   state.flash = error ? (error.code === "23505" ? "Squad už SL má." : saveErr(error)) : !data.length ? "SL se nepodařilo uložit: akce už není otevřená." : null;
@@ -822,6 +841,7 @@ function newHint(f) {
 }
 document.addEventListener("change", e => { if (["doctrine", "map", "team"].includes(e.target.name) && ["new", "mapteam"].includes(e.target.form?.dataset.form)) newHint(e.target.form); });
 document.addEventListener("change", e => { if (e.target.name === "kind" && e.target.form?.dataset.form === "training") capToggle(e.target.form); });
+document.addEventListener("change", e => { if (e.target.dataset.moveto && e.target.value) moveTo(e.target.value, e.target.dataset.moveto); });
 
 document.addEventListener("submit", async e => {
   const f = e.target.closest("form[data-form]");
