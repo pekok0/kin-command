@@ -640,6 +640,9 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .tasks-all td:first-child { white-space: nowrap; }
 .tasks-all td[data-task] { text-align: center; color: var(--ink-3); }
 .tasks-all td.ok { color: var(--fr); font-weight: 700; }
+/* map and team not picked yet: dashed ghost chips (the Dashed Outline Rule) */
+.ghost-pick { display: inline-flex; gap: 6px; vertical-align: middle; }
+.ghost-pick span { padding: 1px 8px 0; border: 1px dashed var(--ink-3); color: var(--ink-3); font: 600 13px/1.6 var(--cond); letter-spacing: .08em; text-transform: uppercase; }
 /* N-04 (UAT 2026-10-22): phone touch targets of at least 32 px for standalone links and disclosures */
 @media (max-width: 720px) {
   .bar nav a { display: inline-flex; align-items: center; min-height: 40px; }

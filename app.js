@@ -402,7 +402,7 @@ function eventHero(ev, s) {
   return `<header class="evhero"><a class="evx" href="#/akce" aria-label="Zavřít detail akce" title="Zavřít">${cross()}</a>
     <div class="evh-when"><p class="evh-k">Operace</p><h1>${esc(fmtWhen(ev.starts_at))}</h1><b class="tminus" data-t0="${esc(ev.starts_at)}">${tminus(ev.starts_at)}</b></div>
     <a class="docplate doc-${d}" href="${sw ? "#/doktrina/swarm" : "#/doktrina"}">${DOC_ICON[d]}<span><b>${esc(docName(d))}</b><small>${esc(docOf(d).short)}</small></span></a>
-    <p class="evh-m">${!ev.strategy_id ? (sw ? "Mapa podle hry" : "Mapa zatím nevybraná. Karta role a nákup se ukážou, až Commander vybere mapu a tým.")
+    <p class="evh-m">${!ev.strategy_id ? NOPICK
       : !sw && s && !s.nomap ? `<a href="${planHref(s)}">${sideOf(ev.strategy_id)}</a>${v ? ` · zóna ${esc(v.name)}` : ""}` : sideOf(ev.strategy_id)}${ev.leader ? ` · vede <b>${esc(ev.leader.name)}</b>` : ""}</p></header>`;
 }
 // every open operation as a card (specs/akce-v2 A2): when, how long to go, doctrine, map, how full, my place; the card
@@ -417,7 +417,7 @@ function opCards() {
     return `<a class="opc${on ? " on" : ""}" href="#/akce/${ev.id}"${on ? ' aria-current="true"' : ""}>
       <span class="opc-k">${esc(docName(ev.doctrine))}</span>
       <b class="opc-t">${esc(fmtWhen(ev.starts_at))}</b><span class="tminus" data-t0="${esc(ev.starts_at)}">${tminus(ev.starts_at)}</span>
-      <span class="opc-m">${sideOf(ev.strategy_id, ev.doctrine === "swarm" ? "mapa podle hry" : "mapa zatím nevybraná")}</span>
+      <span class="opc-m">${sideOf(ev.strategy_id, NOPICK)}</span>
       <span class="opc-g"><i style="width:${total ? Math.min(100, Math.round(100 * n / total)) : 0}%"></i></span><span class="opc-f"><b>${n}</b> / ${total} míst</span>
       <span class="opc-me">${mine ? `Máš místo: ${esc(mine.slot_label)}` : said ? `Odpověď: ${esc((RSVP.find(x => x[0] === said) || [, said])[1])}` : "Zatím bez odpovědi"}</span></a>`; }).join("")}</div></section>`;
 }
@@ -1053,7 +1053,7 @@ function homeEvent() {
   const mine = state.claims.find(c => c.user_id === state.me.user_id);
   const said = (state.rsvps || []).find(r => r.user_id === state.me.user_id);
   const status = mine ? `Máš místo: ${esc(mine.slot_label)}` : said ? `Tvoje odpověď: ${esc((RSVP.find(x => x[0] === said.status) || [, said.status])[1])}` : "Zatím bez odpovědi a bez místa: otevři sestavu";
-  return `<a class="cont evc" href="#/akce/${ev.id}"><span class="big">Operace</span><span>${esc(fmtWhen(ev.starts_at))} · ${sideOf(ev.strategy_id, ev.doctrine === "swarm" ? "mapa podle hry" : "mapa zatím nevybraná")} · ${esc(docName(ev.doctrine))}<small>${status}</small></span></a>${more}${next}`;
+  return `<a class="cont evc" href="#/akce/${ev.id}"><span class="big">Operace</span><span>${esc(fmtWhen(ev.starts_at))} · ${sideOf(ev.strategy_id, NOPICK)} · ${esc(docName(ev.doctrine))}<small>${status}</small></span></a>${more}${next}`;
 }
 
 // specs/mapy-v2 (Petr 2026-10-22): the 3 maps; a map's page picks doctrine, team and zone variant, then shows the
@@ -1558,6 +1558,8 @@ const teamBadge = id => { const t = teamOf(id); return t ? `<span class="team" s
 const mapCell = id => { if (!id) return '<span class="dash">-</span>'; const x = S(id); return x ? `${esc(x.map)} ${teamMark(x.team)}` : esc(id); };
 const teamMark = id => { const t = teamOf(id); return t ? `<span class="tmark" style="--tc:${esc(t.hex)}" title="${esc(t.name)}" role="img" aria-label="${esc(t.name)}"></span>` : ""; };
 // an event's map and team as HTML; null = not picked yet, an id we do not know is shown as stored
+// not picked yet: dashed ghost chips like the empty Sidearm slot (DESIGN: dashed = not fixed); a screen reader hears it said
+const NOPICK = '<span class="ghost-pick" role="img" aria-label="Mapa a tým zatím nevybrané"><span>Mapa</span><span>Tým</span></span>';
 const sideOf = (id, none = "mapa neuvedena") => { if (!id) return none; const s = S(id); return s ? `${esc(s.map)} ${teamBadge(s.team)}` : esc(id); };
 // map and team -> their plan; null while either is "zatím nevím" (one strategy_id field, decision 1)
 const compose = (map, team) => D.strategies.find(s => s.map === map && s.team === team) || null;
