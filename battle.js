@@ -1,8 +1,10 @@
 // The battle behind every page, v2 "vic jako wardogs hra" (Petr 2026-10-22, specs/pozadi-bitva B9-B15): three HQs,
 // a Contact Zone in the middle with a yellow Hot Zone always drifting inside it; trucks, cargo helicopters and APCs carry
 // supplies and infantry from the HQs to the teams' FOBs, attack helicopters, Kodiaks, tanks, artillery, buggies and ATVs
-// fight; a fuelled drill pulls the Hot Zone to its FOB; FOBs, convoys and units get attacked; the camera cuts between
-// places. Decoration only: at most 30 frames a second, DPR up to 1.5, fewer units on a phone, paused in a hidden tab,
+// fight; a fuelled drill pulls the Hot Zone to its FOB; FOBs, convoys and units get attacked. v3 (Petr 2026-10-22
+// odpoledne, B16-B19): the battle comes in waves (calm, artillery preparation, clash on the Hot Zone, retreat) and the
+// camera stays on the whole map, cutting close only to a mass fight or a FOB just destroyed, in slow motion.
+// Decoration only: at most 30 frames a second, DPR up to 1.5, fewer units on a phone, paused in a hidden tab,
 // one still frame for reduced motion.
 (() => {
   const cv = document.getElementById("battle");
@@ -28,7 +30,9 @@
     atv: { sp: 85, hp: 1, rg: 130, cd: 0.8, hit: 0.2, dmg: 1 },
   };
   const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const phone = innerWidth < 720, CAP = phone ? 8 : 16;
+  const phone = innerWidth < 720, CAP = phone ? 8 : 16, MASS = phone ? 5 : 8;
+  // the battle's waves (B18): name, shortest and longest seconds
+  const RHYTHM = [["klid", 16, 24], ["priprava", 9, 14], ["stret", 20, 30], ["ustup", 8, 12]];
   const ROSTER = [...(phone ? ["truck"] : ["truck", "truck"]), "cargoheli", "apc", "heli", "kodiak", "tank", "arty", "buggy", "atv"];
   const ctx = cv.getContext("2d");
   const rnd = (a, b) => a + Math.random() * (b - a);
@@ -41,10 +45,15 @@
     tm.gun = P(tm.home.x + (tm.entry.x - tm.home.x) * 0.3, tm.home.y + (tm.entry.y - tm.home.y) * 0.3); });
 
   const st = { frames: 0, fps: 0, kills: 0, respawns: 0, twists: 0, cuts: 0, owners: [], deliveries: { supplies: 0, infantry: 0 },
-    fobsBuilt: 0, drillPulls: 0, fobHits: 0, convoyHits: 0, hzTravel: 0, hzOut: 0 };
-  let t = 0, nextCut = rnd(6, 10), owner = -1, control = 0;
+    fobsBuilt: 0, drillPulls: 0, fobHits: 0, convoyHits: 0, hzTravel: 0, hzOut: 0,
+    camWide: 0, camClose: 0, closeups: [], phases: ["klid"], shotsWin: [] };
+  let t = 0, owner = -1, control = 0, phase = 0, phaseStart = 0, phaseEnd = rnd(10, 14), nextLook = 0, wideSince = 0, lastClose = -99;
   let ents = [], tracers = [], blasts = [], shells = [], banner = null, flash = 0;
-  let cam = { x: W / 2, y: H / 2, z: 1, dz: 0, label: "CAM 1 · CONTACT ZONE" };
+  let cam = { x: W / 2, y: H / 2, z: 1, dz: 0.002, label: "CAM 1 · CELÁ MAPA", close: false, until: 0 };
+  const PH = () => RHYTHM[phase][0];
+  // who joins the waves; logistics, helicopters and raiding buggies keep going all the time (the map never stands still)
+  const fighter = e => ["inf", "kodiak", "tank", "atv"].includes(e.k) || (e.k === "buggy" && e.mode !== "raid");
+  const shot = () => { const w = Math.floor(t / 10); while (st.shotsWin.length <= w) st.shotsWin.push(0); st.shotsWin[w]++; };
   const hz = { x: CZ.x, y: CZ.y, tx: CZ.x, ty: CZ.y, until: 0, drill: null };
 
   // two FOB places per team on its side of the Contact Zone; built from supplies, a drill once standing
@@ -53,7 +62,7 @@
   const say = text => { banner = { text, life: 4 }; st.twists++; };
 
   const gate = tm => P(tm.home.x + (tm.entry.x - tm.home.x) * 0.12, tm.home.y + (tm.entry.y - tm.home.y) * 0.12);
-  const spawn = (e, at) => Object.assign(e, { x: at.x + rnd(-18, 18), y: at.y + rnd(-18, 18), hp: K[e.k].hp, cd: rnd(0, 1), dead: 0, mode: "go", wp: [], cargo: null, wait: rnd(0, 3), ttl: 0 });
+  const spawn = (e, at) => Object.assign(e, { x: at.x + rnd(-18, 18), y: at.y + rnd(-18, 18), hp: K[e.k].hp, cd: rnd(0, 1), dead: 0, mode: "go", wp: [], cargo: null, wait: rnd(0, 3), ttl: 0, stage: null });
   const add = (ti, k, at) => { const e = spawn({ t: ti, k }, at || gate(TEAMS[ti])); ents.push(e); return e; };
   TEAMS.forEach((tm, i) => { ROSTER.forEach(k => add(i, k)); for (let n = 0; n < (phone ? 3 : 6); n++) add(i, "inf"); });
 
@@ -87,6 +96,11 @@
       if (e.mode !== "raid" && Math.random() < 0.5) { e.mode = "raid"; e.ttl = 35; e.wp = [foe().road]; return; }
       e.mode = "hz";
     }
+    if (PH() !== "stret" && fighter(e)) {  // B18: outside the clash the fighters gather at their own way into the Contact Zone
+      e.stage = e.stage || P(toward(tm, 0.78).x + rnd(-45, 45), toward(tm, 0.78).y + rnd(-45, 45));
+      if (dist(e, e.stage) > 25) e.wp = inCZ(e) ? [e.stage] : road(e, e.stage); else e.wait = rnd(1, 2);
+      return;
+    }
     if (k === "tank") { const f = fobs.filter(f => f.t !== e.t && !f.down && f.build > 0).sort((a, b) => dist(a, e) - dist(b, e))[0];
       e.wp = inCZ(e) ? [f ? P(f.x + rnd(-60, 60), f.y + rnd(-60, 60)) : hzp()] : road(e, f ? P(f.x, f.y) : hzp()); return; }
     e.wp = inCZ(e) ? [hzp()] : road(e, hzp());  // infantry, Kodiak, ATV: into the fight for the Hot Zone
@@ -107,13 +121,20 @@
   const hitFob = (f, d) => {
     st.fobHits++; f.hp -= d;
     if (f.hp <= 0 && !f.down) { f.down = 20; f.build = 0; f.on = false; f.fuel = 0; f.hp = FOB_HP; blasts.push({ x: f.x, y: f.y, r: 0, max: 80, life: 1 });
-      if (hz.drill === f) hz.drill = null; say(`FOB ZNIČENA · ${TEAMS[f.t].name}`); }
+      if (hz.drill === f) hz.drill = null; say(`FOB ZNIČENA · ${TEAMS[f.t].name}`);
+      if (!cam.close && t - lastClose >= 15) closeUp({ x: f.x, y: f.y, n: 0, teams: 0 }, "fob"); }
   };
 
   const step = dt => {
     t += dt;
-    if (t >= nextCut) cut();
-    cam.z = Math.min(1.9, cam.z + cam.dz * dt);
+    if (t >= phaseEnd) nextPhase();
+    if (cam.close) { st.camClose += dt; if (t >= cam.until) wide(); }
+    else if ((st.camWide += dt) && t >= nextLook) {  // the clash builds up on the whole map first, then a close-up
+      nextLook = t + 1;
+      const m = PH() === "stret" && t - phaseStart >= 6 && t - wideSince >= 8 && t - lastClose >= 15 && massFight();
+      if (m) closeUp(m, "stret");
+    }
+    cam.z = Math.min(2.6, cam.z + cam.dz * dt);
     flash = Math.max(0, flash - dt);
     if (banner && (banner.life -= dt) <= 0) banner = null;
     // FOBs: rebuild after a loss, grow while our people stand by, a fuelled drill switches on and pulls the Hot Zone
@@ -141,9 +162,9 @@
       if (e.ttl && (e.ttl -= dt) <= 0) { e.ttl = 0; e.wp = []; }
       if (e.wait > 0) e.wait -= dt;
       else if (!e.wp.length) plan(e);
-      else { const p = e.wp[0], d = dist(e, p), sp = k.sp * (e.k === "inf" || !foeNear(e, live) ? 1 : 0.6) * dt;
+      else { const p = e.wp[0], d = dist(e, p), sp = k.sp * (e.k === "inf" || !foeNear(e, live) ? 1 : 0.6) * (PH() === "stret" && fighter(e) ? 1.25 : 1) * dt;
         if (d <= sp) { e.x = p.x; e.y = p.y; e.wp.shift(); } else { e.x += (p.x - e.x) / d * sp; e.y += (p.y - e.y) / d * sp; } }
-      if (e.k === "arty" && !e.wp.length && dist(e, TEAMS[e.t].gun) < 12 && (e.cd -= dt) <= 0) { e.cd = rnd(12, 16); barrage(e); continue; }
+      if (e.k === "arty" && !e.wp.length && dist(e, TEAMS[e.t].gun) < 12 && (e.cd -= dt) <= 0) { e.cd = PH() === "priprava" ? rnd(4, 6) : rnd(12, 16); barrage(e); continue; }
       if (!k.rg || (e.cd -= dt) > 0) continue;
       // fire at the nearest enemy in range, else at an enemy FOB
       let tg = null, best = k.rg ** 2;
@@ -152,7 +173,7 @@
       if (!tg && !fob) continue;
       const at = tg || fob;
       e.cd = k.cd * rnd(0.8, 1.3);
-      tracers.push({ x1: e.x, y1: e.y, x2: at.x + rnd(-7, 7), y2: at.y + rnd(-7, 7), col: TEAMS[e.t].col, life: 0.14 });
+      tracers.push({ x1: e.x, y1: e.y, x2: at.x + rnd(-7, 7), y2: at.y + rnd(-7, 7), col: TEAMS[e.t].col, life: 0.14 }); shot();
       if (Math.random() > k.hit) continue;
       if (fob) { hitFob(fob, k.dmg); continue; }
       if (K[tg.k].carry && !inCZ(tg)) st.convoyHits++;
@@ -181,17 +202,36 @@
     for (let i = 0; i < 3; i++) shells.push({ t: e.t, x: aim.x + rnd(-40, 40), y: aim.y + rnd(-40, 40), eta: 1.6 + i * 0.4 });
     if (fs.length && Math.random() < 0.3) say(`DĚLOSTŘELECTVO NA FOB · ${TEAMS[aim.t].name}`);
   };
-  // camera: the whole map, the Contact Zone, the Hot Zone, an HQ, a supply road, a FOB, a fresh blast
-  const cut = () => {
-    const spots = [[W / 2, H / 2, 1, "CELÁ MAPA"], [CZ.x, CZ.y, 1.2, "CONTACT ZONE"], [hz.x, hz.y, rnd(1.5, 1.8), "HOT ZONE"],
-      ...TEAMS.map(tm => [tm.home.x, tm.home.y, 1.6, `HQ ${tm.name}`]), ...TEAMS.map(tm => [tm.road.x, tm.road.y, 1.5, `TRASA ${tm.name}`]),
-      ...fobs.filter(f => f.build > 0 && !f.down).map(f => [f.x, f.y, 1.7, `FOB ${TEAMS[f.t].name}`])];
-    if (blasts.length) { const b = blasts[blasts.length - 1]; spots.push([b.x, b.y, 1.7, "ZÁSAH"]); }
-    const [x, y, z, name] = pick(spots);
-    st.cuts++;
-    cam = { x, y, z, dz: rnd(0.004, 0.012), label: `CAM ${1 + (st.cuts % 6)} · ${name}` };
-    flash = 0.18;
-    nextCut = t + rnd(8, 13);
+  // the waves (B18): the clash sends every fighter at the Hot Zone, the retreat calls them back to their gathering spot
+  const nextPhase = () => {
+    phase = (phase + 1) % RHYTHM.length;
+    phaseStart = t; phaseEnd = t + rnd(RHYTHM[phase][1], RHYTHM[phase][2]);
+    st.phases.push(PH());
+    if (PH() === "stret") say("ÚTOK NA HOT ZONE");
+    if (PH() === "stret" || PH() === "ustup") for (const e of ents) if (fighter(e) && !e.dead) { e.wp = []; e.wait = rnd(0, PH() === "stret" ? 3 : 1); }
+  };
+  // the biggest knot of fighting: fighters of two or three teams within 150 of each other (B17)
+  const massFight = () => {
+    const live = ents.filter(e => !e.dead && !e.gone && !K[e.k].carry);
+    let best = null;
+    for (const a of live) {
+      const near = live.filter(b => dist(a, b) < 150), teams = new Set(near.map(b => b.t)).size;
+      if (teams >= 2 && near.length >= MASS && (!best || near.length > best.n))
+        best = { n: near.length, teams, x: near.reduce((s, b) => s + b.x, 0) / near.length, y: near.reduce((s, b) => s + b.y, 0) / near.length };
+    }
+    return best;
+  };
+  const sector = (x, y) => "ABCDEFGH"[Math.max(0, Math.min(7, Math.floor(x / 200)))] + (Math.max(0, Math.min(4, Math.floor(y / 200))) + 1);
+  // camera (B16): the whole map, close only to a mass fight or a FOB just destroyed, then back
+  const wide = () => {
+    st.cuts++; wideSince = t; flash = 0.1;
+    cam = { x: W / 2, y: H / 2, z: 1, dz: rnd(0, 0.003), label: `CAM ${1 + (st.cuts % 6)} · CELÁ MAPA`, close: false, until: 0 };
+  };
+  const closeUp = (m, why) => {
+    const name = why === "fob" ? "FOB ZNIČENA" : `STŘET · ${sector(m.x, m.y)}`;
+    st.cuts++; lastClose = t; flash = 0.18;
+    st.closeups.push({ n: m.n, teams: m.teams, why, label: name });
+    cam = { x: m.x, y: m.y, z: rnd(2, 2.4), dz: rnd(0.006, 0.012), label: `CAM ${1 + (st.cuts % 6)} · ${name}`, close: true, until: t + rnd(5, 8) };
   };
 
   // drawing: world 1600 x 1000 covers the screen, the camera on top; a phone held upright gets the world turned a
@@ -301,7 +341,7 @@
     const dt = last ? Math.min(0.1, (now - last) / 1000) : 0;
     last = now;
     if (dirty) { size(); dirty = false; }
-    step(dt); draw(); count++;
+    step(dt * (cam.close ? 0.6 : 1)); draw(); count++;  // slow motion in a close-up (B17)
     if (now - tick >= 1000) { st.fps = count * 1000 / (now - tick); tick = now; count = 0; }
   };
   const start = () => { if (!raf && !still && !document.hidden) { last = 0; tick = performance.now(); count = 0; raf = requestAnimationFrame(loop); } };
@@ -313,7 +353,7 @@
   if (still) draw(); else start();
   window.__battle = {
     advance,
-    stats: () => ({ ...st, owners: [...st.owners], deliveries: { ...st.deliveries }, static: still, hqs: TEAMS.length, cz: { ...CZ }, hz: { x: hz.x, y: hz.y, r: HZR },
+    stats: () => ({ ...st, camLabel: cam.label, owners: [...st.owners], deliveries: { ...st.deliveries }, static: still, hqs: TEAMS.length, cz: { ...CZ }, hz: { x: hz.x, y: hz.y, r: HZR },
       kinds: [...new Set(ents.map(e => e.k))], teams: Object.fromEntries(TEAMS.map((tm, i) => [tm.id, ents.filter(e => e.t === i).length])) }),
   };
 })();
