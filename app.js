@@ -1237,10 +1237,6 @@ function shopList(s, r, skip = null) {
 // primary brings its best unlocked magazine and the rounds of its calibre (AP once unlocked, if the clan's Munice ladder
 // goes there); the card shows it like the game does, the ladders below show what I have vs what I should have
 const MAGS = 3;  // ponytail: spare magazines per primary as the S1 screenshots had them; per class when Petr wants
-// the sidearm (Petr 2026-10-22): 2 spare magazines and FMJ for both; a revolver (Judge, no magazines) 12 rounds.
-// ponytail: counts are a proposal for Petr; into zebricky.toml when he wants them per class
-const SIDE_MAGS = 2, SIDE_ROUNDS = 12;
-const bestMag = w => w && w.mags && w.mags[w.mags.map(m => !m.unlock || owned(m.item)).lastIndexOf(true)];
 const mineIdx = lad => lad.steps.map(st => !st.unlock || owned(st.item)).lastIndexOf(true);
 const pieceCost = (x, qty) => x.price == null ? 0 : Math.round(x.price * qty / (x.per || 1));
 // the Munice ladder of a class follows my primary: same counts and reasons, rounds of my weapon's calibre
@@ -1254,12 +1250,10 @@ const GRADE = { ok: "Cíl klanu", mid: "Lze lépe", low: "Slabé" };
 function myKit(c) {
   const lads = c.ladders || [], entry = lad => { const i = mineIdx(lad); return { lad, st: lad.steps[i] || null, i, g: grade(lad, i), top: lad.steps.at(-1) }; };
   const slots = Object.fromEntries(Object.keys(SLOT_LABEL).map(k => [k, (l => l && entry(l))(lads.find(l => l.slot === k))]));
-  const gun = slots.slot1 && slots.slot1.st, side = slots.slot2 && slots.slot2.st, store = [];
-  const mag = bestMag(gun), sideMag = bestMag(side), sideFmj = side && side.ammo && side.ammo[0];
+  const gun = slots.slot1 && slots.slot1.st, store = [];
+  const mag = gun && gun.mags && gun.mags[gun.mags.map(m => !m.unlock || owned(m.item)).lastIndexOf(true)];
   if (mag) store.push({ st: { ...mag, qty: MAGS, cost: pieceCost(mag, MAGS) }, g: null });
-  if (sideMag) store.push({ st: { ...sideMag, qty: SIDE_MAGS, cost: pieceCost(sideMag, SIDE_MAGS) }, g: null });
   for (const lad of lads.filter(l => l.slot === "storage")) store.push(entry(lad.group === "Munice" ? municeFor(lad, gun) : lad));
-  if (sideFmj) { const qty = sideMag ? SIDE_MAGS * sideMag.capacity : SIDE_ROUNDS; store.push({ st: { ...sideFmj, qty, cost: pieceCost(sideFmj, qty) }, g: null }); }
   const all = [...Object.values(slots).filter(Boolean), ...store];
   const have = all.filter(e => e.st);
   // a verdict only on real data: without the Tracker every slot would look red for nothing
