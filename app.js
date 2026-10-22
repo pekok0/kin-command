@@ -207,13 +207,17 @@ function rankCard(m, prog, merits) {
 // the member's tasks (specs/ukoly-clenu): Tracker and the first operation War Room sees itself, the rest the member
 // ticks on their own profile
 const taskDone = (x, done, trackerOk, prog) => x.check === "tracker" ? trackerOk : x.check === "ops" ? !!prog && prog.ops >= 1 : done.has(x.id);
-function tasksCard(m, done, trackerOk, prog) {
+function tasksCard(m, done, trackerOk, prog, owned) {
   // nobody ticks by hand: the database's verifier writes what the sources say (Petr 2026-10-22, specs/ukoly-clenu U8)
   const ok = D.ukoly.map(x => taskDone(x, done, trackerOk, prog));
+  // panprstenu2 2026-10-22: clan and Steam group were right, but the Tracker did not tie the profile to his Discord (023)
+  const note = owned ? "Odškrtne se samo, jakmile to uvidíme u zdroje."
+    : trackerOk ? "Klan na Trackeru a Steam skupinu zatím nepočítáme: Tracker k tomuto profilu nemá propojený Discord. Na wardogstracker.gg: vpravo nahoře tvé jméno → Profile → Settings → Linked accounts → Discord → Link. Do hodiny to tu uvidíš u zdroje."
+    : "Odškrtne se samo, jakmile to uvidíme u zdroje. Steam skupinu a klan na Trackeru poznáme, jen když máš na Trackeru propojený i Discord.";
   return `<section class="block ukoly" id="ukoly"><h2>Úkoly <small>${ok.filter(Boolean).length} z ${ok.length}</small></h2><ul class="tasks">
     ${D.ukoly.map((x, i) => `<li data-task="${esc(x.id)}"${ok[i] ? ' class="ok"' : ""}><span class="tk-mark" aria-hidden="true"></span>
       <a href="${esc(x.url || x.href)}"${x.url ? ' target="_blank" rel="noopener"' : ""}>${esc(x.name)}</a></li>`).join("")}</ul>
-    <p class="note">Odškrtne se samo, jakmile to uvidíme u zdroje. Steam skupinu a klan na Trackeru poznáme, jen když máš na Trackeru propojený i Discord. <a href="#/ukoly">Kdo co má hotové</a></p></section>`;
+    <p class="note">${note} <a href="#/ukoly">Kdo co má hotové</a></p></section>`;
 }
 // everyone's tasks, the most missing first (specs/ukoly-clenu U5)
 function viewTasks(ms, done, trk, prog) {
@@ -1649,7 +1653,7 @@ async function loadHist(p) {
         sb.rpc("progress", { uid: m.user_id }),  // counts only (019), others' attendance stays private
         sb.from("merits").select("id, text, created_at").eq("user_id", m.user_id).order("created_at"),
         sb.from("tasks_done").select("task").eq("user_id", m.user_id),
-        sb.from("tracker").select("status").eq("user_id", m.user_id).maybeSingle(),
+        sb.from("tracker").select("status, owned").eq("user_id", m.user_id).maybeSingle(),
       ]) : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: null }];
       if (cl.error) throw cl.error;
       if (at.error) throw at.error;
@@ -1660,7 +1664,7 @@ async function loadHist(p) {
       if (tr.error) throw tr.error;
       // no attendance record = played (older events, or the viewer may not see it)
       const absent = new Set(at.data.filter(a => !a.attended).map(a => a.event_id));
-      html = m ? viewPlayer(m, cl.data.filter(r => !absent.has(r.events.id)), season, new Set(un.data.map(u => u.item)), Array.isArray(pr.data) ? pr.data[0] : null, me.data || [], new Set(td.data.map(r => r.task)), !!tr.data && tr.data.status === "ok") : '<p class="note">Hráč nenalezen.</p>';
+      html = m ? viewPlayer(m, cl.data.filter(r => !absent.has(r.events.id)), season, new Set(un.data.map(u => u.item)), Array.isArray(pr.data) ? pr.data[0] : null, me.data || [], new Set(td.data.map(r => r.task)), !!tr.data && tr.data.status === "ok", !!tr.data && tr.data.owned) : '<p class="note">Hráč nenalezen.</p>';
     }
     const t = el(); if (t) t.innerHTML = html;
   } catch (e) {
@@ -1738,7 +1742,7 @@ function unlockSection(m, season, have) {
     <ul class="cls">${rows.map(x => `<li><a href="${classHref(x.q, x.c)}"><b>${esc(x.c.name)}</b><span>${esc(x.st.item)}${x.top ? " · cíl" : ""}</span></a></li>`).join("")}</ul></section>`;
 }
 
-function viewPlayer(m, rows, season, have, prog, merits = [], done = new Set(), trackerOk = false) {
+function viewPlayer(m, rows, season, have, prog, merits = [], done = new Set(), trackerOk = false, owned = false) {
   const stats = list => {
     const roles = {};
     for (const r of list) { const role = r.slot_label; roles[role] = (roles[role] || 0) + 1; }
@@ -1750,7 +1754,7 @@ function viewPlayer(m, rows, season, have, prog, merits = [], done = new Set(), 
   const sorted = [...rows].sort((a, b) => b.events.starts_at.localeCompare(a.events.starts_at));
   return `<p class="crumb"><a href="#/akce">Akce</a> / ${esc(m.name)}</p>
     <header class="unit-head"><img class="pavatar" src="${esc(m.avatar_url)}" alt=""><div><h1>${esc(m.name)}</h1><p>Člen KIN</p></div></header>
-    ${m.active ? rankCard(m, prog, merits) + tasksCard(m, done, trackerOk, prog) : ""}
+    ${m.active ? rankCard(m, prog, merits) + tasksCard(m, done, trackerOk, prog, owned) : ""}
     <section class="block"><h2>Celkem</h2>${stats(rows)}</section>
     ${unlockSection(m, season, have)}
     ${bySeason(sorted, r => r.events.starts_at).map(({ s, rows: xs }) => `<section class="block"><h2>${esc(seasonName(s))}</h2>${stats(xs)}
