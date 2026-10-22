@@ -61,7 +61,7 @@ async function onAuth(session) {
     try { back = sessionStorage.getItem(BACK); sessionStorage.removeItem(BACK); } catch { /* storage blocked */ }
     if (back && back !== location.hash) location.hash = back;
   }
-  const { data, error } = await sb.from("members").select("user_id, discord_id, name, avatar_url, is_commander, is_officer")
+  const { data, error } = await sb.from("members").select("user_id, discord_id, name, avatar_url, is_commander, is_officer, rank")
     .eq("user_id", session.user.id).maybeSingle();
   if (error) throw error;
   if (!data) { state.error = "Nejsi ověřený člen KIN. Přihlas se znovu."; await sb.auth.signOut(); return; }
@@ -183,15 +183,45 @@ function subscribe() {
 }
 
 // sq = the SWARM squad of the row ({ led }), else undefined: only squads have the SL badge (specs/swarm-squady)
+// ranks (Petr 2026-10-22, specs/hodnosti, 019): the Discord role decides, the database enforces it
+const RANKS = [["rekrut", "Rekrut", "zápis na akce"], ["operator", "Operátor", "SL v kterékoli doktríně, tréninky a kurzy"],
+  ["veteran", "Veterán", "zakládá a vede operace"], ["velitel", "Velitel", "vede klan s Commanderem"]];
+const rankIdx = r => Math.max(0, RANKS.findIndex(x => x[0] === r));
+const rankAt = (m, r) => !!m && rankIdx(m.rank) >= rankIdx(r);
+// what the next rank takes; Veteran also merits for the clan, which the Commander judges
+const NEXT = { rekrut: [["Odehrané akce", "ops", 5]], operator: [["Odehrané akce", "ops", 10], ["Tréninky a kurzy", "trainings", 5]] };
+function rankCard(m, prog, merits) {
+  const i = rankIdx(m.rank), cur = RANKS[i], nxt = RANKS[i + 1], need = NEXT[m.rank] || [], p = prog || { ops: 0, trainings: 0 };
+  const done = need.length && need.every(([, k, goal]) => p[k] >= goal);
+  const bars = need.map(([l, k, goal]) => `<div class="rk-bar${p[k] >= goal ? " ok" : ""}"><span>${l}</span><b>${p[k]} / ${goal}</b><i><u style="width:${Math.round(100 * Math.min(p[k], goal) / goal)}%"></u></i></div>`).join("");
+  const cmd = state.me.is_commander;
+  return `<section class="block rank"><h2>Hodnost</h2>
+    <div class="rk-head"><span class="rk-badge rk-${cur[0]}">${cur[1]}</span><span>${cur[2]}</span></div>
+    ${need.length ? `<h3>Do hodnosti ${nxt[1]}</h3>${bars}${m.rank === "operator" ? `<div class="rk-bar${merits.length ? " ok" : ""}"><span>Zásluhy pro klan</span><b>${merits.length}</b><small>posoudí Commander</small></div>` : ""}
+      <p class="rk-then">${nxt[1]}: ${nxt[2]}</p>${done ? `<p class="need ok">Splněno${cmd ? ": přiděl roli na Discordu" : ", Commander tě povýší"}.</p>` : ""}` : ""}
+    ${merits.length || cmd ? `<h3>Zásluhy</h3>${merits.length ? `<ul class="merits">${merits.map(x => `<li><span>${esc(x.text)}</span><small>${esc(fmtWhen(x.created_at))}</small>${cmd ? `<button type="button" class="kick" data-merit-del="${esc(x.id)}" aria-label="Smazat zásluhu">${cross()}</button>` : ""}</li>`).join("")}</ul>` : ""}
+      ${cmd ? `<form class="evf merit" data-form="merit" data-uid="${esc(m.user_id)}"><label class="wide">Nová zásluha <input name="text" maxlength="200" required></label><button type="submit" class="act">Zapsat</button></form>` : ""}` : ""}
+    <details class="rk-all"><summary>Všechny hodnosti</summary><table class="data"><thead><tr><th>Hodnost</th><th>Podmínka</th><th>Smí</th></tr></thead><tbody>
+      ${RANKS.map(([k, l, can]) => `<tr${k === cur[0] ? ' class="on"' : ""}><td><b>${l}</b></td><td>${{ rekrut: "povýšení z Hosta", operator: "5 akcí", veteran: "10 akcí, 5 tréninků, zásluhy", velitel: "rozhodne Commander" }[k]}</td><td>${can}</td></tr>`).join("")}</tbody></table></details></section>`;
+}
+async function addMerit(f) {
+  const { error } = await sb.from("merits").insert({ user_id: f.dataset.uid, text: f.elements.text.value.trim() });
+  if (error) { console.error(error); f.insertAdjacentHTML("beforeend", '<p class="err">Zásluhu se nepodařilo zapsat.</p>'); return; }
+  render();
+}
+
 function slotRow(x, c, sq) {
   const mine = c && c.user_id === state.me.user_id;
   const who = c ? `<img src="${esc(c.members.avatar_url)}" alt="" loading="lazy"><span class="nm">${esc(c.members.name)}</span>${sq && c.lead ? '<span class="slb" title="Squad leader">SL</span>' : ""}` : '<span class="free">volné</span>';
   const act = mine ? `data-unclaim="${esc(c.user_id)}" title="Odhlásit se"` : c ? "disabled" : `data-claim="${esc(x.key)}"`;
   const kick = c && !mine && state.me.is_commander
     ? `<button type="button" class="kick" data-unclaim="${esc(c.user_id)}" aria-label="Odhlásit ${esc(c.members.name)}">${cross()}</button>` : "";
-  // the badge is taken and handed over on one's own row only, one per squad (decision 4: not even the Commander assigns it)
-  const lead = !sq || !mine ? "" : c.lead ? '<button type="button" class="act lead" data-lead="0">Předat SL</button>'
-    : sq.led ? "" : '<button type="button" class="act lead" data-lead="1">Povedu squad</button>';
+  // the badge, one per squad (011): Operator and up on their own row, the Commander on anyone's (specs/hodnosti H2)
+  const cmd = state.me.is_commander, can = cmd || rankAt(state.me, "operator");
+  const lead = !sq || !c ? "" : mine ? (c.lead ? '<button type="button" class="act lead" data-lead="0">Předat SL</button>'
+      : sq.led || !can ? "" : '<button type="button" class="act lead" data-lead="1">Povedu squad</button>')
+    : !cmd ? "" : c.lead ? `<button type="button" class="act lead" data-leadfor="${esc(c.user_id)}:0">Sundat SL</button>`
+    : sq.led ? "" : `<button type="button" class="act lead" data-leadfor="${esc(c.user_id)}:1">Dát SL</button>`;
   return `<li data-key="${esc(x.key)}"${mine ? ' class="is-me"' : ""}><button type="button" class="rslot" ${act}><span class="lbl">${x.role ? `<span class="rid">${esc(x.role)}</span>` : ""}${esc(x.label)}</span>${who}</button>${lead}${kick}</li>`;
 }
 
@@ -578,6 +608,12 @@ function setFortress(gid, what, arg) {
     if (!Object.keys(c).length) delete r.groups[gid]; });
 }
 
+// the Commander puts the badge on someone else (019 claims_lead_commander; only the badge on another's row)
+async function giveLead(uid, on) {
+  const { data, error } = await sb.from("claims").update({ lead: on }).eq("event_id", state.event.id).eq("user_id", uid).select("slot_key");
+  state.flash = error ? (error.code === "23505" ? "Squad už SL má." : saveErr(error)) : !data.length ? "SL se nepodařilo uložit: akce už není otevřená." : null;
+  await loadEvent();
+}
 // the SL badge on my own row (S4-S5); one per squad: the unique index claims_one_lead refuses a second (23505)
 async function takeLead(on) {
   const uid = state.me.user_id;
@@ -602,9 +638,9 @@ const pickFields = (s, ev) => `<label>Mapa <select name="map"><option value="">z
 // one form in Akce for both doctrines (rozhodnuti 8); founding ahead, the map and team are not known yet (specs/akce-mapa-tym)
 let novaKind = "operace";
 function newPanel() {
-  const cmd = state.me.is_commander;
-  if (!cmd && !state.me.is_officer) return "";
-  const kinds = [["operace", "Operace", "velká akce klanu"], ["trenink", "Trénink", "pro všechny"], ["kurz", "Kurz", "omezený počet míst"]].filter(([k]) => k !== "operace" || cmd);
+  const cmd = state.me.is_commander, op = cmd || rankAt(state.me, "veteran"), tr = cmd || state.me.is_officer || rankAt(state.me, "operator");
+  const kinds = [["operace", "Operace", "velká akce klanu"], ["trenink", "Trénink", "pro všechny"], ["kurz", "Kurz", "omezený počet míst"]].filter(([k]) => k === "operace" ? op : tr);
+  if (!kinds.length) return "";
   const k = kinds.some(x => x[0] === novaKind) ? novaKind : kinds[0][0];
   return `<section class="block nova" id="nova"><h2>Nová akce</h2><div class="vbar seg" role="group" aria-label="Typ nové akce">${kinds.map(([id, l, sub]) =>
     `<button type="button" data-nova="${id}" aria-pressed="${id === k}"><b>${l}</b><small>${sub}</small></button>`).join("")}</div>
@@ -674,7 +710,8 @@ function trainingRow(tr) {
   // T4: no "Prijdu" on a full course unless I already have a place; the capacity trigger refuses it anyway
   const full = tr.capacity && by.yes.length >= tr.capacity && mine !== "yes";
   const ctl = state.me.is_commander || tr.created_by === state.me.user_id ? `<details class="t${id}"><summary>Uzavřít nebo zrušit</summary>
-      <p class="note">Obojí ho z Akce odebere. Uzavři ten, který proběhl, zruš ten, který nebude.</p>
+      ${by.yes.length ? `<fieldset class="atts"><legend>Kdo byl</legend>${tr.rsvps.filter(r => r.status === "yes").map(r =>
+        `<label class="att"><input type="checkbox" name="tatt_${esc(r.user_id)}" checked>${esc(r.members.name)}</label>`).join("")}</fieldset>` : ""}
       <button type="button" class="act" data-tclose="${id}:closed">Proběhl, uzavřít</button> <button type="button" class="act" data-tclose="${id}:cancelled">Zrušit</button></details>` : "";
   return `<li class="tr"><p class="tr-k"><span class="ref">${esc(label(KINDS, tr.kind))}</span>${esc(label(TOPICS, tr.topic))}</p>
     <h3>${esc(tr.title)}</h3>
@@ -717,6 +754,12 @@ async function rsvpTraining(id, status) {
 
 // T5: the founder or the Commander (events_close, 012); no row back = not open any more, or not his
 async function closeTraining(id, status) {
+  // attendance first (019 runs_event: the founder or the Commander while open); counts for ranks (specs/hodnosti)
+  const att = status === "closed" ? [...document.querySelectorAll(`.t${id} input[name^="tatt_"]`)].map(x => ({ event_id: id, user_id: x.name.slice(5), attended: x.checked })) : [];
+  if (att.length) {
+    const { error: e1 } = await sb.from("attendance").upsert(att, { onConflict: "event_id,user_id" });
+    if (e1) { state.trFlash = saveErr(e1); await loadEvent(); return; }
+  }
   const { data, error } = await sb.from("events").update({ status: status === "closed" ? "closed" : "cancelled" })
     .eq("id", id).neq("kind", "operace").select("id");
   state.trFlash = error ? saveErr(error) : !data.length ? "Nepodařilo se uložit: trénink už není otevřený, nebo ho nevypsal ty." : null;
@@ -742,6 +785,7 @@ document.addEventListener("submit", async e => {
   if (btn.disabled) return;  // double click: the first submit is still saving
   btn.disabled = true;
   if (f.dataset.form === "training") { await createTraining(f); btn.disabled = false; await loadEvent(); return; }
+  if (f.dataset.form === "merit") { await addMerit(f); btn.disabled = false; return; }
   const v = Object.fromEntries(new FormData(f)), eventId = state.event && state.event.id;
   // OWASP 2026-10-19 Low: map and team only pick one of our plans, a tampered <option> cannot send its own strategy_id
   const pick = f.elements.map && compose(f.elements.map.value, f.elements.team.value), sid = pick ? pick.id : null;
@@ -1038,7 +1082,6 @@ function viewHome() {
       ${groups.length ? `<section class="hp-mod hp-links"><h2>Užitečné odkazy</h2>${groups.map(g => `<h3>${esc(g)}</h3><ul>${D.odkazy.filter(x => x.group === g).map(x =>
         `<li><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.name)}${out()}</a>${x.note ? `<small>${esc(x.note)}</small>` : ""}</li>`).join("")}</ul>`).join("")}</section>` : ""}
       <details class="hp-mod howto"${matchMedia("(max-width: 720px)").matches ? "" : " open"}><summary><h2 id="h-start">Jak to tu funguje${arrow()}</h2></summary><ol class="proc">
-      <li><span><b>Přihlas se přes Discord</b> (vpravo nahoře). Pustí tě to dál od role Rekrut na serveru Kinetic Solutions.</span></li>
       <li><span><a href="#/akce">Akce</a>: před akcí dej <b>Přijdu</b> a zaber si místo v <b>Sestavě</b>, ať hrajeme cokoli. Hned pod tím je tvůj nákup a odehrané akce po sezónách.</span></li>
       <li><span><a href="#/mapy">Mapy</a>: plán každé mapy podle doktríny, týmu a varianty zóny, s kartou každé role (co koupit, čím jedeš, co děláš v každé fázi).</span></li>
       <li><span><a href="#/vybava">Výbava</a>: tvůj loadout pro každou sub-classu: co koupit a kolik kusů, podle toho, co máš odemčené (WARDOGS Tracker). Kolik nás co umí, je v <a href="#/pokryti">Pokrytí</a>.</span></li>
@@ -1530,20 +1573,24 @@ async function loadHist(p) {
       if (at.error) throw at.error;
       html = ev ? viewEvent(ev, cl.data, new Set(at.data.filter(a => !a.attended).map(a => a.user_id))) : '<p class="note">Akce neexistuje.</p>';
     } else {
-      const { data: m, error } = await sb.from("members").select("user_id, discord_id, name, avatar_url, active").eq("discord_id", p[1]).maybeSingle();
+      const { data: m, error } = await sb.from("members").select("user_id, discord_id, name, avatar_url, active, rank").eq("discord_id", p[1]).maybeSingle();
       if (error) throw error;
       const season = currentSeason();
-      const [cl, at, un] = m ? await Promise.all([
+      const [cl, at, un, pr, me] = m ? await Promise.all([
         sb.from("claims").select("slot_label, events!inner(id, strategy_id, starts_at, status)").eq("user_id", m.user_id).eq("events.status", "closed"),
         sb.from("attendance").select("event_id, attended").eq("user_id", m.user_id),  // visible to the Commander and the player only
         season ? sb.from("unlocks").select("item").eq("user_id", m.user_id).eq("season", season.id) : { data: [] },
-      ]) : [{ data: [] }, { data: [] }, { data: [] }];
+        sb.rpc("progress", { uid: m.user_id }),  // counts only (019), others' attendance stays private
+        sb.from("merits").select("id, text, created_at").eq("user_id", m.user_id).order("created_at"),
+      ]) : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }];
       if (cl.error) throw cl.error;
       if (at.error) throw at.error;
       if (un.error) throw un.error;
+      if (pr.error) throw pr.error;
+      if (me.error) throw me.error;
       // no attendance record = played (older events, or the viewer may not see it)
       const absent = new Set(at.data.filter(a => !a.attended).map(a => a.event_id));
-      html = m ? viewPlayer(m, cl.data.filter(r => !absent.has(r.events.id)), season, new Set(un.data.map(u => u.item))) : '<p class="note">Hráč nenalezen.</p>';
+      html = m ? viewPlayer(m, cl.data.filter(r => !absent.has(r.events.id)), season, new Set(un.data.map(u => u.item)), Array.isArray(pr.data) ? pr.data[0] : null, me.data || []) : '<p class="note">Hráč nenalezen.</p>';
     }
     const t = el(); if (t) t.innerHTML = html;
   } catch (e) {
@@ -1621,7 +1668,7 @@ function unlockSection(m, season, have) {
     <ul class="cls">${rows.map(x => `<li><a href="${classHref(x.q, x.c)}"><b>${esc(x.c.name)}</b><span>${esc(x.st.item)}${x.top ? " · cíl" : ""}</span></a></li>`).join("")}</ul></section>`;
 }
 
-function viewPlayer(m, rows, season, have) {
+function viewPlayer(m, rows, season, have, prog, merits = []) {
   const stats = list => {
     const roles = {};
     for (const r of list) { const role = r.slot_label; roles[role] = (roles[role] || 0) + 1; }
@@ -1633,6 +1680,7 @@ function viewPlayer(m, rows, season, have) {
   const sorted = [...rows].sort((a, b) => b.events.starts_at.localeCompare(a.events.starts_at));
   return `<p class="crumb"><a href="#/akce">Akce</a> / ${esc(m.name)}</p>
     <header class="unit-head"><img class="pavatar" src="${esc(m.avatar_url)}" alt=""><div><h1>${esc(m.name)}</h1><p>Člen KIN</p></div></header>
+    ${m.active ? rankCard(m, prog, merits) : ""}
     <section class="block"><h2>Celkem</h2>${stats(rows)}</section>
     ${unlockSection(m, season, have)}
     ${bySeason(sorted, r => r.events.starts_at).map(({ s, rows: xs }) => `<section class="block"><h2>${esc(seasonName(s))}</h2>${stats(xs)}
@@ -1748,12 +1796,14 @@ function render() {
 }
 
 $app.addEventListener("click", e => {
-  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-kit],[data-role],[data-squad],[data-seat],[data-fx],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker],[data-nova]");
+  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-kit],[data-role],[data-squad],[data-seat],[data-fx],[data-leadfor],[data-merit-del],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker],[data-nova]");
   if (!t) return;
   if (t.dataset.trsvp) { const [id, st] = t.dataset.trsvp.split(":"); rsvpTraining(Number(id), st); return; }
   if (t.dataset.tclose) { t.disabled = true; const [id, st] = t.dataset.tclose.split(":"); closeTraining(Number(id), st); return; }
   if (t.dataset.role) { const [i, kit, d] = t.dataset.role.split(":"); setRole(Number(i), kit, Number(d)); return; }
   if (t.dataset.squad) { setSquad(t.dataset.squad); return; }
+  if (t.dataset.leadfor) { const [uid, on] = t.dataset.leadfor.split(":"); giveLead(uid, on === "1"); return; }
+  if (t.dataset.meritDel) { sb.from("merits").delete().eq("id", t.dataset.meritDel).then(({ error }) => { if (error) console.error(error); render(); }); return; }
   if (t.dataset.fx) { const [gid, what, arg] = t.dataset.fx.split(":"); setFortress(gid, what, arg); return; }
   if (t.dataset.seat) { const [kit, v, d] = t.dataset.seat.split(":"); setSeat(kit, Number(v), Number(d)); return; }
   if (t.dataset.support) { const [i, d] = t.dataset.support.split(":").map(Number); setSupport(i, d); return; }

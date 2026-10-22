@@ -109,7 +109,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .bar nav a:hover, .bar nav a[aria-current] { color: var(--ink); background: var(--panel-2); }
 .bar nav a.mine b { color: var(--fr); margin-left: 4px; }
 
-main { flex: 1; padding: 28px 0 64px; }
+main.wrap { flex: 1; padding-top: 36px; padding-bottom: 64px; }
 
 /* ---- symbology ---- */
 .sym { width: 48px; height: 38px; flex: none; overflow: visible; }
@@ -576,8 +576,8 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .hp-me .trk-lv { margin: 12px 0; }
 .hp-me .act { display: inline-flex; margin-top: 10px; }
 .hp-me .cont { margin-top: 14px; }
-.hp-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.hp-tiles a { display: grid; gap: 3px; min-height: 64px; padding: 10px 12px; border: 1px solid var(--rule); background: var(--acetate); color: var(--ink); text-decoration: none; }
+.hp-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 8px; }  /* every tile one size (Petr 2026-10-22) */
+.hp-tiles a { display: grid; align-content: start; gap: 3px; height: 100%; min-height: 64px; padding: 10px 12px; border: 1px solid var(--rule); background: var(--acetate); color: var(--ink); text-decoration: none; }
 .hp-tiles a:hover { border-color: var(--fr); box-shadow: 0 0 22px -12px var(--fr-glow); }
 .hp-tiles b { font: 700 18px/1 var(--cond); text-transform: uppercase; letter-spacing: .04em; }
 .hp-tiles span { font-size: 13px; color: var(--ink-3); }
@@ -590,6 +590,25 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 /* the team's mark in history: a small shield in the team's colour */
 .tmark { display: inline-block; width: .8em; height: .95em; margin-left: .35em; vertical-align: -.1em; background: var(--tc);
   clip-path: polygon(50% 0, 100% 18%, 100% 58%, 50% 100%, 0 58%, 0 18%); box-shadow: 0 0 10px var(--tc); }
+
+/* ranks on the profile (specs/hodnosti): the badge, progress bars to the next, merits */
+.rk-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; color: var(--ink-2); }
+.rk-badge { font: 700 22px/1 Oxanium, var(--cond); letter-spacing: .12em; text-transform: uppercase; padding: 8px 12px 7px; border: 1px solid var(--fr); color: var(--fr); background: var(--fr-fill); box-shadow: 0 0 18px -8px var(--fr-glow); }
+.rk-badge.rk-veteran, .rk-badge.rk-velitel { border-color: var(--gold); color: var(--gold); background: oklch(0.8 0.12 85 / 0.12); }
+.rank h3 { margin: 18px 0 8px; font: 700 14px/1 var(--cond); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.rk-bar { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: baseline; margin-top: 10px; max-width: 520px; }
+.rk-bar b { font: 700 18px/1 var(--cond); color: var(--un); }
+.rk-bar.ok b { color: var(--gr); }
+.rk-bar i { grid-column: 1 / -1; display: block; height: 8px; background: var(--rule); }
+.rk-bar u { display: block; height: 100%; background: var(--un); box-shadow: 0 0 10px var(--un); }
+.rk-bar.ok u { background: var(--gr); box-shadow: 0 0 10px var(--gr); }
+.rk-bar small { grid-column: 1 / -1; color: var(--ink-3); font-size: 13px; }
+.rk-then { margin-top: 12px; color: var(--ink-2); }
+.merits li { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--rule-soft); }
+.merits small { margin-left: auto; color: var(--ink-3); }
+.rank .merit { margin-top: 10px; }
+.rk-all { margin-top: 16px; }
+.rk-all tr.on td { color: var(--fr); }
 
 /* the roster editor (specs/akce-v2 A6): a role without places stays as a dim line the Commander can grow */
 .sqp.off { opacity: .55; }
@@ -766,7 +785,7 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
   .matrix col.ph { width: 104px; }
   .matrix tbody th { padding: 10px 8px; }
   .matrix tbody th b { display: block; font-size: 15px; overflow-wrap: anywhere; }
-  main { padding-top: 20px; }
+  main.wrap { padding-top: 26px; }
   .bar .wrap { gap: 10px; min-height: 52px; }
   .bar nav a { padding: 8px 6px 7px; font-size: 14px; }
   /* five items since 2026-10-19 (specs/akce-flow A8): the nav gets its own full-width row, nothing hidden sideways
