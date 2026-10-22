@@ -919,10 +919,11 @@ function homeEvent() {
   // specs/typy-akci T6: the nearest training or course as a second line, under the operation or without one
   const next = tr ? `<a class="trnext" href="#/akce"><span class="ref">${esc(label(KINDS, tr.kind))}</span><span>${esc(tr.title)} · ${esc(fmtWhen(tr.starts_at))} · přijde ${trCount(tr)}</span></a>` : "";
   if (!ev) return (state.evErr ? `<p class="err home-ev">${LOAD_ERR}</p>` : '<p class="note home-ev">Teď není otevřená žádná akce.</p>') + next;
+  const more = state.ops.filter(x => x.id !== ev.id).map(x => `<a class="trnext" href="#/akce/${x.id}"><span class="ref">Operace</span><span>${esc(docName(x.doctrine))} · ${esc(fmtWhen(x.starts_at))}</span></a>`).join("");
   const mine = state.claims.find(c => c.user_id === state.me.user_id);
   const said = (state.rsvps || []).find(r => r.user_id === state.me.user_id);
   const status = mine ? `Máš místo: ${esc(mine.slot_label)}` : said ? `Tvoje odpověď: ${esc((RSVP.find(x => x[0] === said.status) || [, said.status])[1])}` : "Zatím bez odpovědi a bez místa: otevři sestavu";
-  return `<a class="cont evc" href="#/akce"><span class="big">Operace</span><span>${esc(fmtWhen(ev.starts_at))} · ${sideOf(ev.strategy_id, "mapa zatím nevybraná")} · ${esc(docName(ev.doctrine))}<small>${status}</small></span></a>${next}`;
+  return `<a class="cont evc" href="#/akce"><span class="big">Operace</span><span>${esc(fmtWhen(ev.starts_at))} · ${ev.doctrine === "swarm" ? "mapa podle hry" : sideOf(ev.strategy_id, "mapa zatím nevybraná")} · ${esc(docName(ev.doctrine))}<small>${status}</small></span></a>${more}${next}`;
 }
 
 // specs/mapy-v2 (Petr 2026-10-22): the 3 maps; a map's page picks doctrine, team and zone variant, then shows the
@@ -962,27 +963,42 @@ function viewMapy() {
     <section class="block">${mapsList()}</section>`;
 }
 
+// the home page (Petr 2026-10-22: "modularnejsi a prehlednejsi stranka s dulezitym infem a rozcestniky" + the Discord's
+// useful links + a futuristic crest): the crest in a HUD, then modules: the next event, me, where to go, links, how-to
+const HUD = `<svg class="hud" viewBox="0 0 200 200" aria-hidden="true"><circle class="h1" cx="100" cy="100" r="94"/><circle class="h2" cx="100" cy="100" r="84"/>
+  <path class="h3" d="M100 6 A94 94 0 0 1 194 100"/><path class="h3 b" d="M100 194 A94 94 0 0 1 6 100"/>
+  <g class="ticks">${Array.from({ length: 36 }, (_, i) => `<line x1="100" y1="${i % 3 ? 9 : 4}" x2="100" y2="14" transform="rotate(${i * 10} 100 100)"/>`).join("")}</g></svg>`;
+const NAV_TILES = [["akce", "Akce", "Operace, tréninky, zápis a lobby"], ["mapy", "Mapy", "Plán podle doktríny, týmu a zóny"],
+  ["vybava", "Výbava", "Tvůj loadout a co odemknout"], ["doktrina", "Doktrína", "Jak klan hraje"], ["vycvik", "Výcvik", "Lekce a drily"], ["pokryti", "Pokrytí", "Kdo co má odemčené"]];
+function homeMe() {
+  if (!state.me) return "";
+  const r = trk || {}, lv = r.levels ? TRACKS.filter(n => n in r.levels).map(n => `<span>${n} <b>${Number(r.levels[n]) || 0}</b></span>`).join("") : "";
+  const mine = me.get(), [sid, rid] = (mine || "/").split("/"), ms = S(sid), mr = ms && roleOf(ms, rid);
+  return `<section class="hp-mod hp-me"><h2>Ty</h2><a class="hp-who" href="#/hrac/${esc(state.me.discord_id)}"><img src="${esc(state.me.avatar_url)}" alt=""><b>${esc(state.me.name)}</b><span>Tvůj profil</span></a>
+    ${r.status === "ok" ? `<p class="trk-lv">${lv}</p><a class="act" href="#/vybava">Tvůj loadout ve Výbavě</a>`
+      : '<p class="need">Nemáš propojený WARDOGS Tracker: bez něj ti Výbava neukáže, co máš.</p><a class="act" href="#/vybava">Propojit Tracker</a>'}
+    ${mr ? `<a class="cont" href="${roleHref(ms, mr)}"><span class="big">${esc(mr.id)}</span><span>Tvoje role na akci<small>${esc(mr.name)} · ${esc(sideLabel(ms))}</small></span></a>` : ""}</section>`;
+}
 function viewHome() {
-  const mine = me.get();
-  let cont = "";
-  if (mine) {
-    const [sid, rid] = mine.split("/"), s = S(sid), r = s && roleOf(s, rid);
-    if (r) cont = `<a class="cont" href="${roleHref(s, r)}"><span class="big">${esc(r.id)}</span><span>Pokračovat na tvou kartu<small>${esc(r.name)} · ${esc(sideLabel(s))}</small></span></a>`;
-  }
+  const groups = [...new Set((D.odkazy || []).map(x => x.group))];
   return `
-    <div class="home-head"><img class="crest" src="znacka/kin-emblem.svg" alt="Emblém Kinetic Solutions" width="150" height="150"><h1>Central Command</h1>
-      <p class="lede">Strategie Kinetic Solutions. Vyber si svou roli a uvidíš, co máš dělat v každé fázi. Na briefingu jedeme podle plátna.</p>
-    </div>
-    ${cont}
-    <div id="home-ev">${homeEvent()}</div>
-    <details class="block start howto"${matchMedia("(max-width: 720px)").matches ? "" : " open"}><summary><h2 id="h-start">Jak to tu funguje${arrow()}</h2></summary><ol class="proc">
+    <div class="home-head"><div class="crest-hud"><img class="crest" src="znacka/kin-emblem.svg" alt="Emblém Kinetic Solutions" width="150" height="150">${HUD}</div>
+      <div><p class="hp-k">Kinetic Solutions · KIN</p><h1>Central Command</h1>
+      <p class="lede">Velitelské centrum klanu: akce, plány map, výbava a doktrína na jednom místě.</p></div></div>
+    <div class="hp-grid">
+      <section class="hp-mod hp-ev"><h2>Další akce</h2><div id="home-ev">${homeEvent()}</div></section>
+      ${homeMe()}
+      <section class="hp-mod hp-nav"><h2>Kam dál</h2><ul class="hp-tiles">${NAV_TILES.map(([k, l, sub]) => `<li><a href="#/${k}"><b>${l}</b><span>${sub}</span></a></li>`).join("")}</ul></section>
+      ${groups.length ? `<section class="hp-mod hp-links"><h2>Užitečné odkazy</h2>${groups.map(g => `<h3>${esc(g)}</h3><ul>${D.odkazy.filter(x => x.group === g).map(x =>
+        `<li><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.name)}${out()}</a>${x.note ? `<small>${esc(x.note)}</small>` : ""}</li>`).join("")}</ul>`).join("")}</section>` : ""}
+      <details class="hp-mod howto"${matchMedia("(max-width: 720px)").matches ? "" : " open"}><summary><h2 id="h-start">Jak to tu funguje${arrow()}</h2></summary><ol class="proc">
       <li><span><b>Přihlas se přes Discord</b> (vpravo nahoře). Pustí tě to dál od role Rekrut na serveru Kinetic Solutions.</span></li>
       <li><span><a href="#/akce">Akce</a>: před akcí dej <b>Přijdu</b> a zaber si místo v <b>Sestavě</b>, ať hrajeme cokoli. Hned pod tím je tvůj nákup a odehrané akce po sezónách.</span></li>
       <li><span><a href="#/mapy">Mapy</a>: plán každé mapy podle doktríny, týmu a varianty zóny, s kartou každé role (co koupit, čím jedeš, co děláš v každé fázi).</span></li>
       <li><span><a href="#/vybava">Výbava</a>: tvůj loadout pro každou sub-classu: co koupit a kolik kusů, podle toho, co máš odemčené (WARDOGS Tracker). Kolik nás co umí, je v <a href="#/pokryti">Pokrytí</a>.</span></li>
       <li><span><a href="#/doktrina">Doktrína</a>: jak klan hraje (${esc(docName("defence"))}, ${esc(docName("swarm"))}) a Výcvik.</span></li>
     </ol></details>
-    <section class="block" aria-labelledby="h-str"><h2 id="h-str">Mapy</h2>${mapsList()}</section>`;
+    </div>`;
 }
 
 function cellEntries(s, gid, pid) {
@@ -1410,6 +1426,10 @@ const place = n => n ? `${n}.` : "-";
 // specs/akce-mapa-tym: the team as in the game, official name and colour; no logo (EULA 5.2(j), knowledge/tymy-s2.md)
 const teamOf = id => D.tymy.find(t => t.id === id);
 const teamBadge = id => { const t = teamOf(id); return t ? `<span class="team" style="--tc:${esc(t.hex)}">${esc(t.name)}</span>` : ""; };
+// the team as a mark in its colour (no name in the cell; the name for screen readers and on hover)
+// history (Petr 2026-10-22): the map and its team's mark, the doctrine in its own column
+const mapCell = id => { if (!id) return '<span class="dash">-</span>'; const x = S(id); return x ? `${esc(x.map)} ${teamMark(x.team)}` : esc(id); };
+const teamMark = id => { const t = teamOf(id); return t ? `<span class="tmark" style="--tc:${esc(t.hex)}" title="${esc(t.name)}" role="img" aria-label="${esc(t.name)}"></span>` : ""; };
 // an event's map and team as HTML; null = not picked yet, an id we do not know is shown as stored
 const sideOf = (id, none = "mapa neuvedena") => { if (!id) return none; const s = S(id); return s ? `${esc(s.map)} ${teamBadge(s.team)}` : esc(id); };
 // map and team -> their plan; null while either is "zatím nevím" (one strategy_id field, decision 1)
@@ -1522,8 +1542,8 @@ function viewHistory(evs) {
   const head = `<h2 class="hist-h">Odehrané akce</h2>`;
   if (!evs.length) return `${head}<p class="note">Zatím žádná uzavřená akce. Commander ji uzavře nahoře v Sestavě po zápase.</p>`;
   return head + bySeason(evs, e => e.starts_at).map(({ s, rows }) => `<section class="block"><h2>${esc(seasonName(s))}</h2>
-    <table class="data hist"><thead><tr><th>Datum</th><th>Mapa</th><th>Zóna</th><th class="num">Umístění</th><th class="num">Zapsáno</th></tr></thead><tbody>
-    ${rows.map(e => `<tr><td><a href="#/akce/${e.id}">${esc(fmtWhen(e.starts_at))}</a></td><td>${sideOf(e.strategy_id)} · ${esc(docName(e.doctrine))}</td><td>${esc(variantName(e.strategy_id, e.variant))}</td><td class="num"><b>${place(e.placement)}</b></td><td class="num">${e.claims[0] ? e.claims[0].count : 0}</td></tr>`).join("")}
+    <table class="data hist"><thead><tr><th>Datum</th><th>Mapa</th><th>Doktrína</th><th>Zóna</th><th class="num">Umístění</th><th class="num">Zapsáno</th></tr></thead><tbody>
+    ${rows.map(e => `<tr><td><a href="#/akce/${e.id}">${esc(fmtWhen(e.starts_at))}</a></td><td>${mapCell(e.strategy_id)}</td><td>${esc(docName(e.doctrine))}</td><td>${esc(variantName(e.strategy_id, e.variant))}</td><td class="num"><b>${place(e.placement)}</b></td><td class="num">${e.claims[0] ? e.claims[0].count : 0}</td></tr>`).join("")}
     </tbody></table></section>`).join("");
 }
 
