@@ -86,12 +86,10 @@ function renderWho() {
 
 // specs/zamek: the hub content lives in public.content, readable only by verified members
 async function loadContent() {
-  const { data, error } = await sb.from("content").select("data, updated_at").eq("id", "hub").single();
+  const { data, error } = await sb.from("content").select("data").eq("id", "hub").single();
   if (error) throw error;
   Object.assign(D, data.data);
-  D.contentAt = data.updated_at;
   state.checking = false;
-  renderFoot();
   const y = scrollY; render(); scrollTo(0, y);
 }
 
@@ -931,8 +929,7 @@ function viewHome() {
       <li><span><a href="#/vybava">Výbava</a>: tvůj loadout pro každou sub-classu: co koupit a kolik kusů, podle toho, co máš odemčené (WARDOGS Tracker). Kolik nás co umí, je v <a href="#/pokryti">Pokrytí</a>.</span></li>
       <li><span><a href="#/doktrina">Doktrína</a>: jak klan hraje (${esc(docName("defence"))}, ${esc(docName("swarm"))}) a Výcvik.</span></li>
     </ol></details>
-    <section class="block" aria-labelledby="h-str"><h2 id="h-str">Mapy</h2>${mapsList()}
-      <a class="doklink" href="#/doktrina">Doktrína: platí pro všechny mapy ${arrow()}</a></section>`;
+    <section class="block" aria-labelledby="h-str"><h2 id="h-str">Mapy</h2>${mapsList()}</section>`;
 }
 
 function cellEntries(s, gid, pid) {
@@ -1651,10 +1648,4 @@ addEventListener("hashchange", () => {
   const y = history.state && history.state.y;
   if (y) window.scrollTo(0, y);
 });
-function renderFoot() {
-  document.getElementById("foot").textContent = D.snapshot
-    ? `Ceny a unlocky: ${D.snapshot} · build ${D.built}${D.contentAt ? ` · obsah z databáze ${fmtWhen(D.contentAt)}` : ""} · Strategie označená Draft zatím není vyhlášená za platnou. · Ikony předmětů: WARDOGS © Bulkhead, přes metaforge.app`
-    : "Kinetic Solutions · CZ/SK klan ve WARDOGS";
-}
-renderFoot();
 render();

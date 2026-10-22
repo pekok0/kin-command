@@ -96,8 +96,6 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .bar nav a.mine b { color: var(--fr); margin-left: 4px; }
 
 main { flex: 1; padding: 28px 0 64px; }
-.foot { border-top: 1px solid var(--rule-soft); color: var(--ink-3); font-size: 13px; }
-.foot .wrap { padding-top: 14px; padding-bottom: 18px; }
 
 /* ---- symbology ---- */
 .sym { width: 48px; height: 38px; flex: none; overflow: visible; }
@@ -234,7 +232,6 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .sheets b { font: 700 28px/1 var(--cond); text-transform: uppercase; letter-spacing: .02em; }
 .sheets a:hover b { color: var(--fr); }
 .sheets .meta { color: var(--ink-2); font: 600 16px/1.2 var(--cond); text-transform: uppercase; letter-spacing: .05em; }
-.doklink { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; font: 600 16px/1 var(--cond); text-transform: uppercase; letter-spacing: .06em; }
 .picker { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); border: 1px solid var(--rule); background: var(--acetate); }
 .pg { padding: 16px; border-right: 1px solid var(--rule-soft); border-bottom: 1px solid var(--rule-soft); }
 .pg-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
@@ -909,7 +906,6 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 </div></header>
 <div id="evbar" class="wrap"></div>
 <main id="app" class="wrap"></main>
-<footer class="foot"><div class="wrap" id="foot"></div></footer>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok" crossorigin="anonymous"></script>
 <script src="config.js"></script>
 <script src="app.js"></script>
