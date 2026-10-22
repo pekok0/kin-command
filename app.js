@@ -229,8 +229,8 @@ function viewTasks(ms, done, trk, prog) {
     .sort((a, b) => a.ok.filter(Boolean).length - b.ok.filter(Boolean).length || a.m.name.localeCompare(b.m.name));
   return `<p class="crumb"><a href="#/hrac/${encodeURIComponent(state.me.discord_id)}">Profil</a> / Úkoly</p>
     <header class="unit-head"><div><h1>Úkoly členů</h1></div></header>
-    <div class="matrix-wrap"><table class="data tasks-all" id="ukoly-all"><thead><tr><th>Člen</th>${D.ukoly.map((x, i) => `<th data-task="${esc(x.id)}">${esc(x.name)} <span class="num">${rows.filter(r => r.ok[i]).length}/${rows.length}</span></th>`).join("")}</tr></thead>
-    <tbody>${rows.map(r => `<tr><td>${memberLink(r.m)}</td>${r.ok.map((ok, i) => `<td data-task="${esc(D.ukoly[i].id)}"${ok ? ' class="ok"' : ""}>${ok ? "✓" : "–"}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+    ${!rows.length ? '<p class="note">Zatím tu nikdo není.</p>' : `<div class="matrix-wrap"><table class="data tasks-all" id="ukoly-all"><thead><tr><th>Člen</th>${D.ukoly.map((x, i) => `<th data-task="${esc(x.id)}">${esc(x.name)} <span class="num">${rows.filter(r => r.ok[i]).length}/${rows.length}</span></th>`).join("")}</tr></thead>
+    <tbody>${rows.map(r => `<tr><td>${memberLink(r.m)}</td>${r.ok.map((ok, i) => `<td data-task="${esc(D.ukoly[i].id)}"${ok ? ' class="ok"' : ""}>${ok ? "✓" : "–"}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`}`;
 }
 async function addMerit(f) {
   const { error } = await sb.from("merits").insert({ user_id: f.dataset.uid, text: f.elements.text.value.trim() });
@@ -780,7 +780,7 @@ async function createTraining(f) {
   const v = Object.fromEntries(new FormData(f)), kind = v.kind === "kurz" ? "kurz" : "trenink";
   const { error } = await sb.from("events").insert({ kind, topic: v.topic, title: v.title.trim(), starts_at: new Date(v.starts).toISOString(),
     description: v.description.trim() || null, capacity: kind === "kurz" ? Number(v.capacity) : null });
-  state.novaFlash = !error ? null : error.code === "42501" ? "Trénink nebo kurz vypíše jen důstojník (role Velitel) nebo Commander." : saveErr(error);
+  state.novaFlash = !error ? null : error.code === "42501" ? "Trénink nebo kurz vypíše člen od hodnosti Operátor." : saveErr(error);
   if (!error) { f.reset(); capToggle(f); }  // the next one starts from an empty form
 }
 
@@ -1122,7 +1122,7 @@ function viewHome() {
       ${groups.length ? `<section class="hp-mod hp-links"><h2>Užitečné odkazy</h2>${groups.map(g => `<h3>${esc(g)}</h3><ul>${D.odkazy.filter(x => x.group === g).map(x =>
         `<li><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.name)}${out()}</a>${x.note ? `<small>${esc(x.note)}</small>` : ""}</li>`).join("")}</ul>`).join("")}</section>` : ""}
       <details class="hp-mod howto"${matchMedia("(max-width: 720px)").matches ? "" : " open"}><summary><h2 id="h-start">Jak to tu funguje${arrow()}</h2></summary><ol class="proc">
-      <li><span><a href="#/akce">Akce</a>: před akcí dej <b>Přijdu</b> a zaber si místo v <b>Sestavě</b>, ať hrajeme cokoli. Hned pod tím je tvůj nákup a odehrané akce po sezónách.</span></li>
+      <li><span><a href="#/akce">Akce</a>: otevři operaci, dej <b>Přijdu</b> a zaber si místo v sestavě. Pod ní je tvůj nákup, odehrané akce jsou v přehledu.</span></li>
       <li><span><a href="#/mapy">Mapy</a>: plán každé mapy podle doktríny, týmu a varianty zóny, s kartou každé role (co koupit, čím jedeš, co děláš v každé fázi).</span></li>
       <li><span><a href="#/vybava">Výbava</a>: tvůj loadout pro každou sub-classu: co koupit a kolik kusů, podle toho, co máš odemčené (WARDOGS Tracker). Kolik nás co umí, je v <a href="#/pokryti">Pokrytí</a>.</span></li>
       <li><span><a href="#/doktrina">Doktrína</a>: jak klan hraje (${esc(docName("defence"))}, ${esc(docName("swarm"))}) a Výcvik.</span></li>
@@ -1457,7 +1457,7 @@ function trackerBox() {
   const r = trk || {}, lv = r.levels ? TRACKS.filter(n => n in r.levels).map(n => [n, Number(r.levels[n]) || 0]) : [];
   const says = trkErr ? esc(trkErr) : trackerSays(r);
   return `<div class="trk"><button type="button" class="act" data-tracker${trkBusy ? " disabled" : ""}>${trkBusy ? "Synchronizuji…" : "Synchronizovat teď"}</button>
-    <p class="note">Co máš ve hře odemčené a levely rolí bere War Room z ${TRK_LINK} (neoficiální web komunity) sám, každých pár minut.${r.fetched_at ? ` Naposledy ${esc(ago(r.fetched_at))}.` : ""} Když si něco odemkneš, klikni na Trackeru na Update my stats.</p>
+    <p class="note">Co máš ve hře odemčené a levely rolí bere War Room z <a href="https://wardogstracker.gg" target="_blank" rel="noopener">WARDOGS Trackeru</a> (neoficiální web komunity) sám, každých pár minut.${r.fetched_at ? ` Naposledy ${esc(ago(r.fetched_at))}.` : ""} Když si něco odemkneš, klikni na Trackeru na Update my stats.</p>
     ${lv.length ? `<p class="trk-lv">${lv.map(([n, l]) => `<span>${n} <b>${l}</b></span>`).join("")}${r.synced_at ? `<span class="ref">na Trackeru ${esc(fmtWhen(r.synced_at))}</span>` : ""}</p>` : ""}
     ${says ? `<p class="need err">${says}</p>` : ""}
     ${r.steam_id ? "" : `<div class="trk-help"><p><b>Propoj svůj profil na Trackeru</b> (stačí jednou)${r.status === "not_found" ? ", podle Discordu tě Tracker nenašel" : ""}:</p><ol>
@@ -1833,7 +1833,7 @@ function render() {
     html = sb && state.me && state.me.is_commander ? '<p class="note">Načítám…</p>' : '<p class="note">Protokol briefingu je jen pro Commandera.</p>';
     if (sb && state.me && state.me.is_commander) setTimeout(loadBriefing);
   } else if (HIST.includes(p[0])) {
-    active = p[0] === "pokryti" ? "vybava" : p[0] === "ukoly" ? "" : "akce"; title = p[0] === "pokryti" ? "Pokrytí · KIN" : p[0] === "ukoly" ? "Úkoly · KIN" : "Akce · KIN";
+    active = p[0] === "pokryti" ? "vybava" : p[0] === "ukoly" ? "" : "akce"; title = p[0] === "pokryti" ? "Pokrytí · KIN" : p[0] === "ukoly" ? "Úkoly · KIN" : p[0] === "hrac" ? "Profil · KIN" : "Akce · KIN";
     html = histShell(sb && state.me ? '<p class="note">Načítám…</p>' : histGate());
     if (sb && state.me) setTimeout(() => loadHist(p));
   }
