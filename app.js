@@ -109,7 +109,7 @@ async function loadEvent() {
     // specs/typy-akci T1: the roster, closing and history work with the open operation only; trainings and courses open
     // beside it are a list of their own and never state.event
     const [op, tr] = await Promise.all([
-      sb.from("events").select("id, strategy_id, doctrine, squad_swarm, squad_support, starts_at, leader:members!events_created_by_fkey(name)").eq("status", "open").eq("kind", "operace").maybeSingle(),
+      sb.from("events").select("id, strategy_id, doctrine, variant, squad_swarm, squad_support, starts_at, leader:members!events_created_by_fkey(name)").eq("status", "open").eq("kind", "operace").maybeSingle(),
       sb.from("events").select("id, kind, topic, title, description, capacity, starts_at, created_by, leader:members!events_created_by_fkey(name), rsvps(user_id, status, members(name, avatar_url, discord_id))")
         .eq("status", "open").neq("kind", "operace").order("starts_at"),
     ]);
@@ -302,8 +302,15 @@ function akceBody() {
   if (!ev || !s) return viewRoster(s) + tr;
   const read = s.swarm ? `Plán ke čtení: <a href="#/doktrina/swarm">${esc(docName("swarm"))} v Doktríně</a>`
     : s.nomap ? "Karta role a nákup se ukážou, až Commander vybere mapu a tým."
-    : `Plán ke čtení: <a href="#/s/${esc(s.id)}">${esc(sideLabel(s))}</a> (opening a kroky rolí)`;
-  return `<p class="note planl">${read}</p>${viewRoster(s)}${s.swarm ? swarmMyKit() : ""}${tr}`;
+    : `Situace, větve a karty rolí: <a href="${planHref(s)}">${esc(sideLabel(s))} v Mapách</a>`;
+  return `<p class="note planl">${read}</p>${viewRoster(s)}${s.swarm ? swarmMyKit() : s.nomap ? "" : buildOrder(s)}${tr}`;
+}
+// FORTRESS with map and team: the plan of the picked zone under the lobby (specs/mapy-v2 M5)
+function buildOrder(s) {
+  const v = curVariant && vById(s, curVariant);
+  viewCanvas(s);  // fills planMatrix
+  return `<section class="block" id="build-order"><h2>Build order · ${esc(sideLabel(s))}${v ? ` · ${esc(v.name)}` : ""}</h2>
+    ${v ? "" : '<p class="note">Varianta zóny zatím není vybraná: plán ukazuje kroky všech variant.</p>'}${planMatrix}</section>`;
 }
 
 // the base and my slot's kit; every role's kit is in Doktrina (rozhodnuti 8: not the same list in two places)
@@ -351,16 +358,10 @@ function renderRoster() {
   if (home) home.innerHTML = homeEvent();
   const card = document.getElementById("ev-card");
   if (card) card.innerHTML = evCard();
-  const pb = document.getElementById("plan-body");
-  if (pb && pb.dataset.swarm !== String(+swarmEv())) {
-    pb.dataset.swarm = String(+swarmEv());
-    pb.innerHTML = swarmEv() ? swarmBox() : planMatrix;
-    applyTrace();
-  }
   const el = document.getElementById("sestava");
   if (!el) return;
   plan = planOf(state.event);  // a new, cancelled or switched event changes which roster Akce shows
-  if (plan && !plan.swarm) curVariant = pickVariant(plan, "");  // the close form offers the map's zones
+  if (plan && !plan.swarm) curVariant = state.event.variant || pickVariant(plan, "");  // the zone picked at founding, else the last seen
   const restore = keepForms();
   keepFocus(() => { el.innerHTML = akceBody(); });
   restore();
@@ -522,10 +523,12 @@ async function takeLead(on) {
 }
 
 // map and team: two choices, "zatím nevím" first (specs/akce-mapa-tym); s = the plan picked so far
-const pickFields = s => `<label>Mapa <select name="map"><option value="">zatím nevím</option>${[...new Set(D.strategies.map(x => x.map))].map(m =>
+const pickFields = (s, ev) => `<label>Mapa <select name="map"><option value="">zatím nevím</option>${[...new Set(D.strategies.map(x => x.map))].map(m =>
     `<option value="${esc(m)}"${s && s.map === m ? " selected" : ""}>${esc(m)}</option>`).join("")}</select></label>
   <label>Tým <select name="team"><option value="">zatím nevím</option>${D.tymy.map(t =>
-    `<option value="${esc(t.id)}"${s && s.team === t.id ? " selected" : ""}>${esc(t.name)}</option>`).join("")}</select></label>`;
+    `<option value="${esc(t.id)}"${s && s.team === t.id ? " selected" : ""}>${esc(t.name)}</option>`).join("")}</select></label>
+  <label>Varianta zóny <select name="variant"><option value="">zatím nevím</option>${MAPS().map(m => `<optgroup label="${esc(m)}">${D.strategies.find(x => x.map === m).variants.map(v =>
+    `<option value="${esc(mapSlug(m) + ":" + v.id)}"${ev && s && s.map === m && ev.variant === v.id ? " selected" : ""}>${esc(v.name)}</option>`).join("")}</optgroup>`).join("")}</select></label>`;
 
 // one form in Akce for both doctrines (rozhodnuti 8); founding ahead, the map and team are not known yet (specs/akce-mapa-tym)
 function newEventForm() {
@@ -539,7 +542,7 @@ function newEventForm() {
 // the Commander picks or changes them while the event is open (specs/akce-mapa-tym 3-4); sign-ups keep their slots
 function mapTeamForm(ev) {
   const s = S(ev.strategy_id);
-  return `<details class="evmap"><summary>Mapa a tým</summary><form class="evf" data-form="mapteam">${pickFields(s)}
+  return `<details class="evmap"><summary>Mapa, tým a varianta</summary><form class="evf" data-form="mapteam">${pickFields(s, ev)}
     <button type="submit" class="act">${esc(saveLabel(s))}</button></form></details>`;
 }
 
@@ -663,6 +666,9 @@ document.addEventListener("submit", async e => {
   const v = Object.fromEntries(new FormData(f)), eventId = state.event && state.event.id;
   // OWASP 2026-10-19 Low: map and team only pick one of our plans, a tampered <option> cannot send its own strategy_id
   const pick = f.elements.map && compose(f.elements.map.value, f.elements.team.value), sid = pick ? pick.id : null;
+  // the zone belongs to the picked map: "ozeti:church" counts only with Ozeti picked (a tampered option saves nothing)
+  const [vm, vid] = String(v.variant || "").split(":"), zone = f.dataset.form !== "close" && pick && pick.map && vm === mapSlug(pick.map)
+    && D.strategies.find(x => x.map === pick.map).variants.some(x => x.id === vid) ? vid : null;
   // attendance = exactly what the Commander saw and ticked in this form (state.claims may be mid-reload);
   // written first: if closing fails the event stays open and this upsert can simply run again
   const att = [...f.querySelectorAll('input[name^="att_"]')].map(x => ({ event_id: eventId, user_id: x.name.slice(4), attended: x.checked }));
@@ -671,8 +677,8 @@ document.addEventListener("submit", async e => {
     if (e1) { state.flash = e1.code === "42501" ? "Docházku se nepodařilo uložit, zkus to znovu." : saveErr(e1); btn.disabled = false; renderRoster(); return; }
   }
   const { data, error } = f.dataset.form === "new"
-    ? await sb.from("events").insert({ strategy_id: sid, doctrine: v.doctrine === "swarm" ? "swarm" : "defence", starts_at: new Date(v.starts).toISOString() })
-    : f.dataset.form === "mapteam" ? await sb.from("events").update({ strategy_id: sid }).eq("id", eventId).select("id")  // count rows like cancelEvent (OWASP L1)
+    ? await sb.from("events").insert({ strategy_id: sid, variant: zone, doctrine: v.doctrine === "swarm" ? "swarm" : "defence", starts_at: new Date(v.starts).toISOString() })
+    : f.dataset.form === "mapteam" ? await sb.from("events").update({ strategy_id: sid, variant: zone }).eq("id", eventId).select("id")  // count rows like cancelEvent (OWASP L1)
     : await sb.from("events").update({ status: "closed", placement: Number(v.placement), variant: v.variant || null,
         went_well: v.went_well || null, went_wrong: v.went_wrong || null, next_time: v.next_time || null }).eq("id", eventId);
   state.flash = error ? (error.code === "23505" ? "Už je otevřená jiná akce." : saveErr(error))
@@ -729,12 +735,10 @@ const swarmPlan = ev => ({ id: "swarm", swarm: true, roster: swarmRoster(D.doktr
 const fortressPlan = () => { const s = D.strategies[0];
   return { id: "fortress", nomap: true, roster: s.roster, fill_order: s.fill_order, roles: s.roles, variants: [] }; };
 const planOf = ev => !ev ? null : ev.doctrine === "swarm" ? swarmPlan(ev) : !ev.strategy_id ? fortressPlan() : S(ev.strategy_id) || null;
-// an open SWARM event: the map's Top defence opening does not apply (Petr 2026-10-18), the canvas does
-const swarmEv = () => !!(state.me && state.event && state.event.doctrine === "swarm");
 // doctrine names live in the content (Petr 2026-10-19: FORTRESS, SWARM); events store "defence" / "swarm"
 const docOf = d => d === "swarm" ? D.doktrina.swarm : D.doktrina.defence;
 const docName = d => docOf(d).title;
-const swarmBox = () => `<section class="block swarm-plan"><h2>Dnes ${esc(docName("swarm"))}</h2><p>Opening ${esc(docName("defence"))} na této mapě dnes neplatí. Zápis a tvůj nákup jsou v <a href="#/akce">Akci</a>, postupy v <a href="#/doktrina/swarm">Doktríně</a>. Kontaktní zóny nahoře platí dál.</p></section>`;
+
 let planMatrix = "";  // the map's Top defence plan, kept to swap back when the SWARM event ends
 let navActive = null;  // menu item of the current page, for re-rendering the nav after a claim
 let trace = null;  // traced role id on the canvas
@@ -870,11 +874,41 @@ function homeEvent() {
 
 // reading pages (map, doctrine) show the open event as a card into Akce, nothing when none is open
 const evCard = () => state.me && state.event ? homeEvent() : "";
-const sheetList = () => `<ul class="sheets">${D.strategies.map(s => `<li><a href="#/s/${s.id}"><b>${esc(s.map)}</b><span class="meta">${esc(s.color)} · ${esc(s.faction)} · ${esc(s.stage)}</span>${s.status === "DRAFT" ? '<span class="tag draft">Draft</span>' : ""}<span class="meta">${arrow()}</span></a></li>`).join("")}</ul>`;
+// specs/mapy-v2 (Petr 2026-10-22): the 3 maps; a map's page picks doctrine, team and zone variant, then shows the
+// plan of that choice. Read-only: no open event changes it, roles are claimed in Akce.
+const MAPS = () => [...new Set(D.strategies.map(x => x.map))];
+const teamKey = x => x.id.slice(x.id.indexOf("-") + 1);  // "ozeti-modri" -> "modri"
+const mapSlug = m => D.strategies.find(x => x.map === m).id.split("-")[0];
+const mapOf = slug => MAPS().find(m => mapSlug(m) === slug);
+const mapHref = (m, o = {}) => { const q = new URLSearchParams(Object.entries(o).filter(([, v]) => v)).toString(); return `#/mapy/${mapSlug(m)}${q ? "?" + q : ""}`; };
+const planHref = (x, tab) => mapHref(x.map, { d: "fortress", t: teamKey(x), v: curVariant, tab: tab === "platno" ? null : tab });
+const mapsList = () => `<ul class="cls maps">${MAPS().map(m => { const xs = D.strategies.filter(x => x.map === m);
+  return `<li><a href="${mapHref(m)}"><b>${esc(m)}</b><span>${xs.length} týmy · ${xs[0].variants.length} varianty zóny</span></a></li>`; }).join("")}</ul>`;
+function viewMapDetail(m, qs) {
+  const q = new URLSearchParams(qs), d = ["fortress", "swarm"].includes(q.get("d")) ? q.get("d") : null;
+  const xs = D.strategies.filter(x => x.map === m), x = d && xs.find(y => teamKey(y) === q.get("t")) || null;
+  const v = x && x.variants.some(y => y.id === q.get("v")) ? q.get("v") : null;
+  const tab = ["situace", "vetve"].includes(q.get("tab")) ? q.get("tab") : "platno";
+  const step = (label, cur, opts) => `<div class="vbar mapstep" role="group" aria-label="${label}"><span class="vlbl">${label}</span>${opts.map(([val, name, sub, href]) =>
+    `<a href="${href}"${val === cur ? ' aria-current="true"' : ""}><b>${esc(name)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</a>`).join("")}</div>`;
+  const steps = step("Doktrína", d, [["fortress", docName("defence"), docOf("defence").short], ["swarm", docName("swarm"), docOf("swarm").short]]
+      .map(([val, n, sub]) => [val, n, sub, mapHref(m, { d: val, t: x && teamKey(x), v })]))
+    + (d ? step("Tým", x && teamKey(x), xs.map(y => [teamKey(y), y.color, y.faction, mapHref(m, { d, t: teamKey(y), v: y.variants.some(z => z.id === q.get("v")) ? q.get("v") : null })])) : "")
+    + (x ? step("Varianta zóny", v, x.variants.map(y => [y.id, y.name, `${y.towers.length} věže${y.status === "NÁVRH" ? " · návrh" : ""}`, mapHref(m, { d, t: teamKey(x), v: y.id, tab: tab === "platno" ? null : tab })])) : "");
+  const head = `<p class="crumb"><a href="#/mapy">Mapy</a> / ${esc(m)}</p>
+    <header class="unit-head"><div><h1>${esc(m)}</h1><p>Vyber doktrínu, tým a variantu kontaktní zóny. Plán se ukáže podle tvých voleb.</p></div></header>${steps}`;
+  if (!v) return head + `<p class="note mapnext">Dál vyber ${!d ? "doktrínu" : !x ? "tým" : "variantu zóny"}.</p>`;
+  if (d === "swarm") return head + `${variantPanel(x)}<section class="block"><h2>${esc(docName("swarm"))} na této mapě</h2><p>${esc(D.doktrina.swarm.tagline)}</p>${bullets(D.doktrina.swarm.points)}
+    <p class="note">${esc(docName("swarm"))} nemá plán pro jednotlivé mapy: zóna nahoře, postupy, role a nákup v <a href="#/doktrina/swarm">Doktríně</a>.</p></section>`;
+  const tabs = [["platno", "Plátno"], ["situace", "Situace"], ["vetve", "Větve a spouštěče"]];
+  return head + `<nav class="tabs" aria-label="Plán">${tabs.map(([k, l]) => `<a href="${mapHref(m, { d, t: teamKey(x), v, tab: k === "platno" ? null : k })}"${k === tab ? ' aria-current="page"' : ""}>${l}</a>`).join("")}</nav>
+    ${x.status === "DRAFT" ? '<p class="note"><span class="tag draft">Draft</span> Plán zatím není vyhlášený za platný.</p>' : ""}
+    ${tab === "situace" ? viewSituace(x) : tab === "vetve" ? viewVetve(x) : viewCanvas(x)}`;
+}
 
 function viewMapy() {
-  return `<header class="unit-head"><div><h1>Mapy</h1><p>Plány ${esc(docName("defence"))} pro každou mapu a stranu: opening, kontaktní zóny, kroky rolí. Na akci se zapisuješ v <a href="#/akce">Akci</a>.</p></div></header>
-    <section class="block">${sheetList()}</section>`;
+  return `<header class="unit-head"><div><h1>Mapy</h1><p>Plán každé mapy podle doktríny, týmu a varianty zóny. Jen ke čtení, na akci se zapisuješ v <a href="#/akce">Akci</a>.</p></div></header>
+    <section class="block">${mapsList()}</section>`;
 }
 
 function viewHome() {
@@ -884,15 +918,6 @@ function viewHome() {
     const [sid, rid] = mine.split("/"), s = S(sid), r = s && roleOf(s, rid);
     if (r) cont = `<a class="cont" href="${roleHref(s, r)}"><span class="big">${esc(r.id)}</span><span>Pokračovat na tvou kartu<small>${esc(r.name)} · ${esc(sideLabel(s))}</small></span></a>`;
   }
-  const pickers = D.strategies.map((s, i) => `
-    <details class="block howto"${i ? "" : " open"} aria-labelledby="pick-${s.id}">
-      <summary><h2 id="pick-${s.id}">Kdo jsi? ${esc(sideLabel(s))}${arrow()}</h2></summary>
-      <div class="picker">${s.groups.map(g => `
-        <div class="pg"><div class="pg-head">${sym(g.symbol, "sm")}<div><b>${esc(g.name)}</b><small>${esc(g.squad)}</small></div></div>
-          <ul>${s.roles.filter(r => r.group === g.id).map(r => `<li><button type="button" data-pick="${s.id}/${esc(r.id)}" class="${mine === `${s.id}/${r.id}` ? "is-me" : ""}"><span class="rid">${esc(r.id)}</span><span>${esc(r.name)}</span></button></li>`).join("")}</ul>
-        </div>`).join("")}
-      </div>
-    </details>`).join("");
   return `
     <div class="home-head"><img class="crest" src="znacka/kin-emblem.svg" alt="Emblém Kinetic Solutions" width="150" height="150"><h1>Central Command</h1>
       <p class="lede">Strategie Kinetic Solutions. Vyber si svou roli a uvidíš, co máš dělat v každé fázi. Na briefingu jedeme podle plátna.</p>
@@ -902,22 +927,12 @@ function viewHome() {
     <details class="block start howto"${matchMedia("(max-width: 720px)").matches ? "" : " open"}><summary><h2 id="h-start">Jak to tu funguje${arrow()}</h2></summary><ol class="proc">
       <li><span><b>Přihlas se přes Discord</b> (vpravo nahoře). Pustí tě to dál od role Rekrut na serveru Kinetic Solutions.</span></li>
       <li><span><a href="#/akce">Akce</a>: před akcí dej <b>Přijdu</b> a zaber si místo v <b>Sestavě</b>, ať hrajeme cokoli. Hned pod tím je tvůj nákup a odehrané akce po sezónách.</span></li>
-      <li><span><a href="#/mapy">Mapy</a>: plán každé mapy a <b>karta tvé role</b> (co koupit, čím jedeš, co děláš v každé fázi). Nech si ji otevřenou na mobilu nebo druhém monitoru.</span></li>
+      <li><span><a href="#/mapy">Mapy</a>: plán každé mapy podle doktríny, týmu a varianty zóny, s kartou každé role (co koupit, čím jedeš, co děláš v každé fázi).</span></li>
       <li><span><a href="#/vybava">Výbava</a>: tvůj loadout pro každou sub-classu: co koupit a kolik kusů, podle toho, co máš odemčené (WARDOGS Tracker). Kolik nás co umí, je v <a href="#/pokryti">Pokrytí</a>.</span></li>
       <li><span><a href="#/doktrina">Doktrína</a>: jak klan hraje (${esc(docName("defence"))}, ${esc(docName("swarm"))}) a Výcvik.</span></li>
     </ol></details>
-    <section class="block" aria-labelledby="h-str"><h2 id="h-str">Mapy</h2>${sheetList()}
-      <a class="doklink" href="#/doktrina">Doktrína: platí pro všechny mapy ${arrow()}</a></section>
-    ${pickers}`;
-}
-
-function stratHead(s, tab) {
-  const tabs = [["platno", "Plátno"], ["situace", "Situace"], ["vetve", "Větve a spouštěče"]];
-  return `
-    <header class="strat-head"><div><div class="t-row"><h1>${esc(s.map)} <span>· ${esc(s.color)}</span></h1>${s.status === "DRAFT" ? '<span class="tag draft" title="Strategie zatím není vyhlášená za platnou">Draft</span>' : ""}</div><p>${esc(s.faction)} · ${esc(s.stage)}</p></div></header>
-    ${variantBar(s)}
-    <nav class="tabs" aria-label="Strana">${D.strategies.filter(x => x.map === s.map).map(x => `<a href="#/s/${x.id}${tab === "platno" ? "" : "/" + tab}${curVariant ? "?v=" + esc(curVariant) : ""}"${x.id === s.id ? ' aria-current="page"' : ""}>${esc(x.color)}</a>`).join("")}</nav>
-    <nav class="tabs" aria-label="Strategie">${tabs.map(([k, l]) => `<a href="#/s/${s.id}${k === "platno" ? "" : "/" + k}${curVariant ? "?v=" + esc(curVariant) : ""}"${k === tab ? ' aria-current="page"' : ""}>${l}</a>`).join("")}</nav>`;
+    <section class="block" aria-labelledby="h-str"><h2 id="h-str">Mapy</h2>${mapsList()}
+      <a class="doklink" href="#/doktrina">Doktrína: platí pro všechny mapy ${arrow()}</a></section>`;
 }
 
 function cellEntries(s, gid, pid) {
@@ -947,8 +962,7 @@ function viewCanvas(s) {
   return `
     ${variantPanel(s)}
     <section class="intent"><h2>Záměr</h2><ul class="bullets">${s.intent.map(i => `<li>${esc(i)}</li>`).join("")}</ul></section>
-    <div id="ev-card">${evCard()}</div>
-    <div id="plan-body" data-swarm="${+swarmEv()}">${swarmEv() ? swarmBox() : planMatrix}</div>`;
+    <div id="plan-body">${planMatrix}</div>`;
 }
 
 function budgetBlock(s, gid, own = null) {
@@ -989,11 +1003,6 @@ function viewVetve(s) {
   return `
     <section class="block narrow"><h2>Spouštěče: stane se kdykoli, reaguj hned</h2>${rxList(s, s.triggers.filter(inV))}</section>
     <section class="block narrow"><h2>Větve: když se situace vyvine</h2>${rxList(s, s.branches.filter(inV))}</section>`;
-}
-
-function viewStrategy(s, tab) {
-  const body = tab === "situace" ? viewSituace(s) : tab === "vetve" ? viewVetve(s) : viewCanvas(s);
-  return stratHead(s, tab) + body;
 }
 
 function kitCell(price, qty) { return price == null ? '<span class="dash">-</span>' : qty === "?" ? `${usd(price)} <span class="unk">× ?</span>` : usd(price * qty); }
@@ -1082,15 +1091,14 @@ function roleBlock(s, r) {
 }
 
 function viewRole(s, r) {
-  const g = groupOf(s, r.group), mine = me.get() === `${s.id}/${r.id}`;
+  const g = groupOf(s, r.group);
   const sib = s.roles.filter(x => x.group === r.group), i = sib.indexOf(r);
   const prev = sib[i - 1], next = sib[i + 1];
   const builds = r.builds.length ? `<section class="block"><h2>Stavba báze (tvoje položky tučně)</h2>${budgetBlock(s, r.group, r.id)}</section>` : "";
   return `
-    <div class="narrow"><p class="crumb"><a href="#/s/${s.id}">${esc(sideLabel(s))}</a> / <a href="#/s/${s.id}/squad/${g.id}">${esc(g.name)}</a> / ${esc(r.id)}</p>
+    <div class="narrow"><p class="crumb"><a href="${planHref(s)}">${esc(sideLabel(s))}</a> / <a href="#/s/${s.id}/squad/${g.id}">${esc(g.name)}</a> / ${esc(r.id)}</p>
     <header class="role-head"><span class="code">${esc(r.id)}</span>
-      <div class="grow"><h1>${esc(r.name)}</h1><p>${esc(r.squad)} · ${esc(g.name)}</p></div>
-      <button type="button" class="me-btn" data-me="${s.id}/${esc(r.id)}" aria-pressed="${mine}">${mine ? "Tvoje role" : "To jsem já"}</button></header>
+      <div class="grow"><h1>${esc(r.name)}</h1><p>${esc(r.squad)} · ${esc(g.name)}</p></div></header>
     ${variantBar(s)}
     <section class="block"><h2>Doprava</h2><p class="transport">${esc(r.transport)}</p></section>
     ${(() => { const [, cc] = classById(r.class), part = r.gear.some(g => g.qty === "?") ? ' <span class="unk">+ ?</span>' : "";
@@ -1111,7 +1119,7 @@ function viewSquad(s, g) {
   const doc = squadDoc(g.squad), roles = s.roles.filter(r => r.group === g.id);
   const phases = s.phases.map(p => ({ p, es: cellEntries(s, g.id, p.id) })).filter(x => x.es.length);
   return `
-    <p class="crumb"><a href="#/s/${s.id}">${esc(sideLabel(s))}</a> / ${esc(g.name)}</p>
+    <p class="crumb"><a href="${planHref(s)}">${esc(sideLabel(s))}</a> / ${esc(g.name)}</p>
     <header class="unit-head">${sym(g.symbol, "lg")}<div><h1>${esc(g.name)}</h1><p>Squad ${esc(g.squad)}</p></div></header>
     ${variantBar(s)}
     ${doc ? `<p class="goal">${esc(doc.goal)}</p><ul class="bullets block" style="margin-top:16px">${doc.points.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
@@ -1188,7 +1196,7 @@ async function loadUnlocks() {
 }
 // a re-render replaces the focused control: put keyboard focus back on its twin
 function keepFocus(fn) {
-  const a = document.activeElement, k = a && ["data-tracker", "data-rsvp", "data-trsvp", "data-me", "data-swarm", "data-support"].find(x => a.hasAttribute(x));
+  const a = document.activeElement, k = a && ["data-tracker", "data-rsvp", "data-trsvp", "data-swarm", "data-support"].find(x => a.hasAttribute(x));
   const sel = k && `[${k}="${CSS.escape(a.getAttribute(k))}"]`, i = sel ? [...document.querySelectorAll(sel)].indexOf(a) : -1;
   fn();
   if (sel) document.querySelectorAll(sel)[i]?.focus({ preventScroll: true });
@@ -1565,7 +1573,11 @@ function render() {
     const r = p[2] === "role" && roleOf(s, p[3]), g = p[2] === "squad" && groupOf(s, p[3]);
     if (r) { html = viewRole(s, r); title = `${r.id} ${r.name} · KIN`; }
     else if (g) { html = viewSquad(s, g); title = `${g.name} · KIN`; }
-    else { html = viewStrategy(s, ["situace", "vetve"].includes(p[2]) ? p[2] : "platno"); title = `${sideLabel(s)} · KIN`; }
+    else { location.replace(planHref(s, ["situace", "vetve"].includes(p[2]) ? p[2] : "platno")); return; }  // M6: Discord and briefing links
+  } else if (p[0] === "mapy" && mapOf(p[1])) {
+    const m = mapOf(p[1]), q = new URLSearchParams(qs), x = D.strategies.find(y => y.map === m && teamKey(y) === q.get("t"));
+    cur = x || null; curVariant = x && x.variants.some(y => y.id === q.get("v")) ? q.get("v") : null;
+    html = viewMapDetail(m, qs); active = "mapy"; title = `${m} · KIN`;
   } else if (p[0] === "mapy") { html = viewMapy(); active = "mapy"; title = "Mapy · KIN"; }
   else if (p[0] === "squady" || p[0] === "vybava") { html = viewSquads(); active = "vybava"; title = "Výbava · KIN"; }
   else if (p[0] === "squad" && SQ(p[1])) {
@@ -1575,7 +1587,8 @@ function render() {
     const tab = p[0] === "vycvik" ? "vycvik" : p[1];
     html = viewDoktrina(tab); active = "doktrina"; title = (tab === "swarm" ? "SWARM" : tab === "vycvik" ? "Výcvik" : "Doktrína") + " · KIN";
   } else if (p[0] === "akce" && !p[1]) {
-    plan = planOf(state.event); if (plan && !plan.swarm) curVariant = pickVariant(plan, qs);
+    plan = planOf(state.event); if (plan && !plan.swarm) curVariant = state.event.variant || pickVariant(plan, qs);
+    cur = plan && !plan.swarm && !plan.nomap ? plan : null;  // the build order's role chips trace on this plan
     html = viewAkce(); active = "akce"; title = "Akce · KIN";
     if (sb && state.me) setTimeout(() => loadHist(["historie"]));
   } else if (p[0] === "briefing") {
@@ -1597,7 +1610,7 @@ function render() {
 }
 
 $app.addEventListener("click", e => {
-  const t = e.target.closest("[data-trace],[data-untrace],[data-pick],[data-me],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-kit],[data-swarm],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker]");
+  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-kit],[data-swarm],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker]");
   if (!t) return;
   if (t.dataset.trsvp) { const [id, st] = t.dataset.trsvp.split(":"); rsvpTraining(Number(id), st); return; }
   if (t.dataset.tclose) { t.disabled = true; const [id, st] = t.dataset.tclose.split(":"); closeTraining(Number(id), st); return; }
@@ -1628,8 +1641,6 @@ $app.addEventListener("click", e => {
   }
   else if (t.dataset.trace) { trace = trace === t.dataset.trace ? null : t.dataset.trace; applyTrace(); }
   else if ("untrace" in t.dataset) { trace = null; applyTrace(); }
-  else if (t.dataset.pick) { me.set(t.dataset.pick); const [sid, rid] = t.dataset.pick.split("/"); location.hash = `#/s/${sid}/role/${rid}`; }
-  else if (t.dataset.me) { me.set(me.get() === t.dataset.me ? null : t.dataset.me); rerenderKeep(); }
 
 });
 // Back/Forward return to where the reader was: the scroll position lives in the history entry (Viktor #023)
