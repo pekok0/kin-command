@@ -11,7 +11,7 @@ const sb = window.supabase ? supabase.createClient(window.KIN_BACKEND.url, windo
 // a stored Supabase session means the login check is on its way: the gate shows "checking", not the button
 const hadSession = (() => { try { return Object.keys(localStorage).some(k => /^sb-.*-auth-token$/.test(k)); } catch { return false; } })();
 // never echo the provider's error text from the URL (content spoofing); drop it so a reload is clean
-let state = { me: null, error: urlQs.has("error") ? "Přihlášení přes Discord selhalo." : null, event: null, claims: [], rsvps: [], trainings: [], flash: null, checking: !!sb && (hadSession || FRESH) };
+let state = { me: null, error: urlQs.has("error") ? "Přihlášení přes Discord selhalo." : null, event: null, claims: [], rsvps: [], trainings: [], ops: [], focusId: null, opsLoaded: false, flash: null, trFlash: null, novaFlash: null, checking: !!sb && (hadSession || FRESH) };
 if (urlQs.has("error")) history.replaceState(null, "", location.pathname + location.hash);
 
 const LOGIN_ERR = "Přihlášení se nepovedlo. Zkus to znovu.";
@@ -101,32 +101,32 @@ let chan = null;
 let loadSeq = 0;
 const LOAD_ERR = "Sestavu se nepodařilo načíst, zkus to znovu.";
 async function loadEvent() {
-  if (!state.me) { state.event = null; state.claims = []; state.rsvps = []; state.trainings = []; renderRoster(); return; }
+  if (!state.me) { state.ops = []; state.event = null; state.claims = []; state.rsvps = []; state.trainings = []; renderRoster(); return; }
   const seq = ++loadSeq;
   try {
-    // specs/typy-akci T1: the roster, closing and history work with the open operation only; trainings and courses open
-    // beside it are a list of their own and never state.event
+    // specs/akce-v2 (Petr 2026-10-22): several operations open at once, each with its own roster; trainings and courses
+    // are a list of their own and never state.event
     const [op, tr] = await Promise.all([
-      sb.from("events").select("id, strategy_id, doctrine, variant, squad_swarm, squad_support, starts_at, leader:members!events_created_by_fkey(name)").eq("status", "open").eq("kind", "operace").maybeSingle(),
+      sb.from("events").select("id, strategy_id, doctrine, variant, squad_swarm, squad_support, starts_at, leader:members!events_created_by_fkey(name)").eq("status", "open").eq("kind", "operace").order("starts_at"),
       sb.from("events").select("id, kind, topic, title, description, capacity, starts_at, created_by, leader:members!events_created_by_fkey(name), rsvps(user_id, status, members(name, avatar_url, discord_id))")
         .eq("status", "open").neq("kind", "operace").order("starts_at"),
     ]);
     if (op.error) throw op.error;
     if (tr.error) throw tr.error;
-    const ev = op.data;
-    let claims = [], rsvps = [];
-    if (ev) {
+    // ponytail: two small queries per open operation (a handful at most); one `in` query when there are many
+    const ops = await Promise.all((op.data || []).map(async ev => {
       const [cl, rs] = await Promise.all([
         sb.from("claims").select("slot_key, slot_label, user_id, lead, members(name, avatar_url, discord_id)").eq("event_id", ev.id),
         sb.from("rsvps").select("user_id, status, members(name, avatar_url, discord_id)").eq("event_id", ev.id),
       ]);
       if (cl.error) throw cl.error;
       if (rs.error) throw rs.error;
-      claims = cl.data; rsvps = rs.data;
-    }
+      return { ...ev, claims: cl.data, rsvps: rs.data };
+    }));
     // swap the whole state at once, and only for the newest load (a slower old response must not win)
     if (seq !== loadSeq) return;
-    state.event = ev; state.claims = claims; state.rsvps = rsvps; state.trainings = tr.data; state.evErr = false;
+    state.ops = ops; state.opsLoaded = true; state.trainings = tr.data; state.evErr = false;
+    focusEvent();
     if (state.flash === LOAD_ERR) state.flash = null;  // connection is back: drop only our own outage message
   } catch (e) {
     // keep the last known roster: an empty "no event open" would lie and offer a second event (Viktor UAT #003)
@@ -135,7 +135,14 @@ async function loadEvent() {
     state.evErr = true; state.flash = LOAD_ERR;
   }
   syncMyRole();  // outside try: a bug here must not show up as a connection outage (OWASP 2026-10-20 L2)
+  // the lobby I looked at was closed or cancelled meanwhile: its address shows the history (closed) or Akce
+  if (state.focusId && !state.ops.some(e => e.id === state.focusId) && (state.opsLoaded || state.evErr)) { state.focusId = null; render(); return; }
   renderRoster();
+}
+// the operation in focus: the one the address names (#/akce/<id>), else the nearest; the roster code works on it
+function focusEvent() {
+  const ev = state.ops.find(e => e.id === state.focusId) || (state.focusId ? null : state.ops[0]) || null;
+  state.event = ev; state.claims = ev ? ev.claims : []; state.rsvps = ev ? ev.rsvps : [];
 }
 
 async function setRsvp(status) {
@@ -246,7 +253,7 @@ function viewRoster(s) {
   if (!state.me) return `${head}<p class="note">Sestava je jen pro členy KIN. <button type="button" class="act" data-login>Přihlásit přes Discord</button></p>`;
   const ev = state.event;
   if (!ev) return state.evErr ? `${head}${msg}`
-    : `${head}${state.me.is_commander ? newEventForm() : '<p class="note">Žádná akce není otevřená. Založí ji Commander.</p>'}${msg}`;
+    : `${head}<p class="note">Žádná akce není otevřená. Založí ji Commander.</p>${msg}`;
   const cancel = state.me.is_commander ? cancelEventForm() : "";
   // the map form too: picking a known map or "zatím nevím" keeps the sign-ups, cancelling drops them (threat model N1)
   if (!s) return `${head}<p class="note">Otevřená akce (${esc(fmtWhen(ev.starts_at))}) je pro mapu ${esc(ev.strategy_id)}, kterou Central Command nezná.</p>${msg}${state.me.is_commander ? mapTeamForm(ev) : ""}${cancel}`;
@@ -296,12 +303,28 @@ setInterval(() => document.querySelectorAll(".tminus[data-t0]").forEach(e => { e
 // the plan, and for SWARM what I buy; maps and doctrine are for reading only
 function akceBody() {
   const s = plan, ev = state.me && state.event;
-  const tr = state.me ? trainingsSection() : "";  // specs/typy-akci T3: under the operation, also when none is open
-  if (!ev || !s) return viewRoster(s) + tr;
+  if (!sb || !state.me) return viewRoster(s);
+  const top = opCards() + trainingsSection(), nova = newPanel();
+  if (!ev || !s) return top + (state.evErr || ev ? `<section class="lobby">${viewRoster(s)}</section>` : "") + nova;
   const read = s.swarm ? `Plán ke čtení: <a href="#/doktrina/swarm">${esc(docName("swarm"))} v Doktríně</a>`
     : s.nomap ? "Karta role a nákup se ukážou, až Commander vybere mapu a tým."
     : `Situace, větve a karty rolí: <a href="${planHref(s)}">${esc(sideLabel(s))} v Mapách</a>`;
-  return `<p class="note planl">${read}</p>${viewRoster(s)}${s.swarm ? swarmMyKit() : s.nomap ? "" : buildOrder(s)}${tr}`;
+  return `${top}<section class="lobby" id="lobby"><p class="note planl">${read}</p>${viewRoster(s)}${s.swarm ? swarmMyKit() : s.nomap ? "" : buildOrder(s)}</section>${nova}`;
+}
+// every open operation as a card (specs/akce-v2 A2): when, how long to go, doctrine, map, how full, my place; the card
+// in focus is lit, a click shows its lobby below
+function opCards() {
+  if (!state.ops.length) return state.evErr ? "" : '<section class="block opl-sec"><h2>Operace</h2><p class="note">Teď není otevřená žádná operace.</p></section>';
+  return `<section class="block opl-sec"><h2>Operace</h2><div class="opl">${state.ops.map(ev => {
+    const s = planOf(ev), total = s ? s.roster.reduce((n, g) => n + g.max, 0) : 0, n = ev.claims.length;
+    const mine = ev.claims.find(c => c.user_id === state.me.user_id), said = (ev.rsvps.find(r => r.user_id === state.me.user_id) || {}).status;
+    const on = state.event && state.event.id === ev.id;
+    return `<a class="opc${on ? " on" : ""}" href="#/akce/${ev.id}"${on ? ' aria-current="true"' : ""}>
+      <span class="opc-k">${esc(docName(ev.doctrine))}</span>
+      <b class="opc-t">${esc(fmtWhen(ev.starts_at))}</b><span class="tminus" data-t0="${esc(ev.starts_at)}">${tminus(ev.starts_at)}</span>
+      <span class="opc-m">${ev.doctrine === "swarm" ? "mapa podle hry" : sideOf(ev.strategy_id, "mapa zatím nevybraná")}</span>
+      <span class="opc-g"><i style="width:${total ? Math.min(100, Math.round(100 * n / total)) : 0}%"></i></span><span class="opc-f"><b>${n}</b> / ${total} míst</span>
+      <span class="opc-me">${mine ? `Máš místo: ${esc(mine.slot_label)}` : said ? `Odpověď: ${esc((RSVP.find(x => x[0] === said) || [, said])[1])}` : "Zatím bez odpovědi"}</span></a>`; }).join("")}</div></section>`;
 }
 // FORTRESS with map and team: the plan of the picked zone under the lobby (specs/mapy-v2 M5)
 function buildOrder(s) {
@@ -334,7 +357,7 @@ function keepForms() {
   const el = document.getElementById("sestava");
   if (!el) return () => {};
   const keep = [...el.querySelectorAll("form[data-form]")].map(f => [f.dataset.form,
-    [...f.elements].filter(x => x.name).map(x => [x.name, x.type === "checkbox" ? x.checked : x.value])]);
+    [...f.elements].filter(x => x.name && x.type !== "hidden").map(x => [x.name, x.type === "checkbox" ? x.checked : x.value])]);
   const opened = [...el.querySelectorAll("details[open]")].map(d => d.className);
   return () => {
     const el = document.getElementById("sestava");
@@ -529,8 +552,18 @@ const pickFields = (s, ev) => `<label>Mapa <select name="map"><option value="">z
     `<option value="${esc(mapSlug(m) + ":" + v.id)}"${ev && s && s.map === m && ev.variant === v.id ? " selected" : ""}>${esc(v.name)}</option>`).join("")}</optgroup>`).join("")}</select></label>`;
 
 // one form in Akce for both doctrines (rozhodnuti 8); founding ahead, the map and team are not known yet (specs/akce-mapa-tym)
+let novaKind = "operace";
+function newPanel() {
+  const cmd = state.me.is_commander;
+  if (!cmd && !state.me.is_officer) return "";
+  const kinds = [["operace", "Operace", "velká akce klanu"], ["trenink", "Trénink", "pro všechny"], ["kurz", "Kurz", "omezený počet míst"]].filter(([k]) => k !== "operace" || cmd);
+  const k = kinds.some(x => x[0] === novaKind) ? novaKind : kinds[0][0];
+  return `<section class="block nova" id="nova"><h2>Nová akce</h2><div class="vbar seg" role="group" aria-label="Typ nové akce">${kinds.map(([id, l, sub]) =>
+    `<button type="button" data-nova="${id}" aria-pressed="${id === k}"><b>${l}</b><small>${sub}</small></button>`).join("")}</div>
+    ${state.novaFlash ? `<p class="err ros-msg" role="alert">${esc(state.novaFlash)}</p>` : ""}${k === "operace" ? newEventForm() : newTrainingForm(k)}</section>`;
+}
 function newEventForm() {
-  return `<form class="evf" data-form="new"><p class="note">Žádná akce není otevřená.</p>
+  return `<form class="evf" data-form="new">
     <label>Začátek <input type="datetime-local" name="starts" required min="${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}T00:00"></label>
     <label>Doktrína <select name="doctrine">${["defence", "swarm"].map(d => `<option value="${d}">${esc(docOf(d).title)}: ${esc(docOf(d).short)}</option>`).join("")}</select></label>
     ${pickFields(null)}
@@ -582,7 +615,8 @@ const trCount = tr => tr.capacity ? `${goers(tr)} / ${esc(tr.capacity)}` : Strin
 function trainingsSection() {
   const list = state.trainings.length ? `<ul class="trl">${state.trainings.map(trainingRow).join("")}</ul>`
     : '<p class="note">Teď není vypsaný žádný trénink ani kurz. Vypisují je důstojníci.</p>';
-  return `<section class="block" id="treninky"><h2>Tréninky a kurzy</h2>${state.me.is_commander || state.me.is_officer ? newTrainingForm() : ""}${list}</section>`;
+  const msg = state.trFlash ? `<p class="err ros-msg" role="alert">${esc(state.trFlash)}</p>` : "";
+  return `<section class="block" id="treninky"><h2>Tréninky a kurzy</h2>${msg}${list}</section>`;
 }
 
 function trainingRow(tr) {
@@ -604,15 +638,14 @@ function trainingRow(tr) {
     ${ctl}</li>`;
 }
 
-function newTrainingForm() {
-  return `<details class="trnew"><summary>Vypsat trénink nebo kurz</summary><form class="evf" data-form="training">
-    <label>Typ <select name="kind"><option value="trenink">Trénink: pro všechny</option><option value="kurz">Kurz: omezený počet míst</option></select></label>
+function newTrainingForm(kind) {
+  return `<form class="evf" data-form="training"><input type="hidden" name="kind" value="${kind === "kurz" ? "kurz" : "trenink"}">
     <label>Téma <select name="topic">${Object.entries(TOPICS).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></label>
     <label class="wide">Název <input name="title" required maxlength="80"></label>
     <label>Začátek <input type="datetime-local" name="starts" required min="${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}T00:00"></label>
-    <label class="cap" hidden>Počet míst <input type="number" name="capacity" min="2" max="12" value="8" required disabled></label>
+    <label class="cap"${kind === "kurz" ? "" : " hidden"}>Počet míst <input type="number" name="capacity" min="2" max="12" value="8" required${kind === "kurz" ? "" : " disabled"}></label>
     <label class="wide">Krátký popis <textarea name="description" maxlength="500" rows="2"></textarea></label>
-    <button type="submit" class="act">Vypsat</button></form></details>`;
+    <button type="submit" class="act">Vypsat</button></form>`;
 }
 // a course has places, a training does not: the field shows and is sent only for a course
 const capToggle = f => { const off = f.elements.kind.value !== "kurz"; f.querySelector(".cap").hidden = off; f.elements.capacity.disabled = off; };
@@ -622,7 +655,7 @@ async function createTraining(f) {
   const v = Object.fromEntries(new FormData(f)), kind = v.kind === "kurz" ? "kurz" : "trenink";
   const { error } = await sb.from("events").insert({ kind, topic: v.topic, title: v.title.trim(), starts_at: new Date(v.starts).toISOString(),
     description: v.description.trim() || null, capacity: kind === "kurz" ? Number(v.capacity) : null });
-  state.flash = !error ? null : error.code === "42501" ? "Trénink nebo kurz vypíše jen důstojník (role Velitel) nebo Commander." : saveErr(error);
+  state.novaFlash = !error ? null : error.code === "42501" ? "Trénink nebo kurz vypíše jen důstojník (role Velitel) nebo Commander." : saveErr(error);
   if (!error) { f.reset(); capToggle(f); }  // the next one starts from an empty form
 }
 
@@ -630,7 +663,7 @@ async function rsvpTraining(id, status) {
   const { error } = await sb.from("rsvps").upsert({ event_id: id, user_id: state.me.user_id, status, updated_at: new Date().toISOString() },
     { onConflict: "event_id,user_id" });
   // 23514 = the capacity trigger (012): someone took the last place a moment earlier
-  state.flash = !error ? null : error.code === "23514" ? "Kurz je plný." : error.code === "42501" ? "Trénink už je uzavřený." : saveErr(error);
+  state.trFlash = !error ? null : error.code === "23514" ? "Kurz je plný." : error.code === "42501" ? "Trénink už je uzavřený." : saveErr(error);
   await loadEvent();
 }
 
@@ -638,7 +671,7 @@ async function rsvpTraining(id, status) {
 async function closeTraining(id, status) {
   const { data, error } = await sb.from("events").update({ status: status === "closed" ? "closed" : "cancelled" })
     .eq("id", id).neq("kind", "operace").select("id");
-  state.flash = error ? saveErr(error) : !data.length ? "Nepodařilo se uložit: trénink už není otevřený, nebo ho nevypsal ty." : null;
+  state.trFlash = error ? saveErr(error) : !data.length ? "Nepodařilo se uložit: trénink už není otevřený, nebo ho nevypsal ty." : null;
   await loadEvent();
 }
 
@@ -679,8 +712,9 @@ document.addEventListener("submit", async e => {
     : f.dataset.form === "mapteam" ? await sb.from("events").update({ strategy_id: sid, variant: zone }).eq("id", eventId).select("id")  // count rows like cancelEvent (OWASP L1)
     : await sb.from("events").update({ status: "closed", placement: Number(v.placement), variant: v.variant || null,
         went_well: v.went_well || null, went_wrong: v.went_wrong || null, next_time: v.next_time || null }).eq("id", eventId);
-  state.flash = error ? (error.code === "23505" ? "Už je otevřená jiná akce." : saveErr(error))
+  const msg = error ? (error.code === "23505" ? "Už je otevřená jiná akce." : saveErr(error))
     : f.dataset.form === "mapteam" && !data.length ? "Mapu a tým se nepodařilo uložit: akce už není otevřená, nebo nemáš práva Commandera." : null;
+  if (f.dataset.form === "new") state.novaFlash = msg; else state.flash = msg;
   btn.disabled = false;
   await loadEvent();
 });
@@ -1193,7 +1227,7 @@ async function loadUnlocks() {
 }
 // a re-render replaces the focused control: put keyboard focus back on its twin
 function keepFocus(fn) {
-  const a = document.activeElement, k = a && ["data-tracker", "data-rsvp", "data-trsvp", "data-swarm", "data-support"].find(x => a.hasAttribute(x));
+  const a = document.activeElement, k = a && ["data-tracker", "data-nova", "data-rsvp", "data-trsvp", "data-swarm", "data-support"].find(x => a.hasAttribute(x));
   const sel = k && `[${k}="${CSS.escape(a.getAttribute(k))}"]`, i = sel ? [...document.querySelectorAll(sel)].indexOf(a) : -1;
   fn();
   if (sel) document.querySelectorAll(sel)[i]?.focus({ preventScroll: true });
@@ -1565,6 +1599,7 @@ function render() {
   if (p[0] === "historie") { location.replace("#/akce"); return; }  // links in Discord debrief threads
   let html, active = null, title = "KIN Central Command";
   cur = null; trace = null; plan = null;
+  if (p[0] !== "akce") { state.focusId = null; focusEvent(); }  // elsewhere the nearest operation (home card, bar, Moje role)
   if (p[0] === "s" && S(p[1])) {
     const s = S(p[1]); cur = s; active = "mapy"; curVariant = pickVariant(s, qs);
     const r = p[2] === "role" && roleOf(s, p[3]), g = p[2] === "squad" && groupOf(s, p[3]);
@@ -1583,7 +1618,8 @@ function render() {
   } else if (p[0] === "doktrina" || p[0] === "vycvik") {
     const tab = p[0] === "vycvik" ? "vycvik" : p[1];
     html = viewDoktrina(tab); active = "doktrina"; title = (tab === "swarm" ? "SWARM" : tab === "vycvik" ? "Výcvik" : "Doktrína") + " · KIN";
-  } else if (p[0] === "akce" && !p[1]) {
+  } else if (p[0] === "akce" && (!p[1] || /^\d+$/.test(p[1]) && (!state.opsLoaded && !state.evErr || state.ops.some(e => e.id === +p[1])))) {
+    state.focusId = p[1] ? +p[1] : null; focusEvent();
     plan = planOf(state.event); if (plan && !plan.swarm) curVariant = state.event.variant || pickVariant(plan, qs);
     cur = plan && !plan.swarm && !plan.nomap ? plan : null;  // the build order's role chips trace on this plan
     html = viewAkce(); active = "akce"; title = "Akce · KIN";
@@ -1607,7 +1643,7 @@ function render() {
 }
 
 $app.addEventListener("click", e => {
-  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-kit],[data-swarm],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker]");
+  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-kit],[data-swarm],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker],[data-nova]");
   if (!t) return;
   if (t.dataset.trsvp) { const [id, st] = t.dataset.trsvp.split(":"); rsvpTraining(Number(id), st); return; }
   if (t.dataset.tclose) { t.disabled = true; const [id, st] = t.dataset.tclose.split(":"); closeTraining(Number(id), st); return; }
@@ -1621,6 +1657,7 @@ $app.addEventListener("click", e => {
   if (t.dataset.rsvp) { setRsvp(t.dataset.rsvp); return; }
   if (t.dataset.cancel !== undefined) { cancelEvent(t); return; }
   if (t.dataset.tracker !== undefined) { syncTracker().catch(e => console.error(e)); return; }
+  if (t.dataset.nova) { novaKind = t.dataset.nova; rerenderKeep(); return; }
   if (t.dataset.claim || t.dataset.unclaim) {
     // the roster re-renders: put focus back on my slot, else on the same row, not on <body> (Viktor UAT #006)
     const i = [...document.querySelectorAll(".ros li")].indexOf(t.closest("li"));

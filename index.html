@@ -332,6 +332,27 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .vbar button small { font: 500 13px/1.1 var(--sans); color: var(--ink-3); }
 .vbar button:hover { border-color: var(--fr); }
 .vbar button[aria-pressed="true"] { border-color: var(--fr); background: var(--fr-fill); box-shadow: inset 0 -3px 0 var(--fr); }
+/* specs/akce-v2: every open operation as a big lit card; the one in focus glows cyan, its lobby follows below */
+.opl { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 14px; margin-top: 12px; }
+.opc { position: relative; display: grid; gap: 6px; padding: 18px 20px 16px; color: var(--ink); text-decoration: none;
+  background: var(--brackets), var(--plate-bg); box-shadow: var(--plate-lift); transition: box-shadow 260ms var(--ease), transform 260ms var(--ease); }
+.opc:hover { transform: translateY(-2px); box-shadow: var(--plate-lift), 0 0 0 1px oklch(0.86 0.15 205 / 0.45), 0 0 30px -12px var(--fr-glow); }
+.opc.on { box-shadow: var(--plate-lift), 0 0 0 1px var(--fr), 0 0 36px -10px var(--fr-glow); }
+.opc-k { justify-self: start; font: 700 13px/1 var(--cond); letter-spacing: .12em; text-transform: uppercase; padding: 5px 8px 4px; color: var(--fr); border: 1px solid oklch(0.86 0.15 205 / 0.6); background: var(--fr-fill); }
+.opc-t { font: 700 26px/1.05 var(--cond); letter-spacing: .02em; text-transform: uppercase; }
+.opc .tminus { font: 700 20px/1 var(--mono, var(--cond)); letter-spacing: .06em; color: var(--fr); text-shadow: 0 0 16px var(--fr-glow); }
+.opc-m { color: var(--ink-2); }
+.opc-g { display: block; height: 6px; margin-top: 4px; background: oklch(0.22 0.04 250); box-shadow: inset 0 0 0 1px var(--rule-soft); }
+.opc-g i { display: block; height: 100%; background: linear-gradient(90deg, oklch(0.8 0.15 210), var(--fr)); box-shadow: 0 0 12px -2px var(--fr-glow); }
+.opc-f { font: 600 15px/1 var(--cond); letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); }
+.opc-f b { color: var(--ink); font-size: 18px; }
+.opc-me { font-size: 14px; color: var(--ink-3); }
+.opc.on .opc-me { color: var(--ink-2); }
+.lobby { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--rule); }
+.nova { margin-top: 30px; }
+.nova .seg { margin-top: 10px; }
+.nova .evf { margin-top: 16px; }
+
 /* specs/mapy-v2: the map page's choices are links (each choice is a shareable URL), styled like the zone switch */
 .mapstep { margin-top: 12px; }
 .mapstep .vlbl { flex-basis: 100%; }
