@@ -384,9 +384,21 @@ function renderRoster() {
   plan = planOf(state.event);  // a new, cancelled or switched event changes which roster Akce shows
   if (plan && !plan.swarm) curVariant = state.event.variant || pickVariant(plan, "");  // the zone picked at founding, else the last seen
   const restore = keepForms();
-  keepFocus(() => { el.innerHTML = akceBody(); });
+  keepView(el, () => keepFocus(() => { el.innerHTML = akceBody(); }));
   restore();
   markChanges(el);
+}
+
+// a rebuilt roster keeps the row I was looking at where it was on screen: innerHTML drops the browser's own scroll
+// anchoring (Petr 2026-10-22: "Povedu squad" jumped the page when the squad's header lost a line); my row if it is in
+// view, else the first row in view
+function keepView(el, fn) {
+  const rows = () => [...el.querySelectorAll(".ros li")], seen = r => { const b = r.getBoundingClientRect(); return b.bottom > 0 && b.top < innerHeight; };
+  const mine = el.querySelector(".ros li.is-me"), a = mine && seen(mine) ? mine : rows().find(seen);
+  const i = a ? rows().indexOf(a) : -1, top = a && a.getBoundingClientRect().top;
+  fn();
+  const b = !a ? null : a === mine ? el.querySelector(".ros li.is-me") : rows()[i];
+  if (b) scrollBy(0, b.getBoundingClientRect().top - top);
 }
 
 // war room (Petr 2026-10-21, specs/war-room W2-W3): every change on the roster shows on the row or vehicle and plays one
