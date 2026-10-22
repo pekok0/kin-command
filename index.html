@@ -591,6 +591,15 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .tmark { display: inline-block; width: .8em; height: .95em; margin-left: .35em; vertical-align: -.1em; background: var(--tc);
   clip-path: polygon(50% 0, 100% 18%, 100% 58%, 50% 100%, 0 58%, 0 18%); box-shadow: 0 0 10px var(--tc); }
 
+/* the roster editor (specs/akce-v2 A6): a role without places stays as a dim line the Commander can grow */
+.sqp.off { opacity: .55; }
+.sqp .swctl .act { min-width: 40px; justify-content: center; }
+.sqtools { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.sqadd { border-color: var(--fr); color: var(--fr); }
+.seatt { margin-top: 8px; font-size: 13px; }
+.sqtools .act, .seatt { min-height: 44px; }  /* a finger on a phone (WCAG 2.5.5) */
+.seatt[aria-pressed="false"] { opacity: .75; }
+
 /* the event rail (Petr 2026-10-22): lit tiles under the nav on every page but Akce and home; scrolls sideways when many */
 .evrail { display: flex; gap: 10px; margin: 14px 0 4px; padding: 2px 2px 8px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: thin; }
 .evt { flex: 0 0 auto; min-width: 230px; max-width: 300px; display: grid; gap: 4px; padding: 10px 14px 11px; scroll-snap-align: start; color: var(--ink); text-decoration: none;
