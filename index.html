@@ -535,8 +535,19 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .evf label.wide { flex: 1 1 28ch; }
 .evf input, .evf select, .evf textarea { font: 500 16px/1.3 var(--sans); color: var(--ink); background: var(--panel-2); border: 1px solid var(--rule); padding: 7px 8px; }
 .evclose, .evmap { margin: 0 0 8px; }
-#evbar a { display: block; margin: 10px 0 0; padding: 9px 12px; border: 1px solid var(--ho); color: var(--ink); font: 600 15px/1.3 var(--cond); letter-spacing: .04em; text-decoration: none; }
-#evbar a b { color: var(--ho); }
+/* the event rail (Petr 2026-10-22): lit tiles under the nav on every page but Akce and home; scrolls sideways when many */
+.evrail { display: flex; gap: 10px; margin: 14px 0 4px; padding: 2px 2px 8px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: thin; }
+.evt { flex: 0 0 auto; min-width: 230px; max-width: 300px; display: grid; gap: 4px; padding: 10px 14px 11px; scroll-snap-align: start; color: var(--ink); text-decoration: none;
+  background: var(--brackets), var(--plate-bg); box-shadow: var(--plate-lift); transition: box-shadow 220ms var(--ease), transform 220ms var(--ease); }
+.evt:hover { transform: translateY(-1px); box-shadow: var(--plate-lift), 0 0 0 1px oklch(0.86 0.15 205 / 0.45); }
+.evt.next { box-shadow: var(--plate-lift), 0 0 0 1px var(--fr), 0 0 26px -12px var(--fr-glow); }
+.evt-k { font: 700 12px/1.1 var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--fr); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.evt-w { display: flex; align-items: baseline; gap: 10px; }
+.evt-w b { font: 700 17px/1 var(--cond); letter-spacing: .02em; text-transform: uppercase; }
+.evt .tminus { font: 700 15px/1 var(--cond); letter-spacing: .05em; color: var(--fr); }
+.evt-s { font-size: 13px; color: var(--ink-3); }
+.evt.need .evt-s { color: var(--un); font-weight: 600; }
+.evt.need .evt-s::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: var(--un); box-shadow: 0 0 10px var(--un); vertical-align: 1px; }
 .evcancel { margin: 0 0 12px; }
 .evclose summary, .evmap summary, .evcancel summary { display: inline-block; cursor: pointer; font: 600 14px/1 var(--cond); letter-spacing: .06em; text-transform: uppercase; padding: 8px 10px 7px; border: 1px solid var(--rule); }
 .evclose summary:hover, .evmap summary:hover { border-color: var(--fr); }
@@ -776,7 +787,7 @@ body::after {
 /* plates: every panel is edge-lit glass with corner brackets, lifted off the floor */
 .matrix-wrap, .picker, .loadout { background: var(--brackets), var(--plate-bg); border: 0; box-shadow: var(--plate-lift); }
 .ros { background: none; border: 0; box-shadow: none; }
-.tile, .cls a, .strip li, .lo-store li, .cont, #evbar a, .vbar button, .drill a.pic {
+.tile, .cls a, .strip li, .lo-store li, .cont, .evt, .vbar button, .drill a.pic {
   background-color: transparent; background-image: var(--plate-bg); box-shadow: var(--plate-lift); border-color: transparent;
   transition: transform 220ms var(--ease), box-shadow 220ms var(--ease); }
 .tile.opt, .strip li.opt { box-shadow: inset 0 0 0 1px oklch(0.45 0.08 228 / 0.55); border: 1px dashed var(--rule); }

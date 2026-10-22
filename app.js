@@ -345,11 +345,22 @@ function swarmMyKit() {
 }
 
 // realtime and tab-return re-render the block: keep what the Commander is typing into a form
-// an open SWARM event: pages without the event card point to Akce (a saved role opens the Top defence card, Viktor #001)
+// every open operation, training and course as a tile under the nav, by time (Petr 2026-10-22: "tu notifikaci urcite
+// chci mit na vsech strankach ... inteligentne a prehledne ... rychle se dostat na danou akci"); the nearest is lit, a tile
+// without my answer asks for it. Akce shows big cards and the home page its own card, so the rail stays off there.
 function renderEvBar() {
-  const ev = state.me && state.event, bar = document.getElementById("evbar");
-  if (bar) bar.innerHTML = ev && ev.doctrine === "swarm" && !["sestava", "ev-card", "home-ev"].some(id => document.getElementById(id))
-    ? `<a href="#/akce"><b>Akce ${esc(fmtWhen(ev.starts_at))}: ${esc(docName("swarm"))}.</b> Zápis a tvůj nákup jsou v Akci.</a>` : "";
+  const bar = document.getElementById("evbar");
+  if (!bar) return;
+  const here = ["sestava", "home-ev"].some(id => document.getElementById(id));
+  const items = !state.me || here ? [] : [...state.ops.map(ev => ({ ev, op: true })), ...state.trainings.map(ev => ({ ev, op: false }))]
+    .sort((a, b) => a.ev.starts_at.localeCompare(b.ev.starts_at));
+  bar.innerHTML = !items.length ? "" : `<nav class="evrail" aria-label="Otevřené akce">${items.map(({ ev, op }, i) => {
+    const mine = op && ev.claims.find(c => c.user_id === state.me.user_id), said = (ev.rsvps.find(r => r.user_id === state.me.user_id) || {}).status;
+    const st = mine ? `Máš místo: ${esc(mine.slot_label)}` : said ? esc((RSVP.find(x => x[0] === said) || [, said])[1]) : "Odpověz, jestli přijdeš";
+    return `<a class="evt${i ? "" : " next"}${mine || said ? "" : " need"}" href="${op ? `#/akce/${ev.id}` : "#/akce"}">
+      <span class="evt-k">${op ? `Operace · ${esc(docName(ev.doctrine))}` : `${esc(label(KINDS, ev.kind))} · ${esc(ev.title)}`}</span>
+      <span class="evt-w"><b>${esc(fmtWhen(ev.starts_at))}</b><span class="tminus" data-t0="${esc(ev.starts_at)}">${tminus(ev.starts_at)}</span></span>
+      <span class="evt-s">${st}</span></a>`; }).join("")}</nav>`;
 }
 
 // returns a function that puts back the roster's typed forms and open <details> after a rebuild
@@ -377,8 +388,6 @@ function renderRoster() {
   renderEvBar();
   const home = document.getElementById("home-ev");
   if (home) home.innerHTML = homeEvent();
-  const card = document.getElementById("ev-card");
-  if (card) card.innerHTML = evCard();
   const el = document.getElementById("sestava");
   if (!el) return;
   plan = planOf(state.event);  // a new, cancelled or switched event changes which roster Akce shows
@@ -916,8 +925,6 @@ function homeEvent() {
   return `<a class="cont evc" href="#/akce"><span class="big">Operace</span><span>${esc(fmtWhen(ev.starts_at))} · ${sideOf(ev.strategy_id, "mapa zatím nevybraná")} · ${esc(docName(ev.doctrine))}<small>${status}</small></span></a>${next}`;
 }
 
-// reading pages (map, doctrine) show the open event as a card into Akce, nothing when none is open
-const evCard = () => state.me && state.event ? homeEvent() : "";
 // specs/mapy-v2 (Petr 2026-10-22): the 3 maps; a map's page picks doctrine, team and zone variant, then shows the
 // plan of that choice. Read-only: no open event changes it, roles are claimed in Akce.
 const MAPS = () => [...new Set(D.strategies.map(x => x.map))];
@@ -1237,7 +1244,6 @@ function viewDoktrina(tab) {
     <div class="narrow">
     <header class="unit-head"><div><h1>Doktrína</h1><p>Platí pro všechny mapy a barvy. Kterou hrajeme, rozhodne Commander před zápasem.</p></div></header>
     <nav class="tabs" aria-label="Doktrína">${tabs.map(([path, label]) => `<a href="#/doktrina${path && "/" + path}"${path === cur ? ' aria-current="page"' : ""}>${esc(label)}</a>`).join("")}</nav>
-    <div id="ev-card">${evCard()}</div>
     ${cur === "swarm" ? viewSwarm(k) + compare : cur === "vycvik" ? viewVycvik() : viewDefence(k) + compare}
     </div>`;
 }
