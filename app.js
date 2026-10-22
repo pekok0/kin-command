@@ -1081,32 +1081,52 @@ const pieceCost = (x, qty) => x.price == null ? 0 : Math.round(x.price * qty / (
 function municeFor(lad, gun) {
   return gun && gun.ammo && gun.ammo.length ? { ...lad, steps: lad.steps.slice(0, gun.ammo.length).map((st, i) => ({ ...st, ...gun.ammo[i], qty: st.qty, cost: pieceCost(gun.ammo[i], st.qty) })) } : lad;
 }
+// how far my step is from the clan's goal (Petr 2026-10-22: the page must frown when I lack the role's best gear):
+// ok = the goal, mid = better than the start, low = the start or nothing; optional and free slots are not judged
+const grade = (lad, i) => lad.free || lad.optional || !lad.steps.length ? null : i === lad.steps.length - 1 ? "ok" : i > 0 ? "mid" : "low";
+const GRADE = { ok: "Cíl klanu", mid: "Lze lépe", low: "Slabé" };
 function myKit(c) {
-  const lads = c.ladders || [], pick = lad => lad && lad.steps[mineIdx(lad)];
-  const slots = Object.fromEntries(Object.keys(SLOT_LABEL).map(k => [k, pick(lads.find(l => l.slot === k))]));
-  const gun = slots.slot1, store = [];
+  const lads = c.ladders || [], entry = lad => { const i = mineIdx(lad); return { lad, st: lad.steps[i] || null, i, g: grade(lad, i), top: lad.steps.at(-1) }; };
+  const slots = Object.fromEntries(Object.keys(SLOT_LABEL).map(k => [k, (l => l && entry(l))(lads.find(l => l.slot === k))]));
+  const gun = slots.slot1 && slots.slot1.st, store = [];
   const mag = gun && gun.mags && gun.mags[gun.mags.map(m => !m.unlock || owned(m.item)).lastIndexOf(true)];
-  if (mag) store.push({ ...mag, qty: MAGS, cost: pieceCost(mag, MAGS) });
-  for (const lad of lads.filter(l => l.slot === "storage")) {
-    const st = pick(lad.group === "Munice" ? municeFor(lad, gun) : lad);
-    if (st) store.push(st);
-  }
+  if (mag) store.push({ st: { ...mag, qty: MAGS, cost: pieceCost(mag, MAGS) }, g: null });
+  for (const lad of lads.filter(l => l.slot === "storage")) store.push(entry(lad.group === "Munice" ? municeFor(lad, gun) : lad));
   const all = [...Object.values(slots).filter(Boolean), ...store];
-  return { slots, store, names: new Set(all.map(x => x.item)), cost: all.reduce((a, x) => a + (x.cost || 0), 0) };
+  const have = all.filter(e => e.st);
+  // a verdict only on real data: without the Tracker every slot would look red for nothing
+  const judged = !!(trk && trk.status === "ok");
+  return { slots, store: store.filter(e => e.st), judged, graded: judged ? all.filter(e => e.g) : [],
+    names: new Set(have.map(e => e.st.item)), cost: have.reduce((a, e) => a + (e.st.cost || 0), 0) };
 }
 const loadoutCost = c => myKit(c).cost;
+function readiness(k) {
+  const g = k.graded, ok = g.filter(e => e.g === "ok").length;
+  if (!g.length) return "";
+  // the nearest unlocks first: the next step of every slot below the goal, cheapest level first
+  const next = g.filter(e => e.g !== "ok").map(e => e.lad.steps[e.i + 1]).filter(Boolean).sort((x, y) => x.unlock.level - y.unlock.level).slice(0, 3);
+  const all = ok === g.length;
+  return `<div class="ready ${all ? "g-ok" : ok * 2 >= g.length ? "g-mid" : "g-low"}"><div class="rd-top"><span class="rd-l">Připravenost role</span><b>${ok} / ${g.length}</b><span class="rd-s">slotů na cíli klanu</span></div>
+    <span class="rd-bar" aria-hidden="true">${g.map(e => `<i class="g-${e.g}"></i>`).join("")}</span>
+    <p>${all ? "Máš všechno, co klan pro tuhle roli chce." : `Pod cílem klanu: <b>${g.length - ok}</b>. Odemkni: ${next.map(st => `<b>${esc(st.item)}</b> (${unlockText(st.unlock)})`).join(", ")}`}</p></div>`;
+}
 function loadoutCard(q, c, h = "h2") {
-  const k = myKit(c), cell = key => { const st = k.slots[key];
-    return `<div class="slot${st ? "" : " empty"}"><span class="sl">${SLOT_LABEL[key]}</span>${st ? `${itemIcon(st.icon)}<span class="sn">${esc(st.item)}</span>${st.cost ? `<span class="pr">${usd(st.cost)}</span>` : ""}` : key === "slot2" ? '<span class="ph">Sidearm</span>' : ""}</div>`; };
+  const k = myKit(c), judged = k.judged;
+  const cell = key => { const e = k.slots[key], st = e && e.st, g = judged && e && e.g;
+    if (e && e.lad.free) return `<div class="slot free"><span class="sl">${SLOT_LABEL[key]}</span><span class="sn">Libovolná zbraň</span><span class="fr-n">Klan ji nepředepisuje: vezmi, co ti sedí.</span></div>`;
+    return `<div class="slot${st ? "" : " empty"}${g ? " g-" + g : ""}"${g ? ` title="${GRADE[g]}"` : ""}><span class="sl">${SLOT_LABEL[key]}</span>${st
+      ? `${itemIcon(st.icon)}<span class="sn">${esc(st.item)}${g && g !== "ok" ? `<span class="goal">Cíl: <b>${esc(e.top.item)}</b> · ${unlockText(e.top.unlock)}</span>` : ""}</span>${st.cost ? `<span class="pr">${usd(st.cost)}</span>` : ""}`
+      : g ? `<span class="sn miss">Chybí<span class="goal">Cíl: <b>${esc(e.top.item)}</b> · ${unlockText(e.top.unlock)}</span></span>` : key === "slot2" ? '<span class="ph">Sidearm</span>' : ""}</div>`; };
   const quick = c.quick.filter(n => k.names.has(n));
   return `<article class="loadout" id="${esc(c.id)}">
     <header class="lo-head"><div><${h} class="lo-name"><a href="${classHref(q, c)}">${esc(c.name)}</a></${h}><p>${esc(c.job)}</p>
-      <p class="src">${trk && trk.status === "ok" ? "Co koupit: nejlepší z toho, co máš odemčené a klan doporučuje." : "Startovní loadout. Propoj WARDOGS Tracker ve <a href=\"#/vybava\">Výbavě</a> a uvidíš svůj."}</p></div></header>
+      <p class="src">${judged ? "Co koupit: nejlepší z toho, co máš odemčené a klan doporučuje." : "Startovní loadout. Propoj WARDOGS Tracker ve <a href=\"#/vybava\">Výbavě</a> a uvidíš svůj."}</p></div></header>
+    ${readiness(k)}
     <div class="lo-grid">
       <div><h3>Equipment</h3>${["slot1", "slot2", "slot3"].map(cell).join("")}
         <h3>Gear</h3><div class="lo-gear">${["helmet", "armor", "vest"].map(cell).join("")}</div></div>
       <div><h3>Storage</h3><div class="lo-gear">${["backpack", "traversal"].map(cell).join("")}</div>
-        <h3>V batohu</h3>${k.store.length ? `<ul class="lo-store">${k.store.map(x => `<li>${itemIcon(x.icon, "sm")}<span class="q">${x.qty}${x.cost ? `<span class="pr">${usd(x.cost)}</span>` : ""}</span><span class="n">${esc(x.item)}</span></li>`).join("")}</ul>` : '<p class="note">Nic.</p>'}
+        <h3>V batohu</h3>${k.store.length ? `<ul class="lo-store">${k.store.map(e => `<li${judged && e.g ? ` class="g-${e.g}" title="${GRADE[e.g]}"` : ""}>${itemIcon(e.st.icon, "sm")}<span class="q">${e.st.qty}${e.st.cost ? `<span class="pr">${usd(e.st.cost)}</span>` : ""}</span><span class="n">${esc(e.st.item)}</span></li>`).join("")}</ul>` : '<p class="note">Nic.</p>'}
         ${quick.length ? `<h3>Rychlé sloty</h3><ol class="lo-quick">${quick.map((n, i) => `<li><span class="kb">${(i + 4) % 10}</span>${esc(n)}</li>`).join("")}</ol>` : ""}</div>
     </div>
     <footer class="lo-sum"><span>Za život</span><b>${usd(k.cost)}</b></footer></article>`;
@@ -1313,11 +1333,12 @@ const SRC = { A: "A", B: "B", C: "C", ODVOZENO: "odvozeno" };
 // mine = the best step I really unlocked (or that needs no unlock); "Odemkni" = my level is there, the purchase is not;
 // "Další" = the first step my level does not reach yet
 function ladderBlock(lad, lv) {
+  if (lad.free) return `<div class="lad free"><div class="lad-h"><span class="sl">${SLOT_LABEL[lad.slot]}</span></div><p class="fr-n">Libovolná zbraň: klan ji pro tuhle roli nepředepisuje.</p>${lad.note ? `<p class="note">${esc(lad.note)}</p>` : ""}</div>`;
   const have = lad.steps.map(st => !st.unlock || !!(haveSet && haveSet.has(st.item)));
   const reach = lad.steps.map(st => !st.unlock || !!(lv && (lv[st.unlock.track] || 0) >= st.unlock.level));
   const mine = have.lastIndexOf(true), next = reach.indexOf(false, mine + 1);
-  const nu = next >= 0 && lad.steps[next].unlock;
-  return `<div class="lad"><div class="lad-h"><span class="sl">${lad.group ? esc(lad.group) : SLOT_LABEL[lad.slot]}</span>${nu ? `<span class="lad-next">Další: od ${esc(nu.track)} ${nu.level}</span>` : ""}</div>
+  const nu = next >= 0 && lad.steps[next].unlock, g = trk && trk.status === "ok" && grade(lad, mine);
+  return `<div class="lad${g ? " g-" + g : ""}"><div class="lad-h"><span class="sl">${lad.group ? esc(lad.group) : SLOT_LABEL[lad.slot]}</span>${nu ? `<span class="lad-next">Další: od ${esc(nu.track)} ${nu.level}</span>` : ""}</div>
     <ol class="lad-steps">${lad.steps.map((st, i) => { const can = i > mine && reach[i] && !have[i];
       return `<li class="st${i === mine ? " mine" : ""}${can ? " can" : ""}${i === next ? " next" : ""}${i > mine && !reach[i] ? " locked" : ""}">
       ${itemIcon(st.icon)}<span class="st-n">${esc(st.item)}</span><span class="st-u">${st.unlock ? `${esc(st.unlock.track)} ${st.unlock.level} · ${usd(st.unlock.cash)}` : "hned"}</span>
@@ -1329,7 +1350,7 @@ function ladderSection(c) {
   const lv = trk && trk.levels || null;
   return `<section class="block lads-sec"><h2>Co máš a co máš mít</h2>
     <p class="note">Co klan doporučuje, od startu po cíl (meta Season 2, rešerše 22. 10.). <b>Tvůj</b> = nejlepší, co máš odemčené. <b>Odemkni</b> = level máš, chybí koupit. <b>Další</b> = kam míříš.${lv ? "" : ` Propoj WARDOGS Tracker ve <a href="#/vybava">Výbavě</a> a uvidíš, co máš.`} Zdroj: A data nebo oficiální, B víc hráčů, C jeden zdroj; číslo = kolik zdrojů.</p>
-    <div class="lads">${c.ladders.map(lad => ladderBlock(lad.group === "Munice" ? municeFor(lad, myKit(c).slots.slot1) : lad, lv)).join("")}</div></section>`;
+    <div class="lads">${c.ladders.map(lad => ladderBlock(lad.group === "Munice" ? municeFor(lad, (myKit(c).slots.slot1 || {}).st) : lad, lv)).join("")}</div></section>`;
 }
 
 function viewClass(q, c) {
@@ -1449,7 +1470,7 @@ async function loadHist(p) {
 
 // coverage: who has which unlock this season, and how many of us reached each sub-class's goal
 // the ladder that tells a sub-class apart: its weapon, or slot [3] when the weapon ladder is just the start rifle
-const keyLadder = c => { const w = c.ladders.find(l => l.slot === "slot1"); return w && w.steps.length > 1 ? w : c.ladders.find(l => l.slot === "slot3") || w || c.ladders[0]; };
+const keyLadder = c => { const w = c.ladders.find(l => l.slot === "slot1"); return w && w.steps.length > 1 ? w : c.ladders.find(l => l.slot === "slot3") || c.ladders.find(l => l.steps.length > 1) || c.ladders.find(l => l.steps.length); };
 function viewCoverage(season, members) {
   const head = `<p class="crumb"><a href="#/vybava">Výbava</a> / Pokrytí</p>
     <header class="unit-head"><div><h1>Pokrytí rolí</h1><p>${esc(season ? season.name : "Žádná sezóna")} · podle WARDOGS Trackeru</p></div></header>`;

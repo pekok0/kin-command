@@ -332,6 +332,37 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .vbar button small { font: 500 13px/1.1 var(--sans); color: var(--ink-3); }
 .vbar button:hover { border-color: var(--fr); }
 .vbar button[aria-pressed="true"] { border-color: var(--fr); background: var(--fr-fill); box-shadow: inset 0 -3px 0 var(--fr); }
+/* Vybava frowns (Petr 2026-10-22): a slot below the clan's goal is red (the start or nothing) or yellow (better, not
+   the goal), the goal is green; the readiness bar on top counts them; no colours without Tracker data */
+.slot.g-ok { border-color: oklch(0.82 0.16 150 / 0.55); box-shadow: inset 3px 0 0 var(--gr); }
+.slot.g-mid { border-color: oklch(0.91 0.15 100 / 0.5); box-shadow: inset 3px 0 0 var(--un); background: linear-gradient(90deg, oklch(0.91 0.15 100 / 0.1), transparent 45%), var(--slot-bg); }
+.slot.g-low { border-color: oklch(0.72 0.19 25 / 0.6); box-shadow: inset 3px 0 0 var(--ho), 0 0 22px -12px var(--ho); background: linear-gradient(90deg, oklch(0.72 0.19 25 / 0.16), transparent 55%), var(--slot-bg); }
+.slot .goal { display: block; margin-top: 4px; font: 500 13px/1.2 var(--sans); color: var(--ink-2); }
+.slot.g-mid .goal b { color: var(--un); }
+.slot.g-low .goal b { color: var(--ho); }
+.slot .sn.miss { color: var(--ho); margin-top: 14px; }
+.slot.free { border-style: dashed; }
+.slot.free .sn { margin-top: 14px; color: var(--ink-2); }
+.fr-n { font-size: 14px; color: var(--ink-3); }
+.slot.free .fr-n { margin-left: auto; max-width: 22ch; text-align: right; }
+.lo-store li.g-ok { box-shadow: inset 3px 0 0 var(--gr); }
+.lo-store li.g-mid { box-shadow: inset 3px 0 0 var(--un); }
+.lo-store li.g-low { box-shadow: inset 3px 0 0 var(--ho); background: oklch(0.72 0.19 25 / 0.1); }
+.ready { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--rule); background: oklch(0.13 0.03 254 / 0.6); }
+.ready .rd-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.ready .rd-l { font: 700 13px/1 var(--cond); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); }
+.ready .rd-top b { font: 700 26px/1 var(--cond); }
+.ready .rd-s { font-size: 14px; color: var(--ink-3); }
+.ready.g-ok { border-color: var(--gr); } .ready.g-ok .rd-top b { color: var(--gr); }
+.ready.g-mid { border-color: oklch(0.91 0.15 100 / 0.6); } .ready.g-mid .rd-top b { color: var(--un); }
+.ready.g-low { border-color: oklch(0.72 0.19 25 / 0.7); box-shadow: 0 0 26px -14px var(--ho); } .ready.g-low .rd-top b { color: var(--ho); }
+.rd-bar { display: flex; gap: 3px; margin-top: 10px; }
+.rd-bar i { flex: 1; height: 8px; background: var(--rule); }
+.rd-bar i.g-ok { background: var(--gr); } .rd-bar i.g-mid { background: var(--un); } .rd-bar i.g-low { background: var(--ho); }
+.ready p { margin-top: 8px; font-size: 15px; color: var(--ink-2); }
+.lad.g-ok .lad-h .sl { color: var(--gr); } .lad.g-mid .lad-h .sl { color: var(--un); } .lad.g-low .lad-h .sl { color: var(--ho); }
+.lad.g-low { box-shadow: var(--plate-lift), inset 3px 0 0 var(--ho); } .lad.g-mid { box-shadow: var(--plate-lift), inset 3px 0 0 var(--un); } .lad.g-ok { box-shadow: var(--plate-lift), inset 3px 0 0 var(--gr); }
+
 /* specs/akce-v2: every open operation as a big lit card; the one in focus glows cyan, its lobby follows below */
 .opl { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 14px; margin-top: 12px; }
 .opc { position: relative; display: grid; gap: 6px; padding: 18px 20px 16px; color: var(--ink); text-decoration: none;
