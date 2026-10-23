@@ -594,6 +594,8 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .evhero { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 14px 24px; align-items: center; margin: 8px 0 22px;
   padding: 20px 64px 20px 22px; background: var(--brackets), var(--plate-bg); box-shadow: var(--plate-lift), 0 0 0 1px oklch(0.86 0.15 205 / 0.35); }
 .evh-k { font: 700 14px/1 Oxanium, var(--cond); letter-spacing: .24em; text-transform: uppercase; color: var(--fr); }
+/* specs/hoste-priznak: the one operation a week that hosts may join, gold like the brand thread */
+.hosts { display: inline-block; margin-left: 10px; padding: 3px 8px 2px; font: 700 12px/1 var(--cond); letter-spacing: .12em; text-transform: uppercase; color: var(--gold); border: 1px solid var(--gold-thread); vertical-align: middle; }
 .evhero h1 { margin-top: 6px; font-size: clamp(30px, 2vw + 22px, 52px); text-transform: uppercase; }
 .evhero .tminus { display: block; margin-top: 6px; font: 700 26px/1 Oxanium, var(--cond); letter-spacing: .06em; color: var(--fr); text-shadow: 0 0 18px var(--fr-glow); }
 .evh-m { grid-column: 1 / -1; color: var(--ink-2); }
@@ -643,6 +645,7 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .tasks-all th, .tasks-all td { padding-left: 14px; }
 .tasks-all td[data-task] { color: var(--ink-3); }
 .tasks-all td.ok { color: var(--fr); font-weight: 700; }
+.tasks-all td.unk { color: var(--ink-2); cursor: help; }  /* U9: unknown, not missing */
 /* map and team not picked yet: dashed ghost chips (the Dashed Outline Rule) */
 .ghost-pick { display: inline-flex; gap: 6px; vertical-align: middle; }
 .ghost-pick span { padding: 1px 8px 0; border: 1px dashed var(--ink-3); color: var(--ink-3); font: 600 13px/1.6 var(--cond); letter-spacing: .08em; text-transform: uppercase; }

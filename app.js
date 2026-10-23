@@ -107,7 +107,7 @@ async function loadEvent() {
     // specs/akce-v2 (Petr 2026-10-22): several operations open at once, each with its own roster; trainings and courses
     // are a list of their own and never state.event
     const [op, tr] = await Promise.all([
-      sb.from("events").select("id, strategy_id, doctrine, variant, squad_swarm, squad_support, roster, starts_at, leader:members!events_created_by_fkey(name)").eq("status", "open").eq("kind", "operace").order("starts_at"),
+      sb.from("events").select("id, strategy_id, doctrine, variant, squad_swarm, squad_support, roster, starts_at, open_to_hosts, leader:members!events_created_by_fkey(name)").eq("status", "open").eq("kind", "operace").order("starts_at"),
       sb.from("events").select("id, kind, topic, title, description, capacity, starts_at, created_by, leader:members!events_created_by_fkey(name), rsvps(user_id, status, members(name, avatar_url, discord_id))")
         .eq("status", "open").neq("kind", "operace").order("starts_at"),
     ]);
@@ -220,14 +220,20 @@ function tasksCard(m, done, trackerOk, prog, owned) {
     <p class="note">${note} <a href="#/ukoly">Kdo co má hotové</a></p></section>`;
 }
 // everyone's tasks, the most missing first (specs/ukoly-clenu U5)
+// U9: a task the source shows only through a Tracker tied to Discord is "?" without one, never "–" (denbler 2026-10-22)
+const UNKNOWN = "Nevíme: bez Trackeru s propojeným Discordem to u zdroje neověříme.";
+const taskCell = (x, ok, owned) => ok ? ["ok", "✓", ""] : x.needs === "owned" && !owned ? ["unk", "?", UNKNOWN] : ["", "–", ""];
 function viewTasks(ms, done, trk, prog) {
   const rows = ms.map(m => { const d = new Set(done.filter(r => r.user_id === m.user_id).map(r => r.task)), t = trk.some(r => r.user_id === m.user_id && r.status === "ok");
-    return { m, ok: D.ukoly.map(x => taskDone(x, d, t, prog[m.user_id])) }; })
+    const owned = trk.some(r => r.user_id === m.user_id && r.status === "ok" && r.owned);
+    return { m, ok: D.ukoly.map(x => taskDone(x, d, t, prog[m.user_id])), owned }; })
     .sort((a, b) => a.ok.filter(Boolean).length - b.ok.filter(Boolean).length || a.m.name.localeCompare(b.m.name));
   return `<p class="crumb"><a href="#/hrac/${encodeURIComponent(state.me.discord_id)}">Profil</a> / Úkoly</p>
     <header class="unit-head"><div><h1>Úkoly členů</h1></div></header>
     ${!rows.length ? '<p class="note">Zatím tu nikdo není.</p>' : `<div class="matrix-wrap"><table class="data tasks-all" id="ukoly-all"><thead><tr><th>Člen</th>${D.ukoly.map((x, i) => `<th data-task="${esc(x.id)}">${esc(x.name)} <span class="num">${rows.filter(r => r.ok[i]).length}/${rows.length}</span></th>`).join("")}</tr></thead>
-    <tbody>${rows.map(r => `<tr><td>${memberLink(r.m)}</td>${r.ok.map((ok, i) => `<td data-task="${esc(D.ukoly[i].id)}"${ok ? ' class="ok"' : ""}>${ok ? "✓" : "–"}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`}`;
+    <tbody>${rows.map(r => `<tr><td>${memberLink(r.m)}</td>${r.ok.map((ok, i) => { const [cls, mark, why] = taskCell(D.ukoly[i], ok, r.owned);
+      return `<td data-task="${esc(D.ukoly[i].id)}"${cls ? ` class="${cls}"` : ""}${why ? ` title="${esc(why)}"` : ""}>${mark}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>
+    <p class="note tasks-legend">? = ${UNKNOWN}</p>`}`;
 }
 async function addMerit(f) {
   const { error } = await sb.from("merits").insert({ user_id: f.dataset.uid, text: f.elements.text.value.trim() });
@@ -407,7 +413,7 @@ const DOC_ICON = {
 function eventHero(ev, s) {
   const sw = ev.doctrine === "swarm", d = sw ? "swarm" : "defence", v = !sw && s && ev.variant && vById(s, ev.variant);
   return `<header class="evhero"><a class="evx" href="#/akce" aria-label="Zavřít detail akce" title="Zavřít">${cross()}</a>
-    <div class="evh-when"><p class="evh-k">Operace</p><h1>${esc(fmtWhen(ev.starts_at))}</h1><b class="tminus" data-t0="${esc(ev.starts_at)}">${tminus(ev.starts_at)}</b></div>
+    <div class="evh-when"><p class="evh-k">Operace${ev.open_to_hosts ? ' <b class="hosts">Otevřená hostům</b>' : ""}</p><h1>${esc(fmtWhen(ev.starts_at))}</h1><b class="tminus" data-t0="${esc(ev.starts_at)}">${tminus(ev.starts_at)}</b></div>
     <a class="docplate doc-${d}" href="${sw ? "#/doktrina/swarm" : "#/doktrina"}">${DOC_ICON[d]}<span><b>${esc(docName(d))}</b><small>${esc(docOf(d).short)}</small></span></a>
     <p class="evh-m">${!ev.strategy_id ? NOPICK
       : !sw && s && !s.nomap ? `<a href="${planHref(s)}">${sideOf(ev.strategy_id)}</a>${v ? ` · zóna ${esc(v.name)}` : ""}` : sideOf(ev.strategy_id)}${ev.leader ? ` · vede <b>${esc(ev.leader.name)}</b>` : ""}</p></header>`;
@@ -422,7 +428,7 @@ function opCards() {
     const mine = ev.claims.find(c => c.user_id === state.me.user_id), said = (ev.rsvps.find(r => r.user_id === state.me.user_id) || {}).status;
     const on = state.focusId === ev.id;
     return `<a class="opc${on ? " on" : ""}" href="#/akce/${ev.id}"${on ? ' aria-current="true"' : ""}>
-      <span class="opc-k">${esc(docName(ev.doctrine))}</span>
+      <span class="opc-k">${esc(docName(ev.doctrine))}${ev.open_to_hosts ? " · otevřená hostům" : ""}</span>
       <b class="opc-t">${esc(fmtWhen(ev.starts_at))}</b><span class="tminus" data-t0="${esc(ev.starts_at)}">${tminus(ev.starts_at)}</span>
       <span class="opc-m">${sideOf(ev.strategy_id, NOPICK)}</span>
       <span class="opc-g"><i style="width:${total ? Math.min(100, Math.round(100 * n / total)) : 0}%"></i></span><span class="opc-f"><b>${n}</b> / ${total} míst</span>
@@ -460,7 +466,7 @@ function renderEvBar() {
     const mine = op && ev.claims.find(c => c.user_id === state.me.user_id), said = (ev.rsvps.find(r => r.user_id === state.me.user_id) || {}).status;
     const st = mine ? `Máš místo: ${esc(mine.slot_label)}` : said ? esc((RSVP.find(x => x[0] === said) || [, said])[1]) : "Odpověz, jestli přijdeš";
     return `<a class="evt${i ? "" : " next"}${mine || said ? "" : " need"}" href="${op ? `#/akce/${ev.id}` : "#/akce"}">
-      <span class="evt-k">${op ? `Operace · ${esc(docName(ev.doctrine))}` : `${esc(label(KINDS, ev.kind))} · ${esc(ev.title)}`}</span>
+      <span class="evt-k">${op ? `Operace · ${esc(docName(ev.doctrine))}${ev.open_to_hosts ? " · otevřená hostům" : ""}` : `${esc(label(KINDS, ev.kind))} · ${esc(ev.title)}`}</span>
       <span class="evt-w"><b>${esc(fmtWhen(ev.starts_at))}</b><span class="tminus" data-t0="${esc(ev.starts_at)}">${tminus(ev.starts_at)}</span></span>
       <span class="evt-s">${st}</span></a>`; }).join("")}</nav>`;
 }
@@ -726,6 +732,7 @@ function newEventForm() {
     <label>Začátek <input type="datetime-local" name="starts" required min="${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}T00:00"></label>
     <label>Doktrína <select name="doctrine">${["defence", "swarm"].map(d => `<option value="${d}">${esc(docOf(d).title)}: ${esc(docOf(d).short)}</option>`).join("")}</select></label>
     ${pickFields(null)}
+    <label class="att wide"><input type="checkbox" name="open_to_hosts"> Otevřená hostům (jedna akce týdně podle ankety)</label>
     <button type="submit" class="act">${esc(newLabel("defence", null))}</button></form>`;
 }
 
@@ -733,6 +740,7 @@ function newEventForm() {
 function mapTeamForm(ev) {
   const s = S(ev.strategy_id);
   return `<details class="evmap"><summary>Mapa, tým a varianta</summary><form class="evf" data-form="mapteam">${pickFields(s, ev)}
+    <label class="att wide"><input type="checkbox" name="open_to_hosts"${ev.open_to_hosts ? " checked" : ""}> Otevřená hostům</label>
     <button type="submit" class="act">${esc(saveLabel(s))}</button></form></details>`;
 }
 
@@ -876,8 +884,8 @@ document.addEventListener("submit", async e => {
     if (e1) { state.flash = e1.code === "42501" ? "Docházku se nepodařilo uložit, zkus to znovu." : saveErr(e1); btn.disabled = false; renderRoster(); return; }
   }
   const { data, error } = f.dataset.form === "new"
-    ? await sb.from("events").insert({ strategy_id: sid, variant: zone, doctrine: v.doctrine === "swarm" ? "swarm" : "defence", starts_at: new Date(v.starts).toISOString() })
-    : f.dataset.form === "mapteam" ? await sb.from("events").update({ strategy_id: sid, variant: zone }).eq("id", eventId).select("id")  // count rows like cancelEvent (OWASP L1)
+    ? await sb.from("events").insert({ strategy_id: sid, variant: zone, doctrine: v.doctrine === "swarm" ? "swarm" : "defence", starts_at: new Date(v.starts).toISOString(), open_to_hosts: !!v.open_to_hosts })
+    : f.dataset.form === "mapteam" ? await sb.from("events").update({ strategy_id: sid, variant: zone, open_to_hosts: !!v.open_to_hosts }).eq("id", eventId).select("id")  // count rows like cancelEvent (OWASP L1)
     : await sb.from("events").update({ status: "closed", placement: Number(v.placement), variant: v.variant || null,
         went_well: v.went_well || null, went_wrong: v.went_wrong || null, next_time: v.next_time || null }).eq("id", eventId);
   const msg = error ? (error.code === "23505" ? "Už je otevřená jiná akce." : saveErr(error))
@@ -1632,7 +1640,7 @@ async function loadHist(p) {
       html = viewCoverage(s, data);
     } else if (p[0] === "ukoly") {
       const [ms, td, tr] = await Promise.all([sb.from("members").select("user_id, discord_id, name, avatar_url").eq("active", true),
-        sb.from("tasks_done").select("user_id, task"), sb.from("tracker").select("user_id, status")]);
+        sb.from("tasks_done").select("user_id, task"), sb.from("tracker").select("user_id, status, owned")]);
       for (const r of [ms, td, tr]) if (r.error) throw r.error;
       // ponytail: one progress call per member (~20); a counts view when the clan outgrows it
       const pr = await Promise.all(ms.data.map(m => sb.rpc("progress", { uid: m.user_id })));
