@@ -584,6 +584,20 @@ document.getElementById("snd")?.addEventListener("click", () => {
 });
 renderSound();
 
+// specs/pozadi-bitva B20 (Superuser 2026-10-22): the battle behind the page is hard on older eyes, the sun button dims it
+let bgPref = null;
+const bgDim = () => { try { return (localStorage.getItem("kin-bg") || bgPref) === "dim"; } catch { return bgPref === "dim"; } };
+function renderBg() {
+  document.documentElement.dataset.bg = bgDim() ? "dim" : "full";
+  document.getElementById("bgd")?.setAttribute("aria-pressed", String(bgDim()));
+}
+document.getElementById("bgd")?.addEventListener("click", () => {
+  bgPref = bgDim() ? "full" : "dim";
+  try { localStorage.setItem("kin-bg", bgPref); } catch { /* private window: bgPref holds it */ }
+  renderBg();
+});
+renderBg();
+
 async function claim(key) {
   const s = plan;  // the page may change while saving (render() resets plan off roster pages, Viktor #029)
   const g = s.roster.find(g => g.slots.some(x => x.key === key)), slot = g.slots.find(x => x.key === key);
