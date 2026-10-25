@@ -806,6 +806,7 @@ function mapTeamForm(ev) {
 function closeEventForm(s) {
   return `<details class="evclose"><summary>Uzavřít akci a uložit do historie</summary><form class="evf" data-form="close">
     <label>Umístění <select name="placement" required><option value="">vyber</option><option value="1">1.</option><option value="2">2.</option><option value="3">3.</option></select></label>
+    <label>Počasí <select name="weather"><option value="">neuvedeno</option>${D.bitvy.pocasi.map(w => `<option value="${esc(w.id)}">${esc(w.label)}</option>`).join("")}</select></label>
     ${s.variants.length ? `<label>Kontaktní zóna <select name="variant" required>${s.variants.map(v => `<option value="${esc(v.id)}"${v.id === curVariant ? " selected" : ""}>${esc(v.name)}</option>`).join("")}</select></label>` : ""}
     ${state.claims.length ? `<fieldset class="atts"><legend>Kdo opravdu hrál (odškrtni, kdo nepřišel)</legend>${state.claims.map(c =>
       `<label class="att"><input type="checkbox" name="att_${esc(c.user_id)}" checked>${esc(c.members.name)}</label>`).join("")}</fieldset>` : ""}
@@ -953,7 +954,7 @@ document.addEventListener("submit", async e => {
   const { data, error } = f.dataset.form === "new"
     ? await sb.from("events").insert({ strategy_id: sid, variant: zone, doctrine: ["swarm", "cw"].includes(v.doctrine) ? v.doctrine : "defence", starts_at: new Date(v.starts).toISOString(), open_to_hosts: !!v.open_to_hosts })
     : f.dataset.form === "mapteam" ? await sb.from("events").update({ strategy_id: sid, variant: zone, open_to_hosts: !!v.open_to_hosts }).eq("id", eventId).select("id")  // count rows like cancelEvent (OWASP L1)
-    : await sb.from("events").update({ status: "closed", placement: Number(v.placement), variant: v.variant || null,
+    : await sb.from("events").update({ status: "closed", placement: Number(v.placement), variant: v.variant || null, weather: v.weather || null,
         went_well: v.went_well || null, went_wrong: v.went_wrong || null, next_time: v.next_time || null }).eq("id", eventId);
   const msg = error ? (error.code === "23505" ? "Už je otevřená jiná akce." : saveErr(error))
     : f.dataset.form === "mapteam" && !data.length ? "Mapu a tým se nepodařilo uložit: akce už není otevřená, nebo nemáš práva Commandera." : null;
@@ -1758,14 +1759,14 @@ async function loadHist(p) {
       const bad = pr.find(r => r.error); if (bad) throw bad.error;
       html = viewTasks(ms.data, td.data, tr.data, Object.fromEntries(ms.data.map((m, i) => [m.user_id, Array.isArray(pr[i].data) ? pr[i].data[0] : null])));
     } else if (p[0] === "historie") {
-      const { data, error } = await sb.from("events").select("id, strategy_id, doctrine, starts_at, variant, placement, claims(count)")
+      const { data, error } = await sb.from("events").select("id, strategy_id, doctrine, starts_at, variant, placement, weather, claims(count)")
         .eq("status", "closed").eq("kind", "operace").order("starts_at", { ascending: false });  // a closed training is no played event
       if (error) throw error;
       html = viewHistory(data);
     } else if (p[0] === "akce") {
       const id = Number(p[1]);  // #/akce/abc: not an id, so "Akce neexistuje" instead of a database error (Viktor UAT #011)
       const { data: ev, error } = Number.isSafeInteger(id) && id > 0
-        ? await sb.from("events").select("id, strategy_id, doctrine, starts_at, status, variant, placement, note, went_well, went_wrong, next_time").eq("id", id).eq("kind", "operace").neq("status", "cancelled").maybeSingle()
+        ? await sb.from("events").select("id, strategy_id, doctrine, starts_at, status, variant, placement, weather, note, went_well, went_wrong, next_time").eq("id", id).eq("kind", "operace").neq("status", "cancelled").maybeSingle()
         : { data: null, error: null };
       if (error) throw error;
       const [cl, at] = ev ? await Promise.all([
@@ -1842,10 +1843,13 @@ function viewHistory(evs) {
   const head = `<h2 class="hist-h">Odehrané akce</h2>`;
   if (!evs.length) return `${head}<p class="note">Zatím žádná uzavřená akce.</p>`;
   return head + bySeason(evs, e => e.starts_at).map(({ s, rows }) => `<section class="block"><h2>${esc(seasonName(s))}</h2>
-    <table class="data hist"><thead><tr><th>Datum</th><th>Mapa</th><th>Doktrína</th><th class="num">Umístění</th><th class="num">Zapsáno</th></tr></thead><tbody>
-    ${rows.map(e => `<tr><td><a href="#/akce/${e.id}">${esc(fmtWhen(e.starts_at))}</a></td><td>${mapCell(e.strategy_id)}</td><td>${esc(docName(e.doctrine))}</td><td class="num"><b>${place(e.placement)}</b></td><td class="num">${e.claims[0] ? e.claims[0].count : 0}</td></tr>`).join("")}
+    <table class="data hist"><thead><tr><th>Datum</th><th>Mapa</th><th>Doktrína</th><th class="num">Umístění</th><th class="num">Zapsáno</th><th>Počasí</th></tr></thead><tbody>
+    ${rows.map(e => `<tr><td><a href="#/akce/${e.id}">${esc(fmtWhen(e.starts_at))}</a></td><td>${mapCell(e.strategy_id)}</td><td>${esc(docName(e.doctrine))}</td><td class="num"><b>${place(e.placement)}</b></td><td class="num">${e.claims[0] ? e.claims[0].count : 0}</td><td>${esc(weatherName(e.weather))}</td></tr>`).join("")}
     </tbody></table></section>`).join("");
 }
+
+// the weather of a played operation (032, Petr 2026-10-26): the label from content/bitvy.toml, "-" when not given
+const weatherName = id => !id ? "-" : (D.bitvy.pocasi.find(w => w.id === id) || { label: id }).label;
 
 // one label column for every card of the roster, so the names line up across cards (Petr 2026-10-25)
 const lblWidth = groups => `min(${Math.max(...Object.values(groups).flat().map(x => x.role.length)) + 1}ch, 9em)`;
@@ -1858,7 +1862,7 @@ function viewEvent(ev, claims, absent = new Set()) {
   const debrief = [["Co fungovalo", ev.went_well], ["Co ne", ev.went_wrong], ["Co příště jinak", ev.next_time]].filter(([, t]) => t);
   return `<p class="crumb"><a href="#/akce">Akce</a> / ${esc(fmtWhen(ev.starts_at))}</p>
     <header class="unit-head"><div><h1>${sideOf(ev.strategy_id)} · ${esc(docName(ev.doctrine))}</h1><p>${esc(fmtWhen(ev.starts_at))} · ${esc(seasonName(seasonOf(ev.starts_at)))}${ev.status === "open" ? " · probíhá" : ""}</p></div></header>
-    <p class="lede">Umístění <b>${place(ev.placement)}</b> · zóna ${esc(variantName(ev.strategy_id, ev.variant))} · ${played === claims.length ? plural(played, "člověk", "lidé", "lidí") : `hrálo ${played} z ${claims.length} zapsaných`}</p>
+    <p class="lede">Umístění <b>${place(ev.placement)}</b> · zóna ${esc(variantName(ev.strategy_id, ev.variant))}${ev.weather ? ` · ${esc(weatherName(ev.weather))}` : ""} · ${played === claims.length ? plural(played, "člověk", "lidé", "lidí") : `hrálo ${played} z ${claims.length} zapsaných`}</p>
     ${debrief.length ? `<section class="block"><h2>Debrief</h2><dl class="debrief">${debrief.map(([h, t]) => `<dt>${h}</dt><dd class="evnote">${esc(t)}</dd>`).join("")}</dl></section>` : ""}
     ${ev.note ? `<section class="block"><h2>Poznámka Commandera</h2><p class="evnote">${esc(ev.note)}</p></section>` : ""}
     <section class="block"><h2>Sestava</h2>${claims.length ? `<div class="ros" style="--lbl: ${lblWidth(groups)}">${Object.entries(groups).map(([g, xs]) => `<div class="rg"><div class="pg-head"><div><b>${esc(g)}</b></div><span class="num">${xs.length}</span></div>
