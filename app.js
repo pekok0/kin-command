@@ -320,7 +320,7 @@ function squadCard(g, by) {
   const drop = cmd && last && g.idx > 0 ? `<button type="button" class="act sqdrop" data-squad="drop"${n && !cw ? ' disabled title="Ve squadu někdo je"' : ""}>Zrušit ${esc(g.name)}${n && cw ? ` (vyhodí ${n})` : ""}</button>` : "";
   const add = cmd && last && g.idx < 11 ? `<button type="button" class="act sqadd" data-squad="add">+ Další squad</button>` : "";
   const title = cmd && cw ? `<input class="sqname" data-sqname="${g.idx}" value="${esc(g.name)}" maxlength="24" aria-label="Název squadu ${g.idx + 1}">` : `<b>${esc(g.name)}</b>`;
-  const free = roles.filter(ro => !g.slots.some(x => x.kit === ro.kit));
+  const free = (cw ? D.doktrina.cw.roles : roles).filter(ro => !g.slots.some(x => x.kit === ro.kit));
   const addRole = cmd && cw && free.length && g.slots.length < 20 ? `<select class="addrole" data-addrole="${g.idx}" aria-label="${esc(g.name)}: přidat roli"><option value="">+ Přidat roli</option>${free.map(ro => `<option value="${esc(ro.kit)}">${esc(ro.label)}</option>`).join("")}</select>` : "";
   const veli = lead ? `Velí: <span class="who">${esc(lead.members.name)}</span>` : "Velí: nikdo, kdokoli ze squadu si vezme SL";
   return `<div class="rg sqc"><div class="pg-head">${sym(g.symbol, "sm")}<div>${title}<small class="veli${!lead && n ? " none" : ""}">${veli}</small></div><span class="num">${n}/${g.max}</span></div>
@@ -467,8 +467,10 @@ function swarmMyKit() {
   const slot = myc && plan.roster.flatMap(g => g.slots).find(x => x.key === myc.slot_key);
   const r = slot && k.slots.find(r => r.id === slot.kit), cls = slot && slot.cls;
   const [cq, cc] = cls ? classById(cls) : r && !r.own_kit ? classById(r.class) : [], skip = cc ? myKit(cc).names : new Set();
-  return `<section class="block" id="swarm-kit"><h2>Tvůj nákup</h2>${cc ? loadoutCard(cq, cc, "h3") : ""}${r && r.own_kit ? "" : kitBase(k, skip)}
-    ${r ? kitRole(slot.seat ? { ...r, ...r.seats[slot.seat] } : r, skip) : cls ? "" : '<p class="note">Zapiš se do slotu a ukážu ti nákup tvé role. Nákup všech rolí je v <a href="#/doktrina/swarm">Doktríně</a>.</p>'}</section>`;
+  // CW buys by the Vybava role, the SWARM base is SWARM's (Petr 2026-10-25: "porad sleduje doktrinu swarm")
+  const cw = state.event.doctrine === "cw";
+  return `<section class="block" id="swarm-kit"><h2>Tvůj nákup</h2>${cc ? loadoutCard(cq, cc, "h3") : ""}${r && r.own_kit || cw ? "" : kitBase(k, skip)}
+    ${r ? kitRole(slot.seat ? { ...r, ...r.seats[slot.seat] } : r, skip) : cls ? "" : `<p class="note">Zapiš se do slotu a ukážu ti nákup tvé role. ${cw ? 'Loadouty všech rolí jsou ve <a href="#/vybava">Výbavě</a>.' : 'Nákup všech rolí je v <a href="#/doktrina/swarm">Doktríně</a>.'}</p>`}</section>`;
 }
 
 // realtime and tab-return re-render the block: keep what the Commander is typing into a form
@@ -786,7 +788,7 @@ function newPanel() {
 function newEventForm() {
   return `<form class="evf" data-form="new">
     <label>Začátek <input type="datetime-local" name="starts" required min="${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}T00:00"></label>
-    <label>Doktrína <select name="doctrine">${[["swarm", "Fun"], ["cw", "CW"]].map(([d, g]) => `<option value="${d}">${g}: ${esc(docOf(d).title)}</option>`).join("")}</select></label>
+    <label>Doktrína <select name="doctrine">${[["swarm", "Fun"], ["cw", "PO"]].map(([d, g]) => `<option value="${d}">${g}: ${esc(docOf(d).title)}</option>`).join("")}</select></label>
     ${pickFields(null)}
     <label class="att wide"><input type="checkbox" name="open_to_hosts"> Otevřená hostům (jedna akce týdně podle ankety)</label>
     <button type="submit" class="act">${esc(newLabel("swarm", null))}</button></form>`;
@@ -993,8 +995,9 @@ function rosterOf(ev) {
 }
 // keys stay as before 017, so sign-ups survive the switch: SW-Q<squad>-<KIT><n> (the first without n), and seat i of
 // vehicle v is SW-<KIT><(v-1)*all seats + i> (a closed optional seat is just a key not offered)
-// the roles a squad may hold: SWARM's kits; CW also every Vybava sub-class (Petr 2026-10-25, migration 028)
-const squadRoles = cw => cw ? [...D.doktrina.swarm.sestava.roles, ...D.doktrina.cw.roles] : D.doktrina.swarm.sestava.roles;
+// the roles a squad may hold: SWARM's kits; CW the Vybava roles (Petr 2026-10-25, migration 028), SWARM kits there only
+// still shown where a roster has them, never offered ("raketomet i rocketeer, to je to samé", migration 030)
+const squadRoles = cw => cw ? [...D.doktrina.cw.roles, ...D.doktrina.swarm.sestava.roles] : D.doktrina.swarm.sestava.roles;
 function swarmRoster(k, r, cw = false) {
   const t = k.sestava;
   return [...r.squads.map((sq, idx) => { const n = idx + 1;
@@ -1500,7 +1503,7 @@ function viewSwarm(k) {
 // Petr 2026-10-25 (D17): two doctrines, Fun (SWARM) and CW (Clan War); FORTRESS is gone from the menu
 function viewDoktrina(tab) {
   const k = D.doktrina, cur = ["cw", "vycvik"].includes(tab) ? tab : "swarm";
-  const tabs = [["swarm", `Fun: ${k.swarm.title}`], ["cw", `CW: ${k.cw.title}`], ["vycvik", "Výcvik"]];
+  const tabs = [["swarm", `Fun: ${k.swarm.title}`], ["cw", `PO: ${k.cw.title}`], ["vycvik", "Výcvik"]];
   return `
     <div class="narrow">
     <header class="unit-head"><div><h1>Doktrína</h1><p>Platí pro všechny mapy a barvy. Kterou hrajeme, rozhodne Commander před zápasem.</p></div></header>
@@ -1511,7 +1514,7 @@ function viewDoktrina(tab) {
 
 function viewCw(c) {
   return `<section class="block"><h2>${esc(c.title)}</h2><p class="lede">${esc(c.tagline)}</p>${bullets(c.points)}
-    <p class="note">Kity rolí jsou stejné jako ve SWARM: <a href="#/doktrina/swarm">nákup podle role</a>.</p></section>`;
+    <p class="note">Nákup bereš z loadoutu své role ve <a href="#/vybava">Výbavě</a>.</p></section>`;
 }
 
 // ---------- squads + loadouts ----------
@@ -1953,7 +1956,7 @@ function render() {
     if (c) { html = viewClass(q, c); title = `${c.name} · KIN`; } else { html = viewSquadPage(q); title = `${q.name} · KIN`; }
   } else if (p[0] === "doktrina" || p[0] === "vycvik") {
     const tab = p[0] === "vycvik" ? "vycvik" : p[1];
-    html = viewDoktrina(tab); active = "doktrina"; title = (tab === "cw" ? "Clan War" : tab === "vycvik" ? "Výcvik" : "SWARM") + " · KIN";
+    html = viewDoktrina(tab); active = "doktrina"; title = (tab === "cw" ? "Public Ops" : tab === "vycvik" ? "Výcvik" : "SWARM") + " · KIN";
   } else if (p[0] === "akce" && (!p[1] || /^\d+$/.test(p[1]) && (!state.opsLoaded && !state.evErr || state.ops.some(e => e.id === +p[1])))) {
     state.focusId = p[1] ? +p[1] : null; focusEvent();
     plan = planOf(state.event); if (plan && !plan.swarm) curVariant = state.event.variant || pickVariant(plan, qs);
