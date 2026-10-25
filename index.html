@@ -527,7 +527,14 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .slb { flex: none; font: 700 13px/1 var(--cond); letter-spacing: .06em; color: var(--ground); background: var(--ink); padding: 4px 5px 3px; }
 .rg li .lead { flex: none; min-height: 44px; margin: 4px 0 2px auto; }
 .rg li .mv, .rg li .mvto { flex: none; min-height: 44px; margin: 4px 0 2px 4px; }
+/* the name keeps its room, the Commander's buttons (Přesunout, Dát SL, x) go under it in a narrow card (Petr 2026-10-25: "text nazvu clena je rozsypany") */
+.ros.swarm .rg li { flex-wrap: wrap; }
+.ros.swarm .rg li .rslot { flex: 1 1 11em; }
+.ros.swarm .rg li:has(.mv) .rslot, .ros.swarm .rg li:has(.mvto) .rslot { flex-basis: 100%; }  /* Commander's row: name across the card, buttons under it */
+.ros.swarm .rg li:has(.mv) .lead, .ros.swarm .rg li:has(.mv) .mv { margin-left: auto; }
+.ros.swarm .rslot .nm { overflow-wrap: break-word; min-width: 0; }  /* a long nick wraps at words, never cut (Petr 2026-10-18) */
 .rg li[data-drag] { cursor: grab; }
+.addrole { display: block; margin: 8px 0 4px; min-height: 44px; font: inherit; color: var(--ink); background: var(--panel-2); border: 1px solid var(--rule); padding: 0 8px; max-width: 100%; }
 .sqname { font: inherit; font-weight: 700; color: var(--ink); background: var(--panel-2); border: 1px solid var(--rule); padding: 2px 6px; min-height: 44px; max-width: 14em; }
 /* the Commander's "Dosadit" on a free command slot (specs/velitelske-sloty V4): a finger-sized select like the form ones */
 .rg li .moveto { flex: none; max-width: 9em; min-height: 44px; margin-left: 4px; font: 500 16px/1.3 var(--sans); color: var(--ink); background: var(--panel-2); border: 1px solid var(--rule); padding: 0 6px; }
