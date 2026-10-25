@@ -1076,7 +1076,7 @@ const roleHref = (s, r) => `#/s/${s.id}/role/${r.id}`;
 const sideLabel = s => `${s.map} · ${s.color}`;
 const SQ = id => D.squads.find(q => q.id === id);
 const classOf = (q, id) => q.classes.find(c => c.id === id);
-const OLD_ROLE = { sniper: "recon", spotter: "marksman", "logistics-ground": "logistics", "logistics-air": "air-logistics" };  // Vybava v3 (D24)
+const OLD_ROLE = { sniper: "recon", spotter: "recon", marksman: "recon", "logistics-ground": "logistics", "logistics-air": "air-logistics" };  // Vybava v3 (D24), Marksman gone (D35)
 const classById = id => { for (const q of D.squads) { const c = classOf(q, id); if (c) return [q, c]; } return []; };
 const classHref = (q, c) => `#/squad/${q.id}/${c.id}`;
 
@@ -1358,13 +1358,44 @@ function municeFor(lad, gun) {
 // ok = the goal, mid = better than the start, low = the start or nothing; optional and free slots are not judged
 const grade = (lad, i) => lad.free || lad.optional || !lad.steps.length ? null : i === lad.steps.length - 1 ? "ok" : i > 0 ? "mid" : "low";
 const GRADE = { ok: "Cíl klanu", mid: "Lze lépe", low: "Slabé" };
+// what fits in my backpack (hub/specs/vybava-batoh, Petr 2026-10-25 D35): mandatory things always go in (over = they do
+// not fit); then the optional ones, those dropped last going in first (respirator 3, rounds 2, magazines 1), one stack at
+// a time; then `fill` (rockets) while there is room. ponytail: greedy first fit per compartment with rotation, not
+// optimal 2D packing -- a hand-packed bag may take one piece more
+function packBag(bag, list) {
+  const grids = bag.map(([w, h]) => Array.from({ length: h }, () => Array(w).fill(false)));
+  const put = ([w, h]) => { for (const g of grids) for (const [a, b] of [[w, h], [h, w]]) for (let y = 0; y + b <= g.length; y++) for (let x = 0; x + a <= g[0].length; x++)
+    if (g.slice(y, y + b).every(r => r.slice(x, x + a).every(v => !v))) { for (let i = y; i < y + b; i++) for (let j = x; j < x + a; j++) g[i][j] = true; return true; }
+    return false; };
+  const out = list.map(e => ({ ...e, want: e.qty, units: 0, over: false })), per = e => e.stack || 1;
+  const add = (e, n) => { let k = 0; while (k < n && put(e.grid || [1, 1])) k++; e.units += k; return k === n; };
+  const must = out.filter(e => !e.drop && !e.fill).sort((a, b) => (b.grid || [1, 1]).reduce((x, y) => x * y) - (a.grid || [1, 1]).reduce((x, y) => x * y));
+  for (const e of must) e.over = !add(e, Math.ceil(e.want / per(e)));
+  for (const e of out.filter(e => e.fill)) e.over = !add(e, e.min || 0);
+  for (const e of out.filter(e => e.drop).sort((a, b) => b.drop - a.drop)) add(e, Math.ceil(e.want / per(e)));
+  for (const e of out.filter(e => e.fill)) while (e.units < 40 && add(e, 1));
+  return out.map(e => ({ ...e, qty: e.fill ? Math.max(e.units, e.min || 0) * per(e) : e.drop ? Math.min(e.want, e.units * per(e)) : e.want,
+    cut: !!e.drop && e.units * per(e) < e.want }));
+}
 function myKit(c) {
   const lads = c.ladders || [], entry = lad => { const i = mineIdx(lad); return { lad, st: lad.steps[i] || null, i, g: grade(lad, i), top: lad.steps.at(-1) }; };
   const slots = Object.fromEntries(Object.keys(SLOT_LABEL).map(k => [k, (l => l && entry(l))(lads.find(l => l.slot === k))]));
-  const gun = slots.slot1 && slots.slot1.st, store = [];
+  const gun = slots.slot1 && slots.slot1.st, store = [], mq = c.mags || { qty: MAGS };
   const mag = gun && gun.mags && gun.mags[gun.mags.map(m => !m.unlock || owned(m.item)).lastIndexOf(true)];
-  if (mag) store.push({ st: { ...mag, qty: MAGS, cost: pieceCost(mag, MAGS) }, g: null });
-  for (const lad of lads.filter(l => l.slot === "storage")) store.push(entry(lad.group === "Munice" ? municeFor(lad, gun) : lad));
+  if (mag && mq.qty) store.push({ st: { ...mag, qty: mq.qty, cost: pieceCost(mag, mq.qty) }, g: null, drop: mq.drop });
+  for (const lad of lads.filter(l => l.slot === "storage")) {
+    // rockets follow my launcher (RPG-7 93mm, MAAWS 84mm), rounds my primary, `stacks` in stacks of its calibre
+    const rk = lad.fill && slots.slot3 && slots.slot3.st && slots.slot3.st.rockets && slots.slot3.st.rockets[0];
+    const e = lad.fill ? { lad, st: rk ? { ...rk, qty: lad.min } : null, g: null } : entry(lad.group === "Munice" ? municeFor(lad, gun) : lad);
+    if (lad.stacks && e.st && e.st.stack) e.st = { ...e.st, qty: lad.stacks * e.st.stack };
+    store.push({ ...e, drop: lad.drop, fill: lad.fill, min: lad.min });
+  }
+  // only roles with packing rules are packed (Rifleman, Rocketeer); a card without a bag in the data keeps its counts
+  const bag = slots.backpack && slots.backpack.st && slots.backpack.st.bag;
+  if (bag && bag.length && (c.mags || lads.some(l => l.drop || l.fill))) {
+    const inBag = store.filter(e => e.st), packed = packBag(bag, inBag.map(e => ({ qty: e.st.qty, stack: e.st.stack, grid: e.st.grid, drop: e.drop, fill: e.fill, min: e.min })));
+    inBag.forEach((e, i) => { const x = packed[i]; e.st = { ...e.st, qty: x.qty, cost: pieceCost(e.st, x.qty) }; e.cut = x.cut; e.over = x.over; });
+  }
   const all = [...Object.values(slots).filter(Boolean), ...store];
   const have = all.filter(e => e.st);
   // a verdict only on real data: without the Tracker every slot would look red for nothing
@@ -1399,7 +1430,7 @@ function loadoutCard(q, c, h = "h2") {
       <div><h3>Equipment</h3>${["slot1", "slot2", "slot3"].map(cell).join("")}
         <h3>Gear</h3><div class="lo-gear">${["helmet", "armor", "vest"].map(cell).join("")}</div></div>
       <div><h3>Storage</h3><div class="lo-gear">${["backpack", "traversal"].map(cell).join("")}</div>
-        <h3>V batohu</h3>${k.store.length ? `<ul class="lo-store">${k.store.map(e => `<li${judged && e.g ? ` class="g-${e.g}" title="${GRADE[e.g]}"` : ""}>${itemIcon(e.st.icon, "sm")}<span class="q">${e.st.qty}${e.st.cost ? `<span class="pr">${usd(e.st.cost)}</span>` : ""}</span><span class="n">${esc(e.st.item)}</span></li>`).join("")}</ul>` : '<p class="note">Nic.</p>'}
+        <h3>V batohu</h3>${k.store.length ? `<ul class="lo-store">${k.store.map(e => `<li${judged && e.g ? ` class="g-${e.g}" title="${GRADE[e.g]}"` : ""}>${itemIcon(e.st.icon, "sm")}<span class="q">${e.st.qty}${e.st.cost ? `<span class="pr">${usd(e.st.cost)}</span>` : ""}</span><span class="n">${esc(e.st.item)}${e.over ? '<span class="cut">Nevejde se: kup větší batoh</span>' : e.cut ? '<span class="cut">Víc se nevejde, větší batoh unese víc</span>' : ""}</span></li>`).join("")}</ul>` : '<p class="note">Nic.</p>'}
         ${quick.length ? `<h3>Rychlé sloty</h3><ol class="lo-quick">${quick.map((n, i) => `<li><span class="kb">${(i + 4) % 10}</span>${esc(n)}</li>`).join("")}</ol>` : ""}</div>
     </div>
     <footer class="lo-sum"><span>Za život</span><b>${usd(k.cost)}</b></footer></article>`;
@@ -1941,7 +1972,7 @@ function render() {
   else if (p[0] === "squad" && !SQ(p[1]) && classById(Object.hasOwn(OLD_ROLE, p[2]) ? OLD_ROLE[p[2]] : p[2]).length) {  // a link from before Vybava v3 (D24)
     const [q, c] = classById(Object.hasOwn(OLD_ROLE, p[2]) ? OLD_ROLE[p[2]] : p[2]); html = viewClass(q, c); title = `${c.name} · KIN`; active = "vybava";
   } else if (p[0] === "squad" && SQ(p[1])) {
-    const q = SQ(p[1]), c = classOf(q, p[2]); active = "vybava";
+    const q = SQ(p[1]), c = classOf(q, Object.hasOwn(OLD_ROLE, p[2]) ? OLD_ROLE[p[2]] : p[2]); active = "vybava";
     if (c) { html = viewClass(q, c); title = `${c.name} · KIN`; } else { html = viewSquadPage(q); title = `${q.name} · KIN`; }
   } else if (p[0] === "doktrina" || p[0] === "vycvik") {
     const tab = p[0] === "vycvik" ? "vycvik" : p[1];
