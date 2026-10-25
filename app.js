@@ -263,11 +263,13 @@ function slotRow(x, c, sq) {
       : sq.led || !can ? "" : '<button type="button" class="act lead" data-lead="1">Povedu squad</button>')
     : !cmd ? "" : c.lead ? `<button type="button" class="act lead" data-leadfor="${esc(c.user_id)}:0">Sundat SL</button>`
     : sq.led ? "" : `<button type="button" class="act lead" data-leadfor="${esc(c.user_id)}:1">Dát SL</button>`;
-  const sqd = cmd && state.event && isSq(state.event), mv = sqd && c ? (state.moving === c.user_id
+  // a Velitel moves people too (Petr 2026-10-25 D39, migration 031): a plain place only -- not an SL, not onto a command slot
+  const sqd = (cmd || state.me.is_officer) && state.event && isSq(state.event), movable = c && (cmd || !c.lead);
+  const mv = sqd && movable ? (state.moving === c.user_id
       ? `<button type="button" class="act mv" data-move="${esc(c.user_id)}" aria-pressed="true">Zrušit přesun</button>`
       : `<button type="button" class="act mv" data-move="${esc(c.user_id)}" aria-label="Přesunout ${esc(c.members.name)}">Přesunout</button>`)
-    : sqd && state.moving && !locked ? `<button type="button" class="act mvto" data-movehere="${esc(x.key)}" aria-label="Přesunout sem: ${esc(x.label)}">Sem</button>` : "";
-  const drag = sqd && c ? ` draggable="true" data-drag="${esc(c.user_id)}"` : sqd && !c ? " data-free" : "";
+    : sqd && !c && state.moving && !locked && (cmd || !need) ? `<button type="button" class="act mvto" data-movehere="${esc(x.key)}" aria-label="Přesunout sem: ${esc(x.label)}">Sem</button>` : "";
+  const drag = sqd && movable ? ` draggable="true" data-drag="${esc(c.user_id)}"` : sqd && !c && (cmd || !need) ? " data-free" : "";
   return `<li data-key="${esc(x.key)}"${drag}${mine ? ' class="is-me"' : ""}><button type="button" class="rslot" ${act}><span class="lbl">${x.role ? `<span class="rid">${esc(x.role)}</span>` : ""}${esc(x.label)}</span>${who}</button>${lead}${moveto}${mv}${kick}</li>`;
 }
 
