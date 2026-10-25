@@ -1072,6 +1072,7 @@ const roleHref = (s, r) => `#/s/${s.id}/role/${r.id}`;
 const sideLabel = s => `${s.map} · ${s.color}`;
 const SQ = id => D.squads.find(q => q.id === id);
 const classOf = (q, id) => q.classes.find(c => c.id === id);
+const OLD_ROLE = { sniper: "recon", spotter: "marksman", "logistics-ground": "logistics", "logistics-air": "air-logistics" };  // Vybava v3 (D24)
 const classById = id => { for (const q of D.squads) { const c = classOf(q, id); if (c) return [q, c]; } return []; };
 const classHref = (q, c) => `#/squad/${q.id}/${c.id}`;
 
@@ -1599,11 +1600,11 @@ document.addEventListener("submit", e => {
 });
 
 function viewSquads() {
-  return `<header class="unit-head"><div><h1>Výbava</h1><p>Tvůj loadout pro každou sub-class, podle toho, co máš odemčené</p></div></header>
+  // Petr 2026-10-25 (D24, hub/specs/vybava-role-v3): roles in one list, no Assault / Builders / Recon groups
+  return `<header class="unit-head"><div><h1>Výbava</h1><p>Tvůj loadout pro každou roli, podle toho, co máš odemčené</p></div></header>
     <p class="note">Kolik nás co má: <a class="act" href="#/pokryti">Pokrytí rolí</a></p>
     ${trackerBox()}
-    ${D.squads.map(q => `<section class="block"><h2><a href="#/squad/${q.id}">${esc(q.name)}</a></h2><p class="goal">${esc(q.goal)}</p>
-      <ul class="cls">${q.classes.map(c => `<li><a href="${classHref(q, c)}"><b>${esc(c.name)}</b></a></li>`).join("")}</ul></section>`).join("")}`;
+    <section class="block"><h2>Role</h2><ul class="cls">${D.squads.flatMap(q => q.classes.map(c => `<li><a href="${classHref(q, c)}"><b>${esc(c.name)}</b></a></li>`)).join("")}</ul></section>`;
 }
 function viewSquadPage(q) {
   return `<p class="crumb"><a href="#/vybava">Výbava</a> / ${esc(q.name)}</p>
@@ -1945,7 +1946,9 @@ function render() {
     html = viewMapDetail(m, qs); active = "mapy"; title = `${m} · KIN`;
   } else if (p[0] === "mapy") { html = viewMapy(); active = "mapy"; title = "Mapy · KIN"; }
   else if (p[0] === "squady" || p[0] === "vybava") { html = viewSquads(); active = "vybava"; title = "Výbava · KIN"; }
-  else if (p[0] === "squad" && SQ(p[1])) {
+  else if (p[0] === "squad" && !SQ(p[1]) && classById(Object.hasOwn(OLD_ROLE, p[2]) ? OLD_ROLE[p[2]] : p[2]).length) {  // a link from before Vybava v3 (D24)
+    const [q, c] = classById(Object.hasOwn(OLD_ROLE, p[2]) ? OLD_ROLE[p[2]] : p[2]); html = viewClass(q, c); title = `${c.name} · KIN`; active = "vybava";
+  } else if (p[0] === "squad" && SQ(p[1])) {
     const q = SQ(p[1]), c = classOf(q, p[2]); active = "vybava";
     if (c) { html = viewClass(q, c); title = `${c.name} · KIN`; } else { html = viewSquadPage(q); title = `${q.name} · KIN`; }
   } else if (p[0] === "doktrina" || p[0] === "vycvik") {
