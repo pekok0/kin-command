@@ -302,26 +302,25 @@ const leadOf = g => state.claims.find(c => c.lead && squadOf(c.slot_key) === g.i
 // the head. The Commander adds and removes a role's places ("-" only the last and only while free), the last squad
 // when it is empty, and a new squad at the end
 function squadCard(g, by) {
-  const t = D.doktrina.swarm.sestava, cmd = state.me.is_commander, n = g.slots.filter(x => by[x.key]).length, lead = leadOf(g), sq = { led: !!lead };
-  const cw = state.event.doctrine === "cw", core = new Set(t.core.map(c => c.kit));
+  const cmd = state.me.is_commander, n = g.slots.filter(x => by[x.key]).length, lead = leadOf(g), sq = { led: !!lead };
+  const cw = state.event.doctrine === "cw";  // D33: the same editor for SWARM and Public Ops, only the roles on offer differ
   const roles = squadRoles(cw);
   const lines = roles.map(ro => {
     const xs = g.slots.filter(x => x.kit === ro.kit), c = xs.length, taken = c && by[xs[c - 1].key];
-    if (!c && (!cmd || cw)) return "";
-    const less = !c ? "žádné místo" : !cw && core.has(ro.kit) && c <= 1 ? "ve SWARM povinné" : !cw && taken ? "poslední je obsazený"
-      : g.slots.length <= 1 ? "squad potřebuje aspoň 1 místo" : "";
+    if (!c) return "";
+    const less = g.slots.length <= 1 ? "squad potřebuje aspoň 1 místo" : "";
     const more = c >= 12 ? "nejvýš 12" : g.slots.length >= 20 ? "squad má nejvýš 20 míst" : "";
     const ctl = cmd ? `<span class="swctl">
-      <button type="button" class="act" data-role="${g.idx}:${ro.kit}:-1" aria-label="${esc(g.name)}: ubrat ${esc(ro.label)}${cw && taken ? ` (vyhodí ${esc(taken.members.name)})` : ""}"${less ? ` disabled title="${esc(less)}"` : ""}>−</button>
+      <button type="button" class="act" data-role="${g.idx}:${ro.kit}:-1" aria-label="${esc(g.name)}: ubrat ${esc(ro.label)}${taken ? ` (vyhodí ${esc(taken.members.name)})` : ""}"${less ? ` disabled title="${esc(less)}"` : ""}>−</button>
       <button type="button" class="act" data-role="${g.idx}:${ro.kit}:1" aria-label="${esc(g.name)}: přidat ${esc(ro.label)}"${more ? ` disabled title="${esc(more)}"` : ""}>+</button></span>` : "";
     return `<div class="sqp${c ? "" : " off"}">${esc(ro.label)} <b>${c}</b>${ctl}</div>${c ? `<ul>${xs.map(x => slotRow(x, by[x.key], sq)).join("")}</ul>` : ""}`;
   }).join("");
   const last = g.idx === rosterOf(state.event).squads.length - 1;
-  const drop = cmd && last && g.idx > 0 ? `<button type="button" class="act sqdrop" data-squad="drop"${n && !cw ? ' disabled title="Ve squadu někdo je"' : ""}>Zrušit ${esc(g.name)}${n && cw ? ` (vyhodí ${n})` : ""}</button>` : "";
+  const drop = cmd && last && g.idx > 0 ? `<button type="button" class="act sqdrop" data-squad="drop">Zrušit ${esc(g.name)}${n ? ` (vyhodí ${n})` : ""}</button>` : "";
   const add = cmd && last && g.idx < 11 ? `<button type="button" class="act sqadd" data-squad="add">+ Další squad</button>` : "";
-  const title = cmd && cw ? `<input class="sqname" data-sqname="${g.idx}" value="${esc(g.name)}" maxlength="24" aria-label="Název squadu ${g.idx + 1}">` : `<b>${esc(g.name)}</b>`;
+  const title = cmd ? `<input class="sqname" data-sqname="${g.idx}" value="${esc(g.name)}" maxlength="24" aria-label="Název squadu ${g.idx + 1}">` : `<b>${esc(g.name)}</b>`;
   const free = (cw ? D.doktrina.cw.roles : roles).filter(ro => !g.slots.some(x => x.kit === ro.kit));
-  const addRole = cmd && cw && free.length && g.slots.length < 20 ? `<select class="addrole" data-addrole="${g.idx}" aria-label="${esc(g.name)}: přidat roli"><option value="">+ Přidat roli</option>${free.map(ro => `<option value="${esc(ro.kit)}">${esc(ro.label)}</option>`).join("")}</select>` : "";
+  const addRole = cmd && free.length && g.slots.length < 20 ? `<select class="addrole" data-addrole="${g.idx}" aria-label="${esc(g.name)}: přidat roli"><option value="">+ Přidat roli</option>${free.map(ro => `<option value="${esc(ro.kit)}">${esc(ro.label)}</option>`).join("")}</select>` : "";
   const veli = lead ? `Velí: <span class="who">${esc(lead.members.name)}</span>` : "Velí: nikdo, kdokoli ze squadu si vezme SL";
   return `<div class="rg sqc"><div class="pg-head">${sym(g.symbol, "sm")}<div>${title}<small class="veli${!lead && n ? " none" : ""}">${veli}</small></div><span class="num">${n}/${g.max}</span></div>
     ${lines}${addRole}${drop || add ? `<div class="sqtools">${drop}${add}</div>` : ""}</div>`;
@@ -343,7 +342,7 @@ function podporaCard(g, by) {
   const types = g.vehicles.map(t => {
     if (g.ctl === false) return `<div class="vtype">${t.cars.map(c => carBox(t, c, by)).join("")}</div>`;  // one tank of several: + / - on the last
     const all = g.all || t.cars, last = all[all.length - 1], wid = `why-POD-${t.kit}`;
-    const less = !last ? `žádný ${t.name}` : state.event.doctrine !== "cw" && last.slots.some(x => by[x.key]) ? `${last.name} má posádku` : "";
+    const less = !last ? `žádný ${t.name}` : "";
     const more = t.n >= t.max ? `${t.name}: nejvýš ${t.max}` : "";
     const why = [less, more].filter(Boolean).join(", ");
     const ctl = state.me.is_commander ? `<div class="sqp">${esc(t.name)} <b>${esc(t.n)}</b><span class="swctl">
@@ -711,14 +710,14 @@ async function dropFrom(keys) {
 const cwEv = () => state.event.doctrine === "cw";
 const setRole = async (i, kit, d) => {
   const xs = d < 0 ? plan.roster.find(g => g.idx === i).slots.filter(x => x.kit === kit) : [];
-  if (xs.length && cwEv() && !await dropFrom([xs[xs.length - 1].key])) return;
+  if (xs.length && !await dropFrom([xs[xs.length - 1].key])) return;
   return writeRoster(r => { r.squads[i][kit] = (r.squads[i][kit] || 0) + d; if (!r.squads[i][kit]) delete r.squads[i][kit]; });
 };
 const setSquad = async op => {
-  if (op !== "add" && cwEv() && !await dropFrom(plan.roster.filter(g => g.sq).pop().slots.map(x => x.key))) return;
+  if (op !== "add" && !await dropFrom(plan.roster.filter(g => g.sq).pop().slots.map(x => x.key))) return;
   return writeRoster(r => { const t = D.doktrina.swarm.sestava, cw = cwEv();
     if (op === "add") {
-      r.squads.push(cw ? { RF: 1 } : Object.fromEntries([...t.core.map(c => [c.kit, 1]), [t.swarm.kit, t.swarm.default]]));
+      r.squads.push(cw ? { ...D.doktrina.cw.squad } : Object.fromEntries([...t.core.map(c => [c.kit, 1]), [t.swarm.kit, t.swarm.default]]));
       if (r.names) r.names.push(`Squad ${r.squads.length}`);
     } else { r.squads.pop(); if (r.names) r.names.pop(); }
   });
@@ -726,7 +725,7 @@ const setSquad = async op => {
 const setName = (i, v) => writeRoster(r => { r.names = r.names || r.squads.map((_, k) => `Squad ${k + 1}`); r.names[i] = v.trim().slice(0, 24) || `Squad ${i + 1}`; });
 const setSupport = async (ti, d) => {
   const p = D.doktrina.swarm.sestava.podpora[ti], car = d < 0 && plan.roster.filter(x => x.vehicles && x.vehicles[0].kit === p.kit).flatMap(x => x.vehicles[0].cars).at(-1);
-  if (car && cwEv() && !await dropFrom(car.slots.map(x => x.key))) return;
+  if (car && !await dropFrom(car.slots.map(x => x.key))) return;
   return writeRoster(r => { const list = r.vehicles[p.kit] = r.vehicles[p.kit] || []; if (d > 0) list.push(p.open); else list.pop(); });
 };
 const setSeat = (kit, v, d) => writeRoster(r => { r.vehicles[kit][v] += d; });
@@ -989,8 +988,10 @@ let plan = null;
 // each vehicle]}}; an event from before 017 keeps its Swarm sizes and vehicle counts with every seat open
 function rosterOf(ev) {
   if (ev.roster) return ev.roster;
-  const t = D.doktrina.swarm.sestava, [a, b, c] = ev.doctrine === "cw" ? ["RK", "RC", "RF"] : [t.core[0].kit, t.core[1].kit, t.swarm.kit];
-  return { squads: Array.from({ length: t.squads }, (_, i) => ({ [a]: 1, [b]: 1, [c]: (ev.squad_swarm && ev.squad_swarm[i]) || t.swarm.default })),
+  // the default draft (Petr 2026-10-25 D33): Public Ops [cw] squad, SWARM core + Swarm; the Commander reworks it from there
+  const t = D.doktrina.swarm.sestava, po = ev.doctrine === "cw" && D.doktrina.cw.squad;
+  return { squads: Array.from({ length: t.squads }, (_, i) => po ? { ...po }
+      : { [t.core[0].kit]: 1, [t.core[1].kit]: 1, [t.swarm.kit]: (ev.squad_swarm && ev.squad_swarm[i]) || t.swarm.default }),
     vehicles: Object.fromEntries(t.podpora.map((p, i) => [p.kit, Array(ev.squad_support?.[i] ?? p.default).fill(p.seats.length)])) };
 }
 // keys stay as before 017, so sign-ups survive the switch: SW-Q<squad>-<KIT><n> (the first without n), and seat i of
@@ -1111,7 +1112,7 @@ function sketchSvg(s, vid) {
   const k = s.sketch, W = 1250, H = 1000, sel = vById(s, vid);
   const pts = a => a.map(([x, y]) => `${x},${y}`).join(" ");
   const zones = k.zones.map(z => `<polygon class="z-${z.kind}" points="${pts(z.poly)}"/>`).join("");
-  const circles = s.variants.map(v => `<circle class="cz${v.id === vid ? " on" : ""}" cx="${v.xy[0]}" cy="${v.xy[1]}" r="${v.r}"/>`).join("");
+  const circles = s.variants.filter(v => v.xy).map(v => `<circle class="cz${v.id === vid ? " on" : ""}" cx="${v.xy[0]}" cy="${v.xy[1]}" r="${v.r}"/>`).join("");
   const label = `<text class="czl" x="${sel.xy[0]}" y="${sel.xy[1] - sel.r - 26}" text-anchor="middle">${esc(sel.name)}</text>`;
   const towers = k.towers.map(t => {
     const on = sel.towers.includes(t.name), n = t.name.replace("Tower ", "");
@@ -1178,40 +1179,52 @@ function homeEvent() {
   return `<a class="cont evc" href="#/akce/${ev.id}"><span class="big">Operace</span><span>${esc(fmtWhen(ev.starts_at))} · ${sideOf(ev.strategy_id, NOPICK)} · ${esc(docName(ev.doctrine))}<small>${status}</small></span></a>${more}${next}`;
 }
 
-// specs/mapy-v2 (Petr 2026-10-22): the 3 maps; a map's page picks doctrine, team and zone variant, then shows the
-// plan of that choice. Read-only: no open event changes it, roles are claimed in Akce.
+// specs/mapy-v3 (Petr 2026-10-25 D34): the 3 maps; a map's page picks team and zone, then shows the battle plan of that
+// combination (no doctrine, no Fortress plan). Read-only: no open event changes it, roles are claimed in Akce.
 const MAPS = () => [...new Set(D.strategies.map(x => x.map))];
 const teamKey = x => x.id.slice(x.id.indexOf("-") + 1);  // "ozeti-modri" -> "modri"
 const mapSlug = m => D.strategies.find(x => x.map === m).id.split("-")[0];
 const mapOf = slug => MAPS().find(m => mapSlug(m) === slug);
 const mapHref = (m, o = {}) => { const q = new URLSearchParams(Object.entries(o).filter(([, v]) => v)).toString(); return `#/mapy/${mapSlug(m)}${q ? "?" + q : ""}`; };
-const planHref = (x, tab) => mapHref(x.map, { d: "fortress", t: teamKey(x), v: curVariant, tab: tab === "platno" ? null : tab });
+const planHref = x => mapHref(x.map, { t: teamKey(x), v: curVariant });
 const mapsList = () => `<ul class="cls maps">${MAPS().map(m => { const xs = D.strategies.filter(x => x.map === m);
-  return `<li><a href="${mapHref(m)}"><b>${esc(m)}</b><span>${xs.length} týmy · ${xs[0].variants.length} varianty zóny</span></a></li>`; }).join("")}</ul>`;
+  return `<li><a href="${mapHref(m)}"><b>${esc(m)}</b><span>${xs.length} týmy · ${xs[0].variants.length} zóny</span></a></li>`; }).join("")}</ul>`;
 function viewMapDetail(m, qs) {
-  const q = new URLSearchParams(qs), d = ["fortress", "swarm"].includes(q.get("d")) ? q.get("d") : null;
-  const xs = D.strategies.filter(x => x.map === m), x = d && xs.find(y => teamKey(y) === q.get("t")) || null;
-  const v = x && x.variants.some(y => y.id === q.get("v")) ? q.get("v") : null;
-  const tab = ["situace", "vetve"].includes(q.get("tab")) ? q.get("tab") : "platno";
+  const q = new URLSearchParams(qs), xs = D.strategies.filter(x => x.map === m), x = xs.find(y => teamKey(y) === q.get("t")) || null;
+  const v = x && x.variants.find(y => y.id === q.get("v")) || null, w = v && D.bitvy.pocasi.some(y => y.id === q.get("w")) ? q.get("w") : "";
   const step = (label, cur, opts) => `<div class="vbar mapstep" role="group" aria-label="${label}"><span class="vlbl">${label}</span>${opts.map(([val, name, sub, href]) =>
     `<a href="${href}"${val === cur ? ' aria-current="true"' : ""}><b>${esc(name)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</a>`).join("")}</div>`;
-  const steps = step("Doktrína", d, [["fortress", docName("defence"), docOf("defence").short], ["swarm", docName("swarm"), docOf("swarm").short]]
-      .map(([val, n, sub]) => [val, n, sub, mapHref(m, { d: val, t: x && teamKey(x), v })]))
-    + (d ? step("Tým", x && teamKey(x), xs.map(y => [teamKey(y), y.color, y.faction, mapHref(m, { d, t: teamKey(y), v: y.variants.some(z => z.id === q.get("v")) ? q.get("v") : null })])) : "")
-    + (x ? step("Varianta zóny", v, x.variants.map(y => [y.id, y.name, `${y.towers.length} věže${y.status === "NÁVRH" ? " · návrh" : ""}`, mapHref(m, { d, t: teamKey(x), v: y.id, tab: tab === "platno" ? null : tab })])) : "");
+  const steps = step("Tým", x && teamKey(x), xs.map(y => [teamKey(y), y.color, y.faction, mapHref(m, { t: teamKey(y), v: y.variants.some(z => z.id === q.get("v")) ? q.get("v") : null, w })]))
+    + (x ? step("Zóna", v && v.id, x.variants.map(y => [y.id, y.name, y.xy ? `${y.towers.length} věže` : "střed doplníme", mapHref(m, { t: teamKey(x), v: y.id, w })])) : "")
+    + (v ? step("Počasí", w, [["", "Každé počasí", ""], ...D.bitvy.pocasi.map(y => [y.id, y.label, y.id])].map(([val, n, sub]) => [val, n, sub, mapHref(m, { t: teamKey(x), v: v.id, w: val })])) : "");
   const head = `<p class="crumb"><a href="#/mapy">Mapy</a> / ${esc(m)}</p>
-    <header class="unit-head"><div><h1>${esc(m)}</h1><p>Vyber doktrínu, tým a variantu kontaktní zóny. Plán se ukáže podle tvých voleb.</p></div></header>${steps}`;
-  if (!v) return head + `<p class="note mapnext">Dál vyber ${!d ? "doktrínu" : !x ? "tým" : "variantu zóny"}.</p>`;
-  if (d === "swarm") return head + `${variantPanel(x)}<section class="block"><h2>${esc(docName("swarm"))} na této mapě</h2><p>${esc(D.doktrina.swarm.tagline)}</p>${bullets(D.doktrina.swarm.points)}
-    <p class="note">${esc(docName("swarm"))} hraje na všech mapách stejně: <a href="#/doktrina/swarm">plán v Doktríně</a>.</p></section>`;
-  const tabs = [["platno", "Plátno"], ["situace", "Situace"], ["vetve", "Větve a spouštěče"]];
-  return head + `<nav class="tabs" aria-label="Plán">${tabs.map(([k, l]) => `<a href="${mapHref(m, { d, t: teamKey(x), v, tab: k === "platno" ? null : k })}"${k === tab ? ' aria-current="page"' : ""}>${l}</a>`).join("")}</nav>
-    ${x.status === "DRAFT" ? '<p class="note"><span class="tag draft">Draft</span> Plán zatím není vyhlášený za platný.</p>' : ""}
-    ${tab === "situace" ? viewSituace(x) : tab === "vetve" ? viewVetve(x) : viewCanvas(x)}`;
+    <header class="unit-head"><div><h1>${esc(m)}</h1><p>Vyber tým a zónu. Plán je pro Clan War, Public Ops z něj vychází.</p></div></header>${steps}`;
+  return head + (v ? viewBattle(x, v, w) : `<p class="note mapnext">Dál vyber ${x ? "zónu" : "tým"}.</p>`);
+}
+
+// the battle plan of one map x team x zone (hub/specs/mapy-v3 M3-M5): content/bitvy.toml, a weather plan wins only
+// where it has something; the zone sketch when the zone has a centre; empty sections say they are still to be filled
+function viewBattle(x, v, w) {
+  const all = D.bitvy.plany.filter(p => p.strategy === x.id && p.zone === v.id);
+  const base = all.find(p => !p.weather), wp = w && all.find(p => p.weather === w);
+  const f = k => [wp, base].map(p => p && p[k]).find(a => a && a.length) || null;
+  const sec = (h, body) => `<section class="block"><h2>${h}</h2>${body || '<p class="note">Zatím prázdné, doplníme s Jurem.</p>'}</section>`;
+  const cil = f("cil"), drzet = f("drzet"), squady = f("squady"), pozn = f("poznamky"), navrh = f("navrh");
+  const src = navrh && [wp, base].find(p => p && p.navrh.length).zdroj;
+  const zone = v.xy ? `<div class="vpanel" aria-label="Zóna ${esc(v.name)}">${sketchSvg(x, v.id)}<div class="vtx">
+      <p class="vtw">Věže v zóně: ${v.towers.map(t => `<span class="ref">${esc(t.replace("Tower ", "T"))}</span>`).join(" ")}</p>
+      <p class="note">Náčrtek z dat metaforge. Kruhy ostatních zón čárkovaně.</p></div></div>`
+    : `<p class="note">Zóna ${esc(v.name)}: střed zóny zatím nemáme, plánek doplníme.</p>`;
+  return `<div id="bplan">${zone}${w && !wp ? '<p class="note">Pro tohle počasí zatím nic zvláštního, platí obecný plán.</p>' : ""}
+    ${sec("Hlavní cíl", cil && `<p>${esc(cil)}</p>`)}
+    ${sec("Místa k držení", drzet && `<ul class="bullets">${drzet.map(d => `<li><b>${esc(d.misto)}</b>${d.squad ? ` · ${esc(d.squad)}` : ""}${d.jak ? `: ${esc(d.jak)}` : ""}</li>`).join("")}</ul>`)}
+    ${sec("Squady a úkoly", squady && `<ul class="bullets">${squady.map(d => `<li><b>${esc(d.squad)}</b>: ${esc(d.ukol)}</li>`).join("")}</ul>`)}
+    ${sec("Poznámky", pozn && bullets(pozn))}
+    ${navrh ? `<section class="block navrh"><h2>Návrh k zařazení</h2><p class="note">Vytěženo z dřívějšího vědění${src ? ` (${esc(src)})` : ""}. Co platí, zařadíme výš, zbytek smažeme.</p>${bullets(navrh)}</section>` : ""}</div>`;
 }
 
 function viewMapy() {
-  return `<header class="unit-head"><div><h1>Mapy</h1><p>Plán každé mapy podle doktríny, týmu a varianty zóny. Jen ke čtení, na akci se zapisuješ v <a href="#/akce">Akci</a>.</p></div></header>
+  return `<header class="unit-head"><div><h1>Mapy</h1><p>Battle plan každé mapy podle týmu a zóny, pro Clan War. Jen ke čtení, na akci se zapisuješ v <a href="#/akce">Akci</a>.</p></div></header>
     <section class="block">${mapsList()}</section>`;
 }
 
@@ -1220,7 +1233,7 @@ function viewMapy() {
 const HUD = `<svg class="hud" viewBox="0 0 200 200" aria-hidden="true"><circle class="h1" cx="100" cy="100" r="94"/><circle class="h2" cx="100" cy="100" r="84"/>
   <path class="h3" d="M100 6 A94 94 0 0 1 194 100"/><path class="h3 b" d="M100 194 A94 94 0 0 1 6 100"/>
   <g class="ticks">${Array.from({ length: 36 }, (_, i) => `<line x1="100" y1="${i % 3 ? 9 : 4}" x2="100" y2="14" transform="rotate(${i * 10} 100 100)"/>`).join("")}</g></svg>`;
-const NAV_TILES = [["akce", "Akce", "Operace, tréninky, zápis a lobby"], ["mapy", "Mapy", "Plán podle doktríny, týmu a zóny"],
+const NAV_TILES = [["akce", "Akce", "Operace, tréninky, zápis a lobby"], ["mapy", "Mapy", "Battle plan podle týmu a zóny"],
   ["vybava", "Výbava", "Tvůj loadout a co odemknout"], ["doktrina", "Doktrína", "Jak klan hraje"], ["vycvik", "Výcvik", "Lekce a drily"], ["pokryti", "Pokrytí", "Kdo co má odemčené"]];
 function homeMe() {
   if (!state.me) return "";
@@ -1245,7 +1258,7 @@ function viewHome() {
         `<li><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.name)}${out()}</a>${x.note ? `<small>${esc(x.note)}</small>` : ""}</li>`).join("")}</ul>`).join("")}</section>` : ""}
       <details class="hp-mod howto"${matchMedia("(max-width: 720px)").matches ? "" : " open"}><summary><h2 id="h-start">Jak to tu funguje${arrow()}</h2></summary><ol class="proc">
       <li><span><a href="#/akce">Akce</a>: otevři operaci, dej <b>Přijdu</b> a zaber si místo v sestavě. Pod ní je tvůj nákup, odehrané akce jsou v přehledu.</span></li>
-      <li><span><a href="#/mapy">Mapy</a>: plán každé mapy podle doktríny, týmu a varianty zóny, s kartou každé role (co koupit, čím jedeš, co děláš v každé fázi).</span></li>
+      <li><span><a href="#/mapy">Mapy</a>: battle plan každé mapy podle týmu a zóny (cíl, místa k držení, úkoly squadů), pro Clan War.</span></li>
       <li><span><a href="#/vybava">Výbava</a>: tvůj loadout pro každou sub-classu: co koupit a kolik kusů, podle toho, co máš odemčené (WARDOGS Tracker). Kolik nás co umí, je v <a href="#/pokryti">Pokrytí</a>.</span></li>
       <li><span><a href="#/doktrina">Doktrína</a>: jak klan hraje (${esc(docName("defence"))}, ${esc(docName("swarm"))}) a Výcvik.</span></li>
     </ol></details>
@@ -1291,35 +1304,8 @@ function budgetBlock(s, gid, own = null) {
     ${(b.deliveries || []).length ? `<p class="note">Dodávky: ${b.deliveries.map(d => `${esc(d.phase)} ${esc(d.what)} <span class="rid">${esc(d.by)}</span> +${d.supplies.toLocaleString("cs-CZ")}`).join(", ")}</p>` : ""}</div>`;
 }
 
-function viewSituace(s) {
-  return `
-    ${variantPanel(s)}
-    <div class="cols block">
-      <section><h2>Kdo kde je</h2><table class="data"><thead><tr><th>Kdo</th><th>Kde</th><th>Poznámka</th></tr></thead><tbody>
-        ${s.situation.map(x => `<tr><td><span class="side ${esc(x.side)}"></span><b>${esc(x.who)}</b></td><td>${esc(x.where)}</td><td>${esc(x.note)}</td></tr>`).join("")}</tbody></table></section>
-      <section><h2>Místa</h2><dl class="places">${s.places.filter(inV).map(p => `<dt>${esc(p.name)}</dt><dd>${esc(p.text)}</dd>`).join("")}</dl></section>
-    </div>
-    <div class="cols block">
-      <section><h2>Palebné sektory mortarů</h2>${s.sectors.filter(inV).map(x => `<div class="sector"><b>${esc(x.keyword)}</b><span>${esc(x.area)}</span><small>${esc(x.aim)}</small></div>`).join("")}
-        <p class="note">Postup palby je v <a href="#/doktrina">doktríně</a>.</p></section>
-      <section><h2>Rozpočet supplies</h2>${Object.keys(s.budget).map(gid => budgetBlock(s, gid)).join("")}
-        <p class="note">FOB po položení obsahuje ${s.fob_default_supplies.toLocaleString("cs-CZ")} Build Supplies. Ceny staveb: ${esc(D.snapshot)}.</p></section>
-    </div>
-    <div class="cols block">
-      <section><h2>Pořadí obsazování rolí</h2><p class="note" style="margin:0 0 12px">Když přijde méně lidí, poslední se škrtají první.</p>
-        <ol class="order">${s.fill_order.map(id => `<li>${roleLink(s, roleOf(s, id))}</li>`).join("")}</ol></section>
-      <section><h2>Interaktivní mapy</h2><p class="links">${s.links.map(l => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.name)} ${out()}</a>`).join("")}</p></section>
-    </div>`;
-}
-
 function rxList(s, items, withWho = true) {
   return items.map(x => `<div class="rx"><div class="when">${esc(x.when)}</div><div class="arrow">${arrow()}</div><div class="then">${esc(x.then)}</div>${withWho && x.roles ? `<div class="who">${x.roles.map(ref => refChip(s, ref)).join("")}</div>` : ""}</div>`).join("");
-}
-
-function viewVetve(s) {
-  return `
-    <section class="block narrow"><h2>Spouštěče: stane se kdykoli, reaguj hned</h2>${rxList(s, s.triggers.filter(inV))}</section>
-    <section class="block narrow"><h2>Větve: když se situace vyvine</h2>${rxList(s, s.branches.filter(inV))}</section>`;
 }
 
 function itemIcon(src, cls = "") {
@@ -1942,7 +1928,7 @@ function render() {
     const r = p[2] === "role" && roleOf(s, p[3]), g = p[2] === "squad" && groupOf(s, p[3]);
     if (r) { html = viewRole(s, r); title = `${r.id} ${r.name} · KIN`; }
     else if (g) { html = viewSquad(s, g); title = `${g.name} · KIN`; }
-    else { location.replace(planHref(s, ["situace", "vetve"].includes(p[2]) ? p[2] : "platno")); return; }  // M6: Discord and briefing links
+    else { location.replace(planHref(s)); return; }  // M6: Discord and briefing links
   } else if (p[0] === "mapy" && mapOf(p[1])) {
     const m = mapOf(p[1]), q = new URLSearchParams(qs), x = D.strategies.find(y => y.map === m && teamKey(y) === q.get("t"));
     cur = x || null; curVariant = x && x.variants.some(y => y.id === q.get("v")) ? q.get("v") : null;
