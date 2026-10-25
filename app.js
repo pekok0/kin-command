@@ -358,10 +358,10 @@ function podporaCard(g, by) {
 }
 
 function viewRoster(s) {
-  const head = "<h2>Sestava</h2>";
+  const head = "<h2>Lobby</h2>";  // Petr 2026-10-26: one term for the page where squads are composed (the draft)
   const msg = state.flash ? `<p class="err ros-msg" role="alert">${esc(state.flash)}</p>` : "";
-  if (!sb) return `${head}<p class="note">Sestava se teď nenačetla (knihovna přihlášení není dostupná). Plány map a doktrína fungují dál.</p>`;
-  if (!state.me) return `${head}<p class="note">Sestava je jen pro členy KIN. <button type="button" class="act" data-login>Přihlásit přes Discord</button></p>`;
+  if (!sb) return `${head}<p class="note">Lobby se teď nenačetlo (knihovna přihlášení není dostupná). Plány map a doktrína fungují dál.</p>`;
+  if (!state.me) return `${head}<p class="note">Lobby je jen pro členy KIN. <button type="button" class="act" data-login>Přihlásit přes Discord</button></p>`;
   const ev = state.event;
   if (!ev) return state.evErr ? `${head}${msg}`
     : `${head}<p class="note">Žádná akce není otevřená.</p>${msg}`;
@@ -1383,18 +1383,20 @@ function packBag(bag, list) {
 function myKit(c) {
   const lads = c.ladders || [], entry = lad => { const i = mineIdx(lad); return { lad, st: lad.steps[i] || null, i, g: grade(lad, i), top: lad.steps.at(-1) }; };
   const slots = Object.fromEntries(Object.keys(SLOT_LABEL).map(k => [k, (l => l && entry(l))(lads.find(l => l.slot === k))]));
-  // [2] takes a second primary too (Combat Sniper, D38): its magazines and rounds come along like the primary's
-  const gun = slots.slot1 && slots.slot1.st, gun2 = slots.slot2 && slots.slot2.st, store = [], mq = c.mags || { qty: MAGS };
+  // a second primary hangs on the backpack's sling (Combat Sniper, D38; [2] is a pistol): only with a sling backpack, then
+  // its magazines and rounds come along like the primary's
+  const slingOk = !!(slots.backpack && slots.backpack.st && slots.backpack.st.slings);
+  const gun = slots.slot1 && slots.slot1.st, gun2 = slingOk && slots.sling ? slots.sling.st : null, store = [], mq = c.mags || { qty: MAGS };
   for (const g of [gun, gun2]) {
     const mag = g && g.mags && g.mags[g.mags.map(m => !m.unlock || owned(m.item)).lastIndexOf(true)];
     if (mag && mq.qty) store.push({ st: { ...mag, qty: mq.qty, cost: pieceCost(mag, mq.qty) }, g: null, drop: mq.drop });
   }
   for (const lad of lads.filter(l => l.slot === "storage")) {
-    // rockets follow my launcher (RPG-7 93mm, MAAWS 84mm), rounds my primary (or [2] with of: "slot2"), `stacks` in
-    // stacks of its calibre
+    // rockets follow my launcher (RPG-7 93mm, MAAWS 84mm), rounds my primary (or the sling's with of: "sling"), `stacks`
+    // in stacks of its calibre
     const rk = lad.fill && slots.slot3 && slots.slot3.st && slots.slot3.st.rockets && slots.slot3.st.rockets[0];
-    const e = lad.fill ? { lad, st: rk ? { ...rk, qty: lad.min } : null, g: null }
-      : entry(lad.of === "slot2" ? municeFor(lad, gun2) : lad.group === "Munice" ? municeFor(lad, gun) : lad);
+    const e = lad.fill ? { lad, st: rk ? { ...rk, qty: lad.min } : null, g: null } : lad.of === "sling" && !gun2 ? { lad, st: null, g: null }
+      : entry(lad.of === "sling" ? municeFor(lad, gun2) : lad.group === "Munice" ? municeFor(lad, gun) : lad);
     if (lad.stacks && e.st && e.st.stack) e.st = { ...e.st, qty: lad.stacks * e.st.stack };
     store.push({ ...e, drop: lad.drop, fill: lad.fill, min: lad.min });
   }
@@ -1408,7 +1410,7 @@ function myKit(c) {
   const have = all.filter(e => e.st);
   // a verdict only on real data: without the Tracker every slot would look red for nothing
   const judged = !!(trk && trk.status === "ok");
-  return { slots, store: store.filter(e => e.st), judged, graded: judged ? all.filter(e => e.g) : [],
+  return { slots, slingOk, store: store.filter(e => e.st), judged, graded: judged ? all.filter(e => e.g) : [],
     names: new Set(have.map(e => e.st.item)), cost: have.reduce((a, e) => a + (e.st.cost || 0), 0) };
 }
 const loadoutCost = c => myKit(c).cost;
@@ -1425,6 +1427,8 @@ function readiness(k) {
 function loadoutCard(q, c, h = "h2") {
   const k = myKit(c), judged = k.judged;
   const cell = key => { const e = k.slots[key], st = e && e.st, g = judged && e && e.g;
+    if (key === "sling" && !k.slingOk) { const b = k.slots.backpack && k.slots.backpack.lad.steps.find(x => x.slings);  // D38: no sling yet
+      return `<div class="slot empty"><span class="sl">${SLOT_LABEL.sling}</span><span class="sn miss">Až s batohem se slingem${b ? `<span class="goal"><b>${esc(b.item)}</b> · ${unlockText(b.unlock)}</span>` : ""}</span></div>`; }
     if (e && e.lad.free) return `<div class="slot free"><span class="sl">${SLOT_LABEL[key]}</span><span class="sn">Libovolná zbraň</span><span class="fr-n">Klan ji nepředepisuje: vezmi, co ti sedí.</span></div>`;
     return `<div class="slot${st ? "" : " empty"}${g ? " g-" + g : ""}"${g ? ` title="${GRADE[g]}"` : ""}><span class="sl">${SLOT_LABEL[key]}</span>${st
       ? `${itemIcon(st.icon)}<span class="sn">${esc(st.item)}${g && g !== "ok" ? `<span class="goal">Cíl: <b>${esc(e.top.item)}</b> · ${unlockText(e.top.unlock)}</span>` : ""}</span>${st.cost ? `<span class="pr">${usd(st.cost)}</span>` : ""}`
@@ -1435,7 +1439,7 @@ function loadoutCard(q, c, h = "h2") {
       <p class="src">${judged ? "Co koupit: nejlepší z toho, co máš odemčené a klan doporučuje." : "Startovní loadout. Propoj WARDOGS Tracker ve <a href=\"#/vybava\">Výbavě</a> a uvidíš svůj."}</p></div></header>
     ${readiness(k)}
     <div class="lo-grid">
-      <div><h3>Equipment</h3>${["slot1", "slot2", "slot3"].map(cell).join("")}
+      <div><h3>Equipment</h3>${["slot1", "slot2", "slot3", ...(k.slots.sling ? ["sling"] : [])].map(cell).join("")}
         <h3>Gear</h3><div class="lo-gear">${["helmet", "armor", "vest"].map(cell).join("")}</div></div>
       <div><h3>Storage</h3><div class="lo-gear">${["backpack", "traversal"].map(cell).join("")}</div>
         <h3>V batohu</h3>${k.store.length ? `<ul class="lo-store">${k.store.map(e => `<li${judged && e.g ? ` class="g-${e.g}" title="${GRADE[e.g]}"` : ""}>${itemIcon(e.st.icon, "sm")}<span class="q">${e.st.qty}${e.st.cost ? `<span class="pr">${usd(e.st.cost)}</span>` : ""}</span><span class="n">${esc(e.st.item)}${e.over ? '<span class="cut">Nevejde se: kup větší batoh</span>' : e.cut ? '<span class="cut">Víc se nevejde, větší batoh unese víc</span>' : ""}</span></li>`).join("")}</ul>` : '<p class="note">Nic.</p>'}
@@ -1546,7 +1550,7 @@ function viewCw(c) {
 }
 
 // ---------- squads + loadouts ----------
-const SLOT_LABEL = { slot1: "[1]", slot2: "[2]", slot3: "[3]", helmet: "Helmet", armor: "Armor", vest: "Tac-Vest", backpack: "Backpack", traversal: "Traversal" };
+const SLOT_LABEL = { slot1: "[1]", slot2: "[2]", slot3: "[3]", sling: "Sling", helmet: "Helmet", armor: "Armor", vest: "Tac-Vest", backpack: "Backpack", traversal: "Traversal" };
 
 // ---- "co mám odemčeno": per member and season; a wipe starts a new season with an empty list ----
 const currentSeason = () => seasonOf(new Date().toISOString());
