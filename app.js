@@ -1380,13 +1380,18 @@ function packBag(bag, list) {
 function myKit(c) {
   const lads = c.ladders || [], entry = lad => { const i = mineIdx(lad); return { lad, st: lad.steps[i] || null, i, g: grade(lad, i), top: lad.steps.at(-1) }; };
   const slots = Object.fromEntries(Object.keys(SLOT_LABEL).map(k => [k, (l => l && entry(l))(lads.find(l => l.slot === k))]));
-  const gun = slots.slot1 && slots.slot1.st, store = [], mq = c.mags || { qty: MAGS };
-  const mag = gun && gun.mags && gun.mags[gun.mags.map(m => !m.unlock || owned(m.item)).lastIndexOf(true)];
-  if (mag && mq.qty) store.push({ st: { ...mag, qty: mq.qty, cost: pieceCost(mag, mq.qty) }, g: null, drop: mq.drop });
+  // [2] takes a second primary too (Combat Sniper, D38): its magazines and rounds come along like the primary's
+  const gun = slots.slot1 && slots.slot1.st, gun2 = slots.slot2 && slots.slot2.st, store = [], mq = c.mags || { qty: MAGS };
+  for (const g of [gun, gun2]) {
+    const mag = g && g.mags && g.mags[g.mags.map(m => !m.unlock || owned(m.item)).lastIndexOf(true)];
+    if (mag && mq.qty) store.push({ st: { ...mag, qty: mq.qty, cost: pieceCost(mag, mq.qty) }, g: null, drop: mq.drop });
+  }
   for (const lad of lads.filter(l => l.slot === "storage")) {
-    // rockets follow my launcher (RPG-7 93mm, MAAWS 84mm), rounds my primary, `stacks` in stacks of its calibre
+    // rockets follow my launcher (RPG-7 93mm, MAAWS 84mm), rounds my primary (or [2] with of: "slot2"), `stacks` in
+    // stacks of its calibre
     const rk = lad.fill && slots.slot3 && slots.slot3.st && slots.slot3.st.rockets && slots.slot3.st.rockets[0];
-    const e = lad.fill ? { lad, st: rk ? { ...rk, qty: lad.min } : null, g: null } : entry(lad.group === "Munice" ? municeFor(lad, gun) : lad);
+    const e = lad.fill ? { lad, st: rk ? { ...rk, qty: lad.min } : null, g: null }
+      : entry(lad.of === "slot2" ? municeFor(lad, gun2) : lad.group === "Munice" ? municeFor(lad, gun) : lad);
     if (lad.stacks && e.st && e.st.stack) e.st = { ...e.st, qty: lad.stacks * e.st.stack };
     store.push({ ...e, drop: lad.drop, fill: lad.fill, min: lad.min });
   }
