@@ -325,9 +325,19 @@
     for (const e of ents) if (!e.dead && K[e.k].air) sym(e);  // helicopters above everything
     // the camera's label and the latest event, on the screen
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // only where no page text sits above them (B21, panprstenu2 2026-10-22: the banner showed through CELKEM)
+    const free = (text, y) => [18, 18 + ctx.measureText(text).width / 2, 18 + ctx.measureText(text).width].every(x => {
+      const el = document.elementFromPoint(x, y);
+      return !el || el === document.body || el === document.documentElement || el.matches("main, .wrap");
+    });
+    const capt = `● ${cam.label} · T+${String(Math.floor(t / 60)).padStart(2, "0")}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
     ctx.textAlign = "left"; ctx.font = "600 13px Oxanium, sans-serif"; ctx.fillStyle = "rgba(65,214,238,.75)";
-    ctx.fillText(`● ${cam.label} · T+${String(Math.floor(t / 60)).padStart(2, "0")}:${String(Math.floor(t % 60)).padStart(2, "0")}`, 18, innerHeight - 18);
-    if (banner) { ctx.fillStyle = `rgba(${YEL},${Math.min(1, banner.life)})`; ctx.font = "700 15px Oxanium, sans-serif"; ctx.fillText(banner.text, 18, innerHeight - 40); }
+    st.caption = free(capt, innerHeight - 23);
+    if (st.caption) ctx.fillText(capt, 18, innerHeight - 18);
+    if (banner) {
+      ctx.fillStyle = `rgba(${YEL},${Math.min(1, banner.life)})`; ctx.font = "700 15px Oxanium, sans-serif";
+      if (free(banner.text, innerHeight - 45)) ctx.fillText(banner.text, 18, innerHeight - 40);
+    }
     if (flash) { ctx.fillStyle = `rgba(200,240,255,${flash})`; ctx.fillRect(0, 0, innerWidth, innerHeight); }
     st.frames++;
   };

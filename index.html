@@ -793,7 +793,9 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .mlink img { width: 24px; height: 24px; border-radius: 50%; flex: none; }
 .mlink:hover { color: var(--fr); }
 /* fixed role column: every name in a group starts at the same x (Petr 2026-10-25, the label used to grow and push names right) */
-.hrow { display: grid; grid-template-columns: minmax(7em, 9em) minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 6px 8px; }
+/* .rg li: `.rg li { display: flex }` outweighed a bare .hrow, so the grid never applied (Petr 2026-10-25) */
+.rg li.hrow { display: grid; grid-template-columns: var(--lbl, 7em) minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 6px 8px; }
+.hrow .mlink span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hrow .lbl { color: var(--ink-2); overflow-wrap: anywhere; }
 .pavatar { width: 64px; height: 64px; border-radius: 50%; flex: none; }
 .evnote { white-space: pre-wrap; max-width: 75ch; }

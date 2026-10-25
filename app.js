@@ -1610,7 +1610,7 @@ const sideOf = (id, none = "mapa neuvedena") => { if (!id) return none; const s 
 // map and team -> their plan; null while either is "zatím nevím" (one strategy_id field, decision 1)
 const compose = (map, team) => D.strategies.find(s => s.map === map && s.team === team) || null;
 const variantName = (sid, vid) => { const s = S(sid), v = s && vById(s, vid); return v ? v.name : (vid || "-"); };
-const memberLink = m => `<a class="mlink" href="#/hrac/${encodeURIComponent(m.discord_id)}"><img src="${esc(m.avatar_url)}" alt="" loading="lazy">${esc(m.name)}</a>`;
+const memberLink = m => `<a class="mlink" href="#/hrac/${encodeURIComponent(m.discord_id)}" title="${esc(m.name)}"><img src="${esc(m.avatar_url)}" alt="" loading="lazy"><span>${esc(m.name)}</span></a>`;
 
 // newest season first, each with its rows in the order given
 function bySeason(rows, iso) {
@@ -1738,6 +1738,9 @@ function viewHistory(evs) {
     </tbody></table></section>`).join("");
 }
 
+// one label column for every card of the roster, so the names line up across cards (Petr 2026-10-25)
+const lblWidth = groups => `min(${Math.max(...Object.values(groups).flat().map(x => x.role.length)) + 1}ch, 9em)`;
+
 function viewEvent(ev, claims, absent = new Set()) {
   // slot_label was stored at sign-up ("Skupina · Role"), so renamed roles keep their old name here
   const groups = {};
@@ -1749,7 +1752,7 @@ function viewEvent(ev, claims, absent = new Set()) {
     <p class="lede">Umístění <b>${place(ev.placement)}</b> · zóna ${esc(variantName(ev.strategy_id, ev.variant))} · ${played === claims.length ? plural(played, "člověk", "lidé", "lidí") : `hrálo ${played} z ${claims.length} zapsaných`}</p>
     ${debrief.length ? `<section class="block"><h2>Debrief</h2><dl class="debrief">${debrief.map(([h, t]) => `<dt>${h}</dt><dd class="evnote">${esc(t)}</dd>`).join("")}</dl></section>` : ""}
     ${ev.note ? `<section class="block"><h2>Poznámka Commandera</h2><p class="evnote">${esc(ev.note)}</p></section>` : ""}
-    <section class="block"><h2>Sestava</h2>${claims.length ? `<div class="ros">${Object.entries(groups).map(([g, xs]) => `<div class="rg"><div class="pg-head"><div><b>${esc(g)}</b></div><span class="num">${xs.length}</span></div>
+    <section class="block"><h2>Sestava</h2>${claims.length ? `<div class="ros" style="--lbl: ${lblWidth(groups)}">${Object.entries(groups).map(([g, xs]) => `<div class="rg"><div class="pg-head"><div><b>${esc(g)}</b></div><span class="num">${xs.length}</span></div>
       <ul>${xs.map(x => `<li class="hrow${x.away ? " absent" : ""}"><span class="lbl">${esc(x.role)}</span>${memberLink(x.m)}${x.away ? '<span class="ref">neúčast</span>' : ""}</li>`).join("")}</ul></div>`).join("")}</div>` : '<p class="note">Nikdo se nezapsal.</p>'}</section>`;
 }
 
