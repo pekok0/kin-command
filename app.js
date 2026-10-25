@@ -1596,11 +1596,13 @@ const seasonName = s => s ? s.name : "Před sezónami";
 const place = n => n ? `${n}.` : "-";
 // specs/akce-mapa-tym: the team as in the game, official name and colour; no logo (EULA 5.2(j), knowledge/tymy-s2.md)
 const teamOf = id => D.tymy.find(t => t.id === id);
-const teamBadge = id => { const t = teamOf(id); return t ? `<span class="team" style="--tc:${esc(t.hex)}">${esc(t.name)}</span>` : ""; };
+// the team's in-game emblem (icons/tym-<id>.webp, Petr 2026-10-25) as a mask, painted in the team's colour
+const teamStyle = t => `--tc:${esc(t.hex)};--tl:url(icons/tym-${esc(t.id)}.webp)`;
+const teamBadge = id => { const t = teamOf(id); return t ? `<span class="team" style="${teamStyle(t)}">${esc(t.name)}</span>` : ""; };
 // the team as a mark in its colour (no name in the cell; the name for screen readers and on hover)
 // history (Petr 2026-10-22): the map and its team's mark, the doctrine in its own column
 const mapCell = id => { if (!id) return '<span class="dash">-</span>'; const x = S(id); return x ? `${esc(x.map)} ${teamMark(x.team)}` : esc(id); };
-const teamMark = id => { const t = teamOf(id); return t ? `<span class="tmark" style="--tc:${esc(t.hex)}" title="${esc(t.name)}" role="img" aria-label="${esc(t.name)}"></span>` : ""; };
+const teamMark = id => { const t = teamOf(id); return t ? `<span class="tmark" style="${teamStyle(t)}" title="${esc(t.name)}" role="img" aria-label="${esc(t.name)}"></span>` : ""; };
 // an event's map and team as HTML; null = not picked yet, an id we do not know is shown as stored
 // not picked yet: dashed ghost chips like the empty Sidearm slot (DESIGN: dashed = not fixed); a screen reader hears it said
 const NOPICK = '<span class="ghost-pick" role="img" aria-label="Mapa a tým zatím nevybrané"><span>Mapa</span><span>Tým</span></span>';

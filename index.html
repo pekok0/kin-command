@@ -238,7 +238,8 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 /* specs/akce-mapa-tym: the in-game team as a badge, its colour (--tc from content/tymy.toml) on the square and the
    border only; the name keeps the surrounding ink (Valkyra red as text on navy is under the DESIGN.md contrast) */
 .team { display: inline-block; padding: .1em .3em 0; border: 1px solid var(--tc); white-space: nowrap; }
-.team::before { content: ""; display: inline-block; width: .6em; height: .6em; margin-right: .3em; background: var(--tc); }
+.team::before { content: ""; display: inline-block; width: .85em; height: .85em; margin-right: .3em; vertical-align: -.08em; background: var(--tc);
+  -webkit-mask: var(--tl) center / contain no-repeat; mask: var(--tl) center / contain no-repeat; }
 .sheets li a { display: grid; grid-template-columns: minmax(150px, auto) 1fr auto auto; gap: 18px; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--rule-soft); text-decoration: none; }
 .sheets li:first-child a { border-top: 1px solid var(--rule); }
 .sheets b { font: 700 28px/1 var(--cond); text-transform: uppercase; letter-spacing: .02em; }
@@ -586,9 +587,10 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .hp-links a { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
 .hp-links small { color: var(--ink-3); }
 .hp-grid .howto { margin: 0; }
-/* the team's mark in history: a small shield in the team's colour */
-.tmark { display: inline-block; width: .8em; height: .95em; margin-left: .35em; vertical-align: -.1em; background: var(--tc);
-  clip-path: polygon(50% 0, 100% 18%, 100% 58%, 50% 100%, 0 58%, 0 18%); box-shadow: 0 0 10px var(--tc); }
+/* the team's mark in history: its in-game emblem in the team's colour (Petr 2026-10-25, before: a coloured shield) */
+.tmark { display: inline-block; width: 1em; height: 1em; margin-left: .35em; vertical-align: -.14em; background: var(--tc);
+  -webkit-mask: var(--tl) center / contain no-repeat; mask: var(--tl) center / contain no-repeat; }
+.foot { margin-top: 48px; padding-top: 16px; padding-bottom: 28px; font-size: 13px; color: var(--ink-3); border-top: 1px solid var(--rule-soft); }
 
 /* the operation's own page (Petr 2026-10-22): a head with when, how long, the doctrine plate and the map; x closes it */
 .evhero { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 14px 24px; align-items: center; margin: 8px 0 22px;
@@ -790,8 +792,9 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .mlink { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; text-decoration: none; min-width: 0; }
 .mlink img { width: 24px; height: 24px; border-radius: 50%; flex: none; }
 .mlink:hover { color: var(--fr); }
-.hrow { display: flex; align-items: center; gap: 10px; padding: 6px 8px; }
-.hrow .lbl { flex: 1 1 9em; min-width: 7em; color: var(--ink-2); }
+/* fixed role column: every name in a group starts at the same x (Petr 2026-10-25, the label used to grow and push names right) */
+.hrow { display: grid; grid-template-columns: minmax(7em, 9em) minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 6px 8px; }
+.hrow .lbl { color: var(--ink-2); overflow-wrap: anywhere; }
 .pavatar { width: 64px; height: 64px; border-radius: 50%; flex: none; }
 .evnote { white-space: pre-wrap; max-width: 75ch; }
 /* ---- briefing protocol (Commander only, klan/briefing-protokol.md) ---- */
@@ -1071,6 +1074,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 </div></header>
 <div id="evbar" class="wrap"></div>
 <main id="app" class="wrap"></main>
+<footer class="foot wrap"><p>Neoficiální klanová aplikace Kinetic Solutions. Znaky frakcí patří Bulkhead a Team17.</p></footer>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok" crossorigin="anonymous"></script>
 <script src="config.js"></script>
 <script src="app.js"></script>
