@@ -1202,15 +1202,17 @@ function viewMapDetail(m, qs) {
   return head + (v ? viewBattle(x, v, w) : `<p class="note mapnext">Dál vyber ${x ? "zónu" : "tým"}.</p>`);
 }
 
-// the battle plan of one map x team x zone (hub/specs/mapy-v3 M3-M5): content/bitvy.toml, a weather plan wins only
-// where it has something; the zone sketch when the zone has a centre; empty sections say they are still to be filled
+// the battle plan of one map x team x zone (hub/specs/mapy-v3 M3-M5): content/bitvy.toml; the zone's plan, its weather
+// plan winning only where it has something, and the map+team plan (zone "") under every zone; the zone sketch when the
+// zone has a centre; empty sections say they are still to be filled
 function viewBattle(x, v, w) {
-  const all = D.bitvy.plany.filter(p => p.strategy === x.id && p.zone === v.id);
-  const base = all.find(p => !p.weather), wp = w && all.find(p => p.weather === w);
-  const f = k => [wp, base].map(p => p && p[k]).find(a => a && a.length) || null;
+  const all = D.bitvy.plany.filter(p => p.strategy === x.id && (p.zone === v.id || !p.zone));
+  const base = all.find(p => p.zone && !p.weather), wp = w && all.find(p => p.zone && p.weather === w), gen = all.find(p => !p.zone && !p.weather);
+  const f = k => [wp, base, gen].map(p => p && p[k]).find(a => a && a.length) || null;
   const sec = (h, body) => `<section class="block"><h2>${h}</h2>${body || '<p class="note">Zatím prázdné, doplníme s Jurem.</p>'}</section>`;
-  const cil = f("cil"), drzet = f("drzet"), squady = f("squady"), pozn = f("poznamky"), navrh = f("navrh");
-  const src = navrh && [wp, base].find(p => p && p.navrh.length).zdroj;
+  const cil = f("cil"), drzet = f("drzet"), squady = f("squady"), pozn = f("poznamky");
+  const nz = [wp, base].find(p => p && p.navrh.length), ng = gen && gen.navrh.length ? gen : null;
+  const part = (h, p) => `<h3>${h}</h3>${p.zdroj ? `<p class="note">Zdroj: ${esc(p.zdroj)}</p>` : ""}${bullets(p.navrh)}`;
   const zone = v.xy ? `<div class="vpanel" aria-label="Zóna ${esc(v.name)}">${sketchSvg(x, v.id)}<div class="vtx">
       <p class="vtw">Věže v zóně: ${v.towers.map(t => `<span class="ref">${esc(t.replace("Tower ", "T"))}</span>`).join(" ")}</p>
       <p class="note">Náčrtek z dat metaforge. Kruhy ostatních zón čárkovaně.</p></div></div>`
@@ -1220,7 +1222,8 @@ function viewBattle(x, v, w) {
     ${sec("Místa k držení", drzet && `<ul class="bullets">${drzet.map(d => `<li><b>${esc(d.misto)}</b>${d.squad ? ` · ${esc(d.squad)}` : ""}${d.jak ? `: ${esc(d.jak)}` : ""}</li>`).join("")}</ul>`)}
     ${sec("Squady a úkoly", squady && `<ul class="bullets">${squady.map(d => `<li><b>${esc(d.squad)}</b>: ${esc(d.ukol)}</li>`).join("")}</ul>`)}
     ${sec("Poznámky", pozn && bullets(pozn))}
-    ${navrh ? `<section class="block navrh"><h2>Návrh k zařazení</h2><p class="note">Vytěženo z dřívějšího vědění${src ? ` (${esc(src)})` : ""}. Co platí, zařadíme výš, zbytek smažeme.</p>${bullets(navrh)}</section>` : ""}</div>`;
+    ${nz || ng ? `<section class="block navrh"><h2>Návrh k zařazení</h2><p class="note">Vytěženo z dřívějšího vědění. Co platí, zařadíme výš, zbytek smažeme.</p>
+      ${nz ? part(`Zóna ${esc(v.name)}`, nz) : ""}${ng ? part(`Celá mapa za ${esc(x.color)}`, ng) : ""}</section>` : ""}</div>`;
 }
 
 function viewMapy() {
