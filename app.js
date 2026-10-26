@@ -117,7 +117,7 @@ async function loadEvent() {
     // ponytail: two small queries per open operation (a handful at most); one `in` query when there are many
     const ops = await Promise.all((op.data || []).map(async ev => {
       const [cl, rs] = await Promise.all([
-        sb.from("claims").select("slot_key, slot_label, user_id, lead, members(name, avatar_url, discord_id)").eq("event_id", ev.id),
+        sb.from("claims").select("slot_key, slot_label, user_id, lead, no_cash, members(name, avatar_url, discord_id)").eq("event_id", ev.id),
         sb.from("rsvps").select("user_id, status, members(name, avatar_url, discord_id)").eq("event_id", ev.id),
       ]);
       if (cl.error) throw cl.error;
@@ -490,15 +490,17 @@ function swarmMyKit() {
 // (Recon wears Ghillie, Rocketeer has no Medical Bag); a crew seat only the vehicle it buys (Petr: armor not for crews)
 function slotNeeds(slot) {
   const n = D.nakup;
-  if (slot.seat) return n.vozidla.filter(v => v.kit === slot.kit && v.seat === slot.seat);
+  if (slot.seat) return n.vozidla.filter(v => v.kit === slot.kit && v.seat === slot.seat).map(v => ({ ...v, qty: 1 }));
   const r = D.doktrina.swarm.slots.find(r => r.id === slot.kit), cls = slot.cls || (r && !r.own_kit && r.class);
   const c = cls && classById(cls)[1];
   if (!c) return [];
-  const has = new Set(c.ladders.flatMap(l => l.steps.map(st => st.item)));
-  return [...(n.role[cls] || []), ...n.z_vybavy.filter(e => has.has(e.item))];
+  // pieces per life as the role's ladder says (2 smokes, 6 frags), else one
+  const qty = new Map(c.ladders.flatMap(l => l.steps.map(st => [st.item, typeof st.qty === "number" ? st.qty : 1])));
+  return [...(n.role[cls] || []), ...n.z_vybavy.filter(e => qty.has(e.item))].map(e => ({ ...e, qty: qty.get(e.item) || 1 }));
 }
-// N1 + N3: per item how many are missing, whose and who of the operation has it unlocked (may buy it); things unlocked
-// from the start never show; a member without Tracker data is listed apart, not as missing everything
+// N1 + N3: per item how many pieces are missing, whose and who of the operation has it unlocked (may buy it); things unlocked
+// from the start never show; a member without Tracker data is listed apart, not as missing everything. A member the
+// Commander marked no cash (033) gets the whole minimum bought, kdo = null: unlocked from the start, anyone buys it
 function nakupList(s) {
   const have = state.lobbyHave;
   if (!have) return null;
@@ -507,14 +509,14 @@ function nakupList(s) {
   for (const c of state.claims) {
     const x = slots.get(c.slot_key), mine = have.get(c.user_id);
     if (!x) continue;
-    if (!mine) { bezDat.push(name(c)); continue; }
+    if (!mine && !c.no_cash) { bezDat.push(name(c)); continue; }
     for (const e of slotNeeds(x)) {
-      if (!e.unlock || mine.has(e.item)) continue;
-      if (!rows.has(e.item)) rows.set(e.item, { item: e.item, price: e.price, n: 0, komu: [], kdo: [] });
-      const r = rows.get(e.item); r.n++; r.komu.push(name(c));
+      if (!c.no_cash && (!e.unlock || mine.has(e.item))) continue;
+      if (!rows.has(e.item)) rows.set(e.item, { item: e.item, price: e.price, unlock: e.unlock, n: 0, komu: [], kdo: [] });
+      const r = rows.get(e.item); r.n += e.qty; r.komu.push(name(c) + (c.no_cash ? " (bez peněz)" : ""));
     }
   }
-  for (const r of rows.values()) r.kdo = state.claims.filter(c => have.get(c.user_id)?.has(r.item)).map(name);
+  for (const r of rows.values()) r.kdo = !r.unlock ? null : state.claims.filter(c => !c.no_cash && have.get(c.user_id)?.has(r.item)).map(name);
   return { rows: [...rows.values()], bezDat };
 }
 function nakupBlock(s) {
@@ -524,9 +526,11 @@ function nakupBlock(s) {
   const list = names => names.map(esc).join(", ");
   return `${head}<p class="note">Co z nákupního minima rolí zapsaní nemají odemčené. Koupit to může jen ten, kdo to má odemčené; kdo komu koupí, domluvte na Briefingu.</p>
     ${l.rows.length ? `<div class="tblw"><table class="data nakup"><thead><tr><th>Položka</th><th class="num">Kusů</th><th>Komu chybí</th><th>Může koupit</th><th class="num">Za kus</th></tr></thead><tbody>${l.rows.map(r =>
-      `<tr><td>${esc(r.item)}</td><td class="num">${r.n}</td><td>${list(r.komu)}</td><td>${r.kdo.length ? list(r.kdo) : '<b class="nobuy">nikdo z akce</b>'}</td><td class="num">${r.price == null ? "–" : usd(r.price)}</td></tr>`).join("")}</tbody></table></div>`
+      `<tr><td>${esc(r.item)}</td><td class="num">${r.n}</td><td>${list(r.komu)}</td><td>${!r.kdo ? "kdokoli" : r.kdo.length ? list(r.kdo) : '<b class="nobuy">nikdo z akce</b>'}</td><td class="num">${r.price == null ? "–" : usd(r.price)}</td></tr>`).join("")}</tbody></table></div>`
       : '<p class="note">Zapsaným nic z minima nechybí.</p>'}
     ${l.bezDat.length ? `<p class="note">Bez dat z Trackeru (nevím, co mají odemčené): ${list(l.bezDat)}. Ať si Tracker synchronizují.</p>` : ""}
+    ${state.me.is_commander ? `<p class="note nocash">Bez peněz (označuješ jen ty, členům se koupí celé minimum): ${state.claims.map(c =>
+      `<button type="button" class="act" data-nocash="${esc(c.user_id)}:${c.no_cash ? 0 : 1}" aria-pressed="${!!c.no_cash}">${esc((c.members && c.members.name) || "?")}</button>`).join(" ")}</p>` : ""}
     <p class="note">Kdo kupuje pro jiné, potřebuje bednu a vozidlo, kterým ji koupí: ${D.nakup.rezie.map(e => `${esc(e.item)} ${e.price == null ? "" : usd(e.price)}`).join(", ")}.</p></section>`;
 }
 
@@ -808,6 +812,12 @@ async function moveTo(uid, key) {
 async function giveLead(uid, on) {
   const { data, error } = await sb.from("claims").update({ lead: on }).eq("event_id", state.event.id).eq("user_id", uid).select("slot_key");
   state.flash = error ? (error.code === "23505" ? "Squad už SL má." : saveErr(error)) : !data.length ? "SL se nepodařilo uložit: akce už není otevřená." : null;
+  await loadEvent();
+}
+// the Commander marks a member without cash (033: only he may change no_cash); the shopping list buys him the minimum
+async function setNoCash(uid, on) {
+  const { data, error } = await sb.from("claims").update({ no_cash: on }).eq("event_id", state.event.id).eq("user_id", uid).select("slot_key");
+  state.flash = error ? saveErr(error) : !data.length ? "Značku se nepodařilo uložit: akce už není otevřená." : null;
   await loadEvent();
 }
 // the SL badge on my own row (S4-S5); one per squad: the unique index claims_one_lead refuses a second (23505)
@@ -2073,7 +2083,7 @@ function render() {
 }
 
 $app.addEventListener("click", e => {
-  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-kit],[data-role],[data-move],[data-movehere],[data-squad],[data-seat],[data-fx],[data-leadfor],[data-merit-del],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker],[data-nova]");
+  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-kit],[data-role],[data-move],[data-movehere],[data-squad],[data-seat],[data-fx],[data-leadfor],[data-nocash],[data-merit-del],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker],[data-nova]");
   if (!t) return;
   if (t.dataset.trsvp) { const [id, st] = t.dataset.trsvp.split(":"); rsvpTraining(Number(id), st); return; }
   if (t.dataset.tclose) { t.disabled = true; const [id, st] = t.dataset.tclose.split(":"); closeTraining(Number(id), st); return; }
@@ -2082,6 +2092,7 @@ $app.addEventListener("click", e => {
   if (t.dataset.movehere) { const uid = state.moving; state.moving = null; moveTo(uid, t.dataset.movehere); return; }
   if (t.dataset.squad) { setSquad(t.dataset.squad); return; }
   if (t.dataset.leadfor) { const [uid, on] = t.dataset.leadfor.split(":"); giveLead(uid, on === "1"); return; }
+  if (t.dataset.nocash) { const [uid, on] = t.dataset.nocash.split(":"); setNoCash(uid, on === "1"); return; }
   if (t.dataset.meritDel) { sb.from("merits").delete().eq("id", t.dataset.meritDel).then(({ error }) => { if (error) console.error(error); render(); }); return; }
   if (t.dataset.fx) { const [gid, what, arg] = t.dataset.fx.split(":"); setFortress(gid, what, arg); return; }
   if (t.dataset.seat) { const [kit, v, d] = t.dataset.seat.split(":"); setSeat(kit, Number(v), Number(d)); return; }
