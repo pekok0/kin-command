@@ -124,9 +124,11 @@ async function loadEvent() {
       if (rs.error) throw rs.error;
       return { ...ev, claims: cl.data, rsvps: rs.data };
     }));
+    // the shopping list's unlocks fail on their own: the roster stays usable (null = the block says it did not load)
+    const have = await loadLobbyHave(ops).catch(e => (console.error(e), null));
     // swap the whole state at once, and only for the newest load (a slower old response must not win)
     if (seq !== loadSeq) return;
-    state.ops = ops; state.opsLoaded = true; state.trainings = tr.data; state.evErr = false;
+    state.ops = ops; state.opsLoaded = true; state.trainings = tr.data; state.evErr = false; state.lobbyHave = have;
     focusEvent();
     if (state.flash === LOAD_ERR) state.flash = null;  // connection is back: drop only our own outage message
   } catch (e) {
@@ -139,6 +141,15 @@ async function loadEvent() {
   // the lobby I looked at was closed or cancelled meanwhile: its address shows the history (closed) or Akce
   if (state.focusId && !state.ops.some(e => e.id === state.focusId) && (state.opsLoaded || state.evErr)) { state.focusId = null; render(); return; }
   renderRoster();
+}
+// hub/specs/nakupni-seznam: what the members of the open operations unlocked this season; members nest their items so
+// the row cap counts people, not unlocks (like Pokrytí); a member without rows has no Tracker data
+async function loadLobbyHave(ops) {
+  const s = currentSeason(), ids = [...new Set(ops.flatMap(ev => ev.claims.map(c => c.user_id)))];
+  if (!s || !ids.length) return new Map();
+  const { data, error } = await sb.from("members").select("user_id, unlocks!inner(item)").in("user_id", ids).eq("unlocks.season", s.id);
+  if (error) throw error;
+  return new Map(data.map(m => [m.user_id, new Set(m.unlocks.map(u => u.item))]));
 }
 // the operation in focus: the one the address names (#/akce/<id>), else the nearest; the roster code works on it
 function focusEvent() {
@@ -399,7 +410,8 @@ function viewRoster(s) {
     ${msg}
     <div class="ros${s.swarm ? " swarm" : ""}">${s.roster.map(g => g.sq ? squadCard(g, by) : g.vehicles ? podporaCard(g, by) : rosterGroup(g, by)).join("")}</div>
     ${s.base && state.me.is_commander && s.base.length > s.roster.length ? `<div class="sqtools hidden-g">Skryté: ${s.base.filter(b => !s.roster.some(g => g.id === b.id)).map(b =>
-      `<button type="button" class="act sqadd" data-fx="${b.id}:hide:0">+ ${esc(b.name)}</button>`).join("")}</div>` : ""}`;
+      `<button type="button" class="act sqadd" data-fx="${b.id}:hide:0">+ ${esc(b.name)}</button>`).join("")}</div>` : ""}
+    ${nakupBlock(s)}`;
 }
 
 // "T-01:12:05" before the start, "+00:14" after it; one interval ticks every clock on the page
@@ -472,6 +484,50 @@ function swarmMyKit() {
   const cw = state.event.doctrine === "cw";
   return `<section class="block" id="swarm-kit"><h2>Tvůj nákup</h2>${cc ? loadoutCard(cq, cc, "h3") : ""}${r && r.own_kit || cw ? "" : kitBase(k, skip)}
     ${r ? kitRole(slot.seat ? { ...r, ...r.seats[slot.seat] } : r, skip) : cls ? "" : `<p class="note">Zapiš se do slotu a ukážu ti nákup tvé role. ${cw ? 'Loadouty všech rolí jsou ve <a href="#/vybava">Výbavě</a>.' : 'Nákup všech rolí je v <a href="#/doktrina/swarm">Doktríně</a>.'}</p>`}</section>`;
+}
+
+// hub/specs/nakupni-seznam N2: the minimum of a place = its role's items and the shared ones its role carries in Vybava
+// (Recon wears Ghillie, Rocketeer has no Medical Bag); a crew seat only the vehicle it buys (Petr: armor not for crews)
+function slotNeeds(slot) {
+  const n = D.nakup;
+  if (slot.seat) return n.vozidla.filter(v => v.kit === slot.kit && v.seat === slot.seat);
+  const r = D.doktrina.swarm.slots.find(r => r.id === slot.kit), cls = slot.cls || (r && !r.own_kit && r.class);
+  const c = cls && classById(cls)[1];
+  if (!c) return [];
+  const has = new Set(c.ladders.flatMap(l => l.steps.map(st => st.item)));
+  return [...(n.role[cls] || []), ...n.z_vybavy.filter(e => has.has(e.item))];
+}
+// N1 + N3: per item how many are missing, whose and who of the operation has it unlocked (may buy it); things unlocked
+// from the start never show; a member without Tracker data is listed apart, not as missing everything
+function nakupList(s) {
+  const have = state.lobbyHave;
+  if (!have) return null;
+  const slots = new Map(s.roster.flatMap(g => g.slots.map(x => [x.key, x]))), name = c => (c.members && c.members.name) || "?";
+  const rows = new Map(), bezDat = [];
+  for (const c of state.claims) {
+    const x = slots.get(c.slot_key), mine = have.get(c.user_id);
+    if (!x) continue;
+    if (!mine) { bezDat.push(name(c)); continue; }
+    for (const e of slotNeeds(x)) {
+      if (!e.unlock || mine.has(e.item)) continue;
+      if (!rows.has(e.item)) rows.set(e.item, { item: e.item, price: e.price, n: 0, komu: [], kdo: [] });
+      const r = rows.get(e.item); r.n++; r.komu.push(name(c));
+    }
+  }
+  for (const r of rows.values()) r.kdo = state.claims.filter(c => have.get(c.user_id)?.has(r.item)).map(name);
+  return { rows: [...rows.values()], bezDat };
+}
+function nakupBlock(s) {
+  if (!s.swarm || !state.claims.length) return "";
+  const l = nakupList(s), head = '<section class="block" id="nakup"><h2>Nákupní seznam</h2>';
+  if (!l) return `${head}<p class="err">Nákupní seznam se nepodařilo načíst, zkus to znovu.</p></section>`;
+  const list = names => names.map(esc).join(", ");
+  return `${head}<p class="note">Co z nákupního minima rolí zapsaní nemají odemčené. Koupit to může jen ten, kdo to má odemčené; kdo komu koupí, domluvte na Briefingu.</p>
+    ${l.rows.length ? `<div class="tblw"><table class="data nakup"><thead><tr><th>Položka</th><th class="num">Kusů</th><th>Komu chybí</th><th>Může koupit</th><th class="num">Za kus</th></tr></thead><tbody>${l.rows.map(r =>
+      `<tr><td>${esc(r.item)}</td><td class="num">${r.n}</td><td>${list(r.komu)}</td><td>${r.kdo.length ? list(r.kdo) : '<b class="nobuy">nikdo z akce</b>'}</td><td class="num">${r.price == null ? "–" : usd(r.price)}</td></tr>`).join("")}</tbody></table></div>`
+      : '<p class="note">Zapsaným nic z minima nechybí.</p>'}
+    ${l.bezDat.length ? `<p class="note">Bez dat z Trackeru (nevím, co mají odemčené): ${list(l.bezDat)}. Ať si Tracker synchronizují.</p>` : ""}
+    <p class="note">Kdo kupuje pro jiné, potřebuje bednu a vozidlo, kterým ji koupí: ${D.nakup.rezie.map(e => `${esc(e.item)} ${e.price == null ? "" : usd(e.price)}`).join(", ")}.</p></section>`;
 }
 
 // realtime and tab-return re-render the block: keep what the Commander is typing into a form
