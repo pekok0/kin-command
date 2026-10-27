@@ -1735,7 +1735,20 @@ function ladderSection(c) {
   const lv = trk && trk.levels || null;
   return `<section class="block lads-sec"><h2>Co máš a co máš mít</h2>
     <p class="note">Co klan doporučuje, od startu po cíl (meta Season 2, rešerše 22. 10.). <b>Tvůj</b> = nejlepší, co máš odemčené. <b>Odemkni</b> = level máš, chybí koupit. <b>Další</b> = kam míříš.${lv ? "" : ` Propoj WARDOGS Tracker ve <a href="#/vybava">Výbavě</a> a uvidíš, co máš.`} Zdroj: A data nebo oficiální, B víc hráčů, C jeden zdroj; číslo = kolik zdrojů.</p>
-    <div class="lads">${c.ladders.map(lad => ladderBlock(lad.group === "Munice" ? municeFor(lad, (myKit(c).slots.slot1 || {}).st) : lad, lv)).join("")}</div></section>`;
+    <div class="lads">${c.ladders.map(lad => ladderBlock(lad.group === "Munice" ? municeFor(lad, (myKit(c).slots.slot1 || {}).st) : lad, lv) + (lad.slot === "slot1" ? doplnkyBlocks(lad) : "")).join("")}</div></section>`;
+}
+// hub/specs/vybava-doplnky (Petr 2026-10-27): attachments of the weapons in the role's weapon ladder, main first, then
+// substitutes; mine = the first of that order I have unlocked
+function doplnkyBlocks(lad) {
+  const guns = lad.steps.map(st => st.item);
+  return (D.doplnky || []).filter(b => b.weapons.some(w => guns.includes(w))).map(b => b.slots.map((s, k) => {
+    const mine = s.items.findIndex(x => !x.unlock || !!(haveSet && haveSet.has(x.item)));
+    return `<div class="lad dop"><div class="lad-h"><span class="sl">${esc(s.slot)} · ${esc(b.weapons.join(", "))}</span></div>
+      <ol class="lad-steps">${s.items.map((x, i) => `<li class="st${i === mine ? " mine" : ""}">${itemIcon(x.icon)}<span class="st-n">${esc(x.item)}</span><span class="st-u">${x.unlock ? `${esc(x.unlock.track)} ${x.unlock.level} · ${usd(x.unlock.cash)}` : "hned"}</span>
+        <span class="st-src">${i ? `Náhrada ${i}` : "Hlavní"}</span>${i === mine ? '<span class="st-tag">Tvůj</span>' : ""}</li>`).join("")}</ol>
+      ${s.note ? `<p class="note">${esc(s.note)}</p>` : ""}${k ? "" : `<p class="note">${b.note ? esc(b.note) + " " : ""}Zdroj: ${esc(b.source)}.</p>`}
+      <details class="lad-why"><summary>Proč</summary><dl>${s.items.map(x => `<dt>${esc(x.item)}</dt><dd>${esc(x.why)}</dd>`).join("")}</dl></details></div>`;
+  }).join("")).join("");
 }
 
 function viewClass(q, c) {
