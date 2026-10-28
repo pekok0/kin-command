@@ -801,6 +801,13 @@ function drawers(s) {
     <header class="dw-h"><h2 id="dw-${k}-h">${title}</h2><button type="button" class="ib dw-x" data-dwclose aria-label="Zavřít panel">${cross()}</button></header><div class="dw-b">${body}</div></aside>`;
   return `<div class="dws"><div class="dw-shade${d ? " open" : ""}" data-dwclose></div>${s && s.swarm ? one("kit", "Tvůj nákup", swarmMyKit()) : ""}${one("rsvp", "Kdo se ozval", rsvpWho())}${leadsOps() ? one("brief", "Protokol briefingu", briefList()) : ""}</div>`;
 }
+// the panels sit outside #app (renderDrawers), so their x and shade need their own listener (Petr 2026-10-28: "nejde zavrit
+// krizkem ani klikem mimo"); buttons inside a panel that act on the lobby go through the same handler as #app
+document.addEventListener("click", e => {
+  if (!e.target.closest?.("#drawers")) return;
+  if (e.target.closest("[data-dwclose]")) { setDrawer(null); return; }
+  if (e.target.closest("a[href^='#']")) setDrawer(null);  // a link in a panel leaves the page: the panel goes with it
+});
 function renderDrawers() {
   const box = document.getElementById("drawers");
   if (box) box.innerHTML = state.focusId && state.event && state.me && location.hash.startsWith("#/akce/") ? drawers(plan) : "";
@@ -2422,7 +2429,7 @@ function render() {
 }
 
 $app.addEventListener("click", e => {
-  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-drawer],[data-dwclose],[data-role],[data-squad],[data-sqdrop],[data-cmd],[data-seat],[data-fx],[data-leadfor],[data-nocash],[data-merit-del],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker],[data-nova],[data-ctask]");
+  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-drawer],[data-role],[data-squad],[data-sqdrop],[data-cmd],[data-seat],[data-fx],[data-leadfor],[data-nocash],[data-merit-del],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker],[data-nova],[data-ctask]");
   if (state.sqArm != null && !(t && t.dataset.sqdrop)) { state.sqArm = null; renderRoster(); }  // a click elsewhere: no drop
   if (!t) return;
   if (t.dataset.ctask) { const [id, st] = t.dataset.ctask.split(":"); setTask(id, st); return; }
@@ -2446,7 +2453,6 @@ $app.addEventListener("click", e => {
     return;
   }
   if (t.dataset.drawer) { setDrawer(t.dataset.drawer); return; }
-  if (t.dataset.dwclose !== undefined) { setDrawer(null); return; }
   if (t.dataset.rsvp) { setRsvp(t.dataset.rsvp); return; }
   if (t.dataset.cancel !== undefined) { cancelEvent(t); return; }
   if (t.dataset.tracker !== undefined) { syncTracker().catch(e => console.error(e)); return; }
