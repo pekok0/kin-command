@@ -1140,6 +1140,56 @@ body.carrying, body.carrying * { cursor: grabbing !important; user-select: none;
 .ros li.drop-hot .free { color: var(--ground); background: var(--fr); border-style: solid; }
 @media (prefers-reduced-motion: reduce) { .carry-ghost.landing { transition: none; } }
 
+/* the lobby's pickers (Petr 2026-10-28: "drop down ... urcite ne s bilym pozadim, cele poradne ostylovat dle designu"): a
+   dark plate with a cyan edge; roles in their hue with their mark, SL candidates with their avatar. A browser without the
+   customisable select still gets the dark list */
+.addrole, .slpick, .rg li .moveto { color-scheme: dark; }
+.addrole option, .slpick option, .rg li .moveto option { background-color: var(--panel-2); color: var(--ink); }
+@supports (appearance: base-select) {
+  .addrole, .slpick, .rg li .moveto, .addrole::picker(select), .slpick::picker(select), .rg li .moveto::picker(select) { appearance: base-select; }
+  .addrole, .slpick, .rg li .moveto { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; border-radius: 0; }
+  .addrole::picker(select), .slpick::picker(select), .rg li .moveto::picker(select), .addrole option, .slpick option, .rg li .moveto option { border-radius: 0; }
+  .addrole:hover, .slpick:hover { background: var(--fr-fill); }
+  .addrole::picker(select), .slpick::picker(select), .rg li .moveto::picker(select) { min-width: 14em; margin: 4px 0; padding: 4px; color: var(--ink);
+    border: 1px solid oklch(0.86 0.15 205 / 0.6); background: linear-gradient(180deg, oklch(0.25 0.055 245 / 0.98), oklch(0.17 0.045 252 / 0.98));
+    box-shadow: 0 0 0 1px oklch(0.86 0.15 205 / 0.12), 0 22px 44px -16px rgba(0, 0, 0, .85), 0 0 30px -12px var(--fr-glow); }
+  .addrole option, .slpick option, .rg li .moveto option { display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 6px 10px; cursor: pointer;
+    background: transparent; color: var(--rc, var(--ink)); font: 700 14px/1.1 var(--cond); letter-spacing: .06em; text-transform: uppercase; }
+  .slpick option, .rg li .moveto option { font: 600 15px/1.2 var(--sans); letter-spacing: 0; text-transform: none; color: var(--ink); }
+  .addrole option[value=""], .slpick option[value=""], .rg li .moveto option[value=""] { display: none; }
+  .addrole option:hover, .slpick option:hover, .rg li .moveto option:hover, .addrole option:focus-visible, .slpick option:focus-visible, .rg li .moveto option:focus-visible {
+    outline: none; background: var(--fr-fill); box-shadow: inset 2px 0 0 var(--rc, var(--fr)); }
+  .addrole option::checkmark, .slpick option::checkmark, .rg li .moveto option::checkmark { display: none; }
+  .slpick option img { width: 24px; height: 24px; border-radius: 50%; flex: none; }
+  .addrole::picker-icon, .slpick::picker-icon, .rg li .moveto::picker-icon { color: var(--fr); transition: rotate 180ms var(--ease); }
+  .addrole:open::picker-icon, .slpick:open::picker-icon, .rg li .moveto:open::picker-icon { rotate: 180deg; }
+}
+
+/* unlocking an operation (Petr 2026-10-28): the clan crest as a dial lock over the page; the three rings lock in one by
+   one and light up, the pins slide out, the shackle halves split, then the view flies through into the lobby */
+.unlock { position: fixed; inset: 0; z-index: 900; display: grid; place-items: center; padding: 16px; cursor: pointer;
+  background: radial-gradient(circle at 50% 45%, oklch(0.22 0.06 235 / 0.97), oklch(0.12 0.03 255 / 0.985) 62%), var(--ground); }
+.unlock::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
+  background: repeating-linear-gradient(0deg, oklch(0.86 0.15 205 / 0.05) 0 1px, transparent 1px 4px); }
+.ul-core { position: relative; display: grid; justify-items: center; text-align: center; }
+.ul-dial { position: relative; display: grid; place-items: center; width: min(62vmin, 360px); aspect-ratio: 1; }
+.ul-rings { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.ul-rings .ring, .ul-rings .half, .ul-rings .pin { transform-origin: 200px 200px; transform-box: view-box; }
+.ul-rings line, .ul-rings circle, .ul-rings .half { fill: none; stroke: var(--fr); vector-effect: non-scaling-stroke; transition: stroke-opacity 180ms, filter 180ms; }
+.ul-rings .r1 line { stroke-opacity: .35; }
+.ul-rings .r1 line.l { stroke-opacity: .7; stroke-width: 2; }
+.ul-rings .r2 circle { stroke-width: 7; stroke-opacity: .22; stroke-dasharray: 46 14; }
+.ul-rings .r3 circle { stroke-width: 1.5; stroke-opacity: .45; stroke-dasharray: 3 7; }
+.ul-rings .mark, .ul-rings .pin { fill: var(--fr); stroke: none; opacity: .55; transition: opacity 180ms; }
+.ul-rings .half { stroke-width: 3; stroke-opacity: .85; filter: drop-shadow(0 0 6px var(--fr-glow)); }
+.ul-rings .ring.locked line, .ul-rings .ring.locked circle { stroke-opacity: 1; filter: drop-shadow(0 0 5px var(--fr-glow)); }
+.ul-rings .ring.locked .mark, .ul-rings .ring.locked .pin { opacity: 1; }
+.ul-crest { position: relative; width: 44%; height: auto; filter: drop-shadow(0 0 26px oklch(0.86 0.15 205 / 0.45)); }
+.ul-k { margin: 22px 0 0; font: 700 14px/1 var(--cond); letter-spacing: .32em; text-transform: uppercase; color: var(--fr); }
+.ul-t { margin: 8px 0 0; font: 700 clamp(28px, 3vw + 14px, 46px)/1 var(--cond); letter-spacing: .02em; text-transform: uppercase; color: var(--ink); }
+.ul-s { margin: 12px 0 0; font: 600 13px/1 var(--cond); letter-spacing: .18em; text-transform: uppercase; color: var(--ink-3); }
+.ul-s.ok { color: var(--fr); text-shadow: 0 0 12px var(--fr-glow); }
+
 /* the Commander's tasks (specs/ukoly-velitele): rows between hairlines, kind and age left, the two answers right; on a
    phone the answers are full-width finger buttons under the text */
 .bar nav a .nav-n { margin-left: 5px; padding: 2px 4px 1px; font-size: 12px; color: var(--ground); background: var(--fr); }

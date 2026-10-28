@@ -331,7 +331,7 @@ function squadCard(g, by) {
   const drop = cmd && live > 1 ? `<button type="button" class="${armed ? "act sqx armed" : "ib sqx"}" data-sqdrop="${g.idx}" aria-label="Zrušit ${esc(g.name)}${n ? ` (vyhodí ${n})` : ""}" title="Zrušit squad">${armed ? `Zrušit? vyhodí ${n}` : cross()}</button>` : "";
   const title = cmd ? `<input class="sqname" data-sqname="${g.idx}" value="${esc(g.name)}" maxlength="24" aria-label="Název squadu ${g.idx + 1}">` : `<b>${esc(g.name)}</b>`;
   const free = roles.filter(ro => !g.slots.some(x => x.kit === ro.kit));
-  const addRole = cmd && free.length && g.slots.length < 20 ? `<select class="addrole" data-addrole="${g.idx}" aria-label="${esc(g.name)}: přidat roli"><option value="">+ Přidat roli</option>${free.map(ro => `<option value="${esc(ro.kit)}">${esc(ro.label)}</option>`).join("")}</select>` : "";
+  const addRole = cmd && free.length && g.slots.length < 20 ? `<select class="addrole" data-addrole="${g.idx}" aria-label="${esc(g.name)}: přidat roli"><option value="">+ Přidat roli</option>${free.map(ro => `<option value="${esc(ro.kit)}" class="ro-${esc(ro.kit)}">${roleMark(ro.kit)}<span>${esc(ro.label)}</span></option>`).join("")}</select>` : "";
   return `<div class="rg sqc"><div class="pg-head">${sym(g.symbol, "sm")}<div>${title}</div><span class="num">${n}/${g.max}</span>${drop}</div>
     ${slPlate(g, by, lead, n)}${lines}${addRole}</div>`;
 }
@@ -348,7 +348,7 @@ function slPlate(g, by, lead, n) {
   const take = people.some(c => c.user_id === me) && (cmd || rankAt(state.me, "operator"));
   return `<div class="slplate ${n ? "need" : "idle"}" data-slq="${g.id}">${head}<span class="who-none">${n ? "Squad nemá SL" : "SL squadu"}</span>
     ${take ? '<button type="button" class="act lead" data-lead="1">Povedu squad</button>'
-      : cmd && people.length ? `<select class="slpick" data-slpick aria-label="${esc(g.name)}: vybrat SL"><option value="">Vybrat SL</option>${people.map(c => `<option value="${esc(c.user_id)}">${esc(c.members.name)}</option>`).join("")}</select>` : ""}</div>`;
+      : cmd && people.length ? `<select class="slpick" data-slpick aria-label="${esc(g.name)}: vybrat SL"><option value="">Vybrat SL</option>${people.map(c => `<option value="${esc(c.user_id)}"><img src="${esc(c.members.avatar_url)}" alt=""><span>${esc(c.members.name)}</span></option>`).join("")}</select>` : ""}</div>`;
 }
 // the Commander's add plate at the end of the lobby (Petr 2026-10-28): a squad into the first gap, and every vehicle type
 // the operation has none of yet; a type with vehicles keeps its - / + on its own card
@@ -380,7 +380,7 @@ function podporaCard(g, by) {
   const ctl = leadsOps() && g.ctl !== false ? `<span class="swctl">
       <button type="button" class="ib" data-support="${t.ti}:-1" aria-label="Podpora: ubrat ${esc(t.name)}" title="Ubrat ${esc(t.name)}">${minus()}</button>
       <b>${esc(t.n)}</b><button type="button" class="ib" data-support="${t.ti}:1" aria-label="Podpora: přidat ${esc(t.name)}"${more ? ` disabled title="${esc(more)}"` : ` title="Přidat ${esc(t.name)}"`}>${plus()}</button></span>` : "";
-  return `<div class="rg podc"><div class="pg-head">${sym(g.symbol, "sm")}<div><b>${esc(g.name)}</b><small>${esc(g.squad)}</small></div><span class="num">${n}/${g.max}</span>${ctl}</div>
+  return `<div class="rg podc"><div class="pg-head">${sym(g.symbol, "sm")}<div><b>${esc(g.name)}</b></div><span class="num">${n}/${g.max}</span>${ctl}</div>
     <div class="vtypes"><div class="vtype">${t.cars.map(c => carBox(t, c, by)).join("")}</div></div></div>`;
 }
 
@@ -603,6 +603,7 @@ function renderRoster() {
   restore();
   markChanges(el);
   carryMarks();  // a change pushed while a player is carried: the hole and the free places stay lit
+  if (pinY && Date.now() < pinY.until) scrollTo(0, pinY.y);  // a drop never moves the page (Petr 2026-10-28)
 }
 
 // a rebuilt roster keeps the row I was looking at where it was on screen: innerHTML drops the browser's own scroll
@@ -661,6 +662,10 @@ const CUES = {  // [start Hz, end Hz, seconds, wave, delay s, peak gain (default
   lead: [[150, 50, .16, "sine", 0, .3], [2400, 300, .03, "square", 0, .05], [523, 523, .12, "triangle", .08, .12],
     [659, 659, .12, "triangle", .16, .12], [784, 784, .14, "triangle", .24, .12], [1047, 1047, .45, "triangle", .32, .14], [2094, 2094, .4, "sine", .32, .04]],
   unlead: [[784, 523, .18, "triangle", 0, .1], [392, 262, .25, "triangle", .1, .1]],
+  // opening an operation (the unlock): a rising whoosh, a click per locked ring, the lock giving way
+  open: [[180, 520, .26, "sawtooth", 0, .015], [90, 70, .2, "sine", 0, .12]],
+  dial: [[1800, 900, .025, "square", 0, .03], [520, 520, .04, "triangle", .01, .07]],
+  unlock: [[110, 40, .3, "sine", 0, .32], [260, 1400, .4, "sawtooth", .03, .02], [1047, 1047, .25, "triangle", .18, .08], [1568, 1568, .35, "sine", .24, .05]],
   lift: [[220, 560, .08, "triangle", 0, .08]],  // a player taken off his place; tick: over a free place; back: put back
   tick: [[2200, 2200, .015, "square", 0, .012]],
   back: [[560, 220, .09, "triangle", 0, .06]],
@@ -1029,7 +1034,7 @@ document.addEventListener("change", e => { if (e.target.dataset.slpick !== undef
 // pusteni hrace na slot"): a mouse press and drag lifts him, a click or a tap (or Enter) lifts him until the next click;
 // he rides on a card under the pointer, the place he left stays a dashed hole, free places light up and the one under
 // him glows; a free place takes him, anything else (or Esc) puts him back. A phone scrolls as before: there a tap lifts
-let carry = null, pressed = null, swallow = false;
+let carry = null, pressed = null, swallow = false, pinY = null;
 const FREE = ".ros li[data-free]";
 function carryMarks() {
   if (!carry) return;
@@ -1068,7 +1073,7 @@ function putDown(target) {
   c.ghost.classList.add("landing");
   if (to) { c.ghost.style.transform = `translate(${to.left}px, ${to.top}px)`; c.ghost.style.width = `${to.width}px`; }
   setTimeout(() => c.ghost.remove(), 220);
-  if (target) moveTo(c.uid, target.dataset.key); else sound("back");
+  if (target) { pinY = { y: scrollY, until: Date.now() + 2500 }; moveTo(c.uid, target.dataset.key); } else sound("back");
 }
 document.addEventListener("pointerdown", e => {
   if (carry || e.button !== 0 || e.pointerType === "touch") return;
@@ -1085,7 +1090,8 @@ document.addEventListener("pointermove", e => {
 document.addEventListener("pointerup", e => {
   pressed = null;
   if (!carry || carry.sticky) return;
-  swallow = true;  // the click this release makes is the drop, not a sign-up
+  swallow = true;  // the click this release makes is the drop, not a sign-up; none comes when it ends off the row
+  setTimeout(() => { swallow = false; });
   putDown(document.elementFromPoint(e.clientX, e.clientY)?.closest(FREE) || null);
 });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && carry) putDown(null); });
@@ -1191,7 +1197,7 @@ function podporaGroup(types, vehicles, base = 0) {
       ({ key: `SW-${t.kit}${v * t.seats.length + i + 1}`, label: seat, role: null, kit: t.kit, seat, car: `${t.name} ${v + 1}`, stat: `${t.name} · ${seat}` })) })) }; });
   const slots = vs.flatMap(t => t.cars.flatMap(c => c.slots));
   // each vehicle type is its own squad (Petr 2026-10-25 D20: tank, logi heli, combat heli, artillery)
-  return { id: `POD-${vs[0].kit}`, name: vs[0].name, squad: "vlastní squad", symbol: vs[0].symbol, max: slots.length, vehicles: vs, slots };
+  return { id: `POD-${vs[0].kit}`, name: vs[0].name, symbol: vs[0].symbol, max: slots.length, vehicles: vs, slots };
 }
 const swarmPlan = ev => ({ id: ev.doctrine, swarm: true, cw: ev.doctrine === "cw", roster: swarmRoster(D.doktrina.swarm, rosterOf(ev), ev.doctrine === "cw"), fill_order: [], variants: [] });
 // FORTRESS before the map (specs/akce-mapa-tym): all plans share the 45 slots (test_build), so sign-ups keep their slot
@@ -2137,6 +2143,74 @@ async function loadVycvik() {
   state.vycvik = data && data.data || false;
   if (["#/vycvik", "#/doktrina/vycvik"].includes(location.hash)) render();
 }
+// opening an operation unlocks it (Petr 2026-10-28: "jako herni menu ... nacitalo akci ... animace s vasim animovanym
+// logem ... jako otevirajici se zamek, vic otacejicich se prvku ... cool, ale zaroven slick ... od kliku po nastup a
+// odchod"): an iris opens from the clicked card, the crest's three rings spin and lock in one by one like a dial, the pins
+// slide out, the shackle splits, the crest flashes and the view flies through the lock into the lobby. The route changes
+// under the lock, so the lobby loads meanwhile; a click or a key skips; reduced motion goes straight in
+const UL_RINGS = `<svg class="ul-rings" viewBox="0 0 400 400" aria-hidden="true">
+  <path class="half l" d="M200 388 A188 188 0 0 1 200 12"/><path class="half r" d="M200 12 A188 188 0 0 1 200 388"/>
+  <g class="ring r1">${Array.from({ length: 72 }, (_, i) => `<line${i % 6 ? "" : ' class="l"'} x1="200" y1="${i % 6 ? 26 : 20}" x2="200" y2="34" transform="rotate(${i * 5} 200 200)"/>`).join("")}</g>
+  <g class="ring r2"><circle cx="200" cy="200" r="150"/><path class="mark" d="M200 42 l-7 -12 h14 z"/></g>
+  <g class="ring r3"><circle cx="200" cy="200" r="122"/>${[0, 90, 180, 270].map(a => `<g transform="rotate(${a} 200 200)"><rect class="pin" x="196" y="84" width="8" height="18"/></g>`).join("")}</g>
+</svg>`;
+let unlocking = null;
+const EASE = "cubic-bezier(.16, 1, .3, 1)";
+function unlockInto(a, e) {
+  const href = a.getAttribute("href"), ev = state.ops.find(x => `#/akce/${x.id}` === href);
+  const r = a.getBoundingClientRect(), x = e.clientX || r.left + r.width / 2, y = e.clientY || r.top + r.height / 2;
+  const el = document.createElement("div"), T = [], at = (ms, fn) => T.push(setTimeout(fn, ms));
+  el.className = "unlock";
+  el.innerHTML = `<div class="ul-core"><div class="ul-dial">${UL_RINGS}<img class="ul-crest" src="znacka/kin-emblem.svg" alt=""></div>
+    <p class="ul-k">${ev ? esc(docName(ev.doctrine)) : "Operace"}</p><p class="ul-t">${ev ? esc(fmtWhen(ev.starts_at)) : ""}</p><p class="ul-s" role="status">Ověřuji přístup</p></div>`;
+  document.body.append(el);
+  const $ = s => el.querySelector(s), status = (t, ok) => { $(".ul-s").textContent = t; $(".ul-s").classList.toggle("ok", !!ok); };
+  let routed = false, done = false;
+  const route = () => { if (!routed) { routed = true; location.hash = href; } };
+  const finish = (ms = 380) => {
+    if (done) return;
+    done = true; T.forEach(clearTimeout); route();
+    $(".ul-core").animate([{ transform: "scale(1)", opacity: 1 }, { transform: "scale(2.6)", opacity: 0 }], { duration: ms, easing: "cubic-bezier(.5, 0, .75, 0)", fill: "forwards" });
+    el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: ms, delay: ms * .35, easing: "ease-in", fill: "forwards" }).finished.then(() => { el.remove(); unlocking = null; });
+    [...$app.children].forEach((c, i) => c.animate([{ opacity: 0, transform: "translateY(18px) scale(.985)" }, { opacity: 1, transform: "none" }],
+      { duration: 480, delay: ms * .45 + 60 * i, easing: EASE, fill: "backwards" }));
+  };
+  unlocking = finish;
+  el.addEventListener("click", () => finish(200));
+  // in: the iris from the card, the dial rises; the card flashes
+  el.animate([{ clipPath: `circle(0px at ${x}px ${y}px)` }, { clipPath: `circle(150vmax at ${x}px ${y}px)` }], { duration: 340, easing: EASE });
+  $(".ul-core").animate([{ transform: "scale(.72)", opacity: 0, filter: "blur(6px)" }, { transform: "scale(1)", opacity: 1, filter: "blur(0)" }], { duration: 420, delay: 70, easing: EASE, fill: "backwards" });
+  a.animate([{ boxShadow: "0 0 0 2px var(--fr), 0 0 40px var(--fr-glow)" }, { boxShadow: "none" }], { duration: 500, easing: EASE });
+  sound("open");
+  at(200, route);
+  // the dial: each ring spins in from its own side and locks with a click, overshooting a hair
+  [["r1", -470, 520], ["r2", 560, 640], ["r3", -690, 760]].forEach(([k, from, ms]) => {
+    const g = $(`.${k}`);
+    g.animate([{ transform: `rotate(${from}deg)` }, { transform: `rotate(${from > 0 ? -5 : 5}deg)`, offset: .88 }, { transform: "rotate(0deg)" }], { duration: ms, delay: 100, easing: "cubic-bezier(.2, .7, .2, 1)", fill: "backwards" });
+    at(100 + ms, () => { g.classList.add("locked"); sound("dial"); });
+  });
+  at(360, () => status("Načítám sestavu"));
+  // unlocked: the pins slide out, the shackle splits, the crest flashes
+  at(900, () => {
+    status("Odemčeno", true);
+    sound("unlock");
+    el.querySelectorAll(".pin").forEach(p => p.animate([{ transform: "none", opacity: 1 }, { transform: "translateY(-26px)", opacity: 0 }], { duration: 260, easing: EASE, fill: "forwards" }));
+    $(".half.l").animate([{ transform: "none" }, { transform: "translateX(-34px)", opacity: 0 }], { duration: 320, easing: EASE, fill: "forwards" });
+    $(".half.r").animate([{ transform: "none" }, { transform: "translateX(34px)", opacity: 0 }], { duration: 320, easing: EASE, fill: "forwards" });
+    $(".ul-crest").animate([{ transform: "scale(1)", filter: "brightness(1)" }, { transform: "scale(1.09)", filter: "brightness(1.9)", offset: .3 }, { transform: "scale(1)", filter: "brightness(1)" }], { duration: 420, easing: EASE });
+  });
+  at(1040, () => finish());
+}
+document.addEventListener("click", e => {
+  const a = e.target.closest?.('a[href^="#/akce/"]');
+  if (!a || unlocking || e.defaultPrevented || e.button || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+  if (!/^#\/akce\/\d+$/.test(a.getAttribute("href")) || a.getAttribute("href") === location.hash) return;
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;  // straight in
+  e.preventDefault();
+  unlockInto(a, e);
+});
+document.addEventListener("keydown", () => { if (unlocking) unlocking(200); });
+
 // the Commander's tasks from the KIN kernel (specs/ukoly-velitele, 037): what waits for him first, newest first; "Odbav ty"
 // hands a task to the Claude session running in wardogs (ceo/ukoly.py --vezmi), "Hotovo" closes it. Loaded once after
 // login, then on every change in the database (the session closing a task shows here at once)
