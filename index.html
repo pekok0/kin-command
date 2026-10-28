@@ -1246,6 +1246,48 @@ body.carrying, body.carrying * { cursor: grabbing !important; user-select: none;
 .ul-s { margin: 12px 0 0; font: 600 13px/1 var(--cond); letter-spacing: .18em; text-transform: uppercase; color: var(--ink-3); }
 .ul-s.ok { color: var(--fr); text-shadow: 0 0 12px var(--fr-glow); }
 
+/* Velení as a strip over the squads (Petr 2026-10-28): the general's gold (DESIGN.md Velení exception) on two stars, a
+   double lampas and the place chips; the strip spans the lobby, it is no card */
+.ros > .cmdbar { grid-column: 1 / -1; }
+.cmdbar { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 7px 12px 7px 22px;
+  background: linear-gradient(90deg, oklch(0.80 0.12 85 / 0.16), oklch(0.80 0.12 85 / 0.04) 45%, oklch(0.19 0.042 252 / 0.9) 80%);
+  box-shadow: inset 0 1px 0 oklch(0.80 0.12 85 / 0.85), inset 0 -1px 0 oklch(0.80 0.12 85 / 0.35), 0 14px 30px -18px rgba(0, 0, 0, .8); }
+.cmdbar::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 9px;
+  background: linear-gradient(90deg, var(--gold) 0 3px, transparent 3px 6px, var(--gold) 6px 9px); opacity: .9; }  /* the general's lampas */
+.cmd-k { display: inline-flex; align-items: center; gap: 10px; font: 700 15px/1 var(--cond); letter-spacing: .28em; text-transform: uppercase; color: var(--gold);
+  text-shadow: 0 0 14px oklch(0.80 0.12 85 / 0.45); }
+.cmd-stars { width: 40px; height: 16px; fill: var(--gold); filter: drop-shadow(0 0 5px oklch(0.80 0.12 85 / 0.6)); }
+.cmdbar ul { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; margin: 0; padding: 0; list-style: none; }
+.cmdbar li { display: inline-flex; align-items: center; }
+.ros.swarm .cmdbar li .rslot { flex: none; min-height: 32px; padding: 3px 10px 3px 8px; gap: 7px; border: 1px solid oklch(0.80 0.12 85 / 0.7); background: oklch(0.80 0.12 85 / 0.1); }
+.cmdbar li:not(:has(.nm)) .rslot { border-style: dashed; background: transparent; }
+.cmdbar .rslot::before { content: "★"; color: var(--gold); font-size: 13px; }
+.cmdbar .rslot .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.cmdbar .rslot .nm { color: var(--ink); max-width: 14em; }
+.cmdbar .free { border: 0; padding: 0; color: oklch(0.80 0.12 85 / 0.85); }
+.cmdbar li.drop-ok .rslot { box-shadow: inset 0 0 0 1px var(--gold); }
+.cmdbar li.drop-hot .rslot { background: oklch(0.80 0.12 85 / 0.3); box-shadow: inset 0 0 0 2px var(--gold), 0 0 22px -6px var(--gold); }
+.cmdbar .swctl { margin-left: auto; }
+@media (max-width: 720px) { .ros.swarm .cmdbar li .rslot { min-height: 44px; } .cmdbar { padding-left: 18px; } }
+
+/* the squad's shopping (Petr 2026-10-28): in the card for its SL, and per squad under the lobby */
+.sq-buy { margin: 12px 0 0; border-top: 1px solid var(--rule-soft); padding-top: 8px; }
+.sq-buy > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-height: 32px; cursor: pointer; font: 700 13px/1 var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); }
+.sq-buy > summary .num { color: var(--fr); font-size: 15px; }
+.sq-buy.warn > summary { color: var(--ho); }
+.sq-buy .nobuy { font-size: 12px; letter-spacing: .04em; }
+.buy { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; }
+.buy li { display: grid; gap: 2px; padding: 6px 8px; border-left: 2px solid var(--rule); background: oklch(0.13 0.03 254 / 0.45); font-size: 14px; line-height: 1.35; }
+.buy li.nobody { border-left-color: var(--ho); }
+.buy .bi b { color: var(--ink); font-weight: 600; }
+.buy .bk { color: var(--ink-2); }
+.buy .bw b { color: var(--fr); font-weight: 600; }
+.buy .bw b.nobuy { color: var(--ho); }
+.buy .pr { color: var(--ink-3); font-size: 13px; }
+.buy-g { margin: 14px 0 0; }
+.buy-g h3 { margin: 0 0 4px; font: 700 15px/1.2 var(--cond); letter-spacing: .06em; text-transform: uppercase; }
+.buy-g h3 small { margin-left: 8px; font-size: 13px; color: var(--ink-3); letter-spacing: .04em; }
+
 /* the Commander's tasks (specs/ukoly-velitele): rows between hairlines, kind and age left, the two answers right; on a
    phone the answers are full-width finger buttons under the text */
 .bar nav a .nav-n { margin-left: 5px; padding: 2px 4px 1px; font-size: 12px; color: var(--ground); background: var(--fr); }

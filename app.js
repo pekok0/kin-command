@@ -343,7 +343,7 @@ function squadCard(g, by) {
   const free = roles.filter(ro => !g.slots.some(x => x.kit === ro.kit));
   const addRole = cmd && free.length && g.slots.length < 20 ? `<select class="addrole" data-addrole="${g.idx}" aria-label="${esc(g.name)}: přidat roli"><option value="">+ Přidat roli</option>${free.map(ro => `<option value="${esc(ro.kit)}" class="ro-${esc(ro.kit)}">${roleMark(ro.kit)}<span>${esc(ro.label)}</span></option>`).join("")}</select>` : "";
   return `<div class="rg sqc"><div class="pg-head">${sym(g.symbol, "sm")}<div>${title}</div><span class="num">${n}/${g.max}</span>${drop}</div>
-    ${slPlate(g, by, lead, n)}${lines}${addRole}</div>`;
+    ${slPlate(g, by, lead, n)}${lines}${addRole}${buyDetails(g)}</div>`;
 }
 // the squad's command seat (Petr 2026-10-28: "Veli: nikdo ... by taky mohla vypadat jinak nez text, co zmizi"): a plate
 // under the name, dashed while nobody leads (hostile red once people are in), solid with the SL when someone does; the
@@ -360,15 +360,18 @@ function slPlate(g, by, lead, n) {
     ${take ? '<button type="button" class="act lead" data-lead="1">Povedu squad</button>'
       : cmd && people.length ? `<select class="slpick" data-slpick aria-label="${esc(g.name)}: vybrat SL"><option value="">Vybrat SL</option>${people.map(c => `<option value="${esc(c.user_id)}"><img src="${esc(c.members.avatar_url)}" alt=""><span>${esc(c.members.name)}</span></option>`).join("")}</select>` : ""}</div>`;
 }
-// the Velení card: the Commander places, - n + for the command (a place taken drops its member, like a role's -)
+// Velení as a narrow strip over the squads (Petr 2026-10-28: "si urcite nezaslouzi celou vlastni kartu, dej nekam do uzkeho
+// prouzku ... pekne barvy a symboliku generalstvi"): the general's two stars and gold lampas, the Commander places as
+// chips, - n + for the command (a place taken drops its member, like a role's -); a member sees it only when someone is in
+const STARS = '<svg class="cmd-stars" viewBox="0 0 40 16" aria-hidden="true"><path d="M10 1.5 L12 6.6 H17.4 L13 9.8 L14.7 15 L10 11.8 L5.3 15 L7 9.8 L2.6 6.6 H8 Z M30 1.5 L32 6.6 H37.4 L33 9.8 L34.7 15 L30 11.8 L25.3 15 L27 9.8 L22.6 6.6 H28 Z"/></svg>';
 function cmdCard(g, by) {
   const n = g.slots.filter(x => by[x.key]).length, lead = leadsOps();
-  if (!g.slots.length && !lead) return "";
+  if (!lead && !n) return "";
   const ctl = lead ? `<span class="swctl">
       <button type="button" class="ib" data-cmd="-1" aria-label="Velení: ubrat místo"${g.slots.length ? "" : " disabled"}>${minus()}</button>
-      <b>${g.slots.length}</b><button type="button" class="ib" data-cmd="1" aria-label="Velení: přidat místo"${g.slots.length >= CMD_MAX ? ` disabled title="Nejvýš ${CMD_MAX}"` : ""}>${plus()}</button></span>` : `<b>${g.slots.length}</b>`;
-  return `<div class="rg cmdc"><div class="pg-head">${sym("hq", "sm")}<div><b>Velení</b></div><span class="num">${n}/${g.max}</span></div>
-    <div class="sqp ro-CM">${roleMark("CM")}<span class="rn">Commander</span>${ctl}</div><ul class="ro-CM">${g.slots.map(x => slotRow(x, by[x.key])).join("")}</ul></div>`;
+      <b>${g.slots.length}</b><button type="button" class="ib" data-cmd="1" aria-label="Velení: přidat místo"${g.slots.length >= CMD_MAX ? ` disabled title="Nejvýš ${CMD_MAX}"` : ""}>${plus()}</button></span>` : "";
+  return `<div class="cmdbar cmdc" role="group" aria-label="Velení"><span class="cmd-k">${STARS}Velení</span>
+    <ul>${g.slots.map(x => slotRow(x, by[x.key])).join("")}</ul>${ctl}</div>`;
 }
 const setCmd = async d => {
   const last = d < 0 && plan.roster.find(g => g.cmdg).slots.at(-1);
@@ -406,7 +409,7 @@ function podporaCard(g, by) {
       <button type="button" class="ib" data-support="${t.ti}:-1" aria-label="Podpora: ubrat ${esc(t.name)}" title="Ubrat ${esc(t.name)}">${minus()}</button>
       <b>${esc(t.n)}</b><button type="button" class="ib" data-support="${t.ti}:1" aria-label="Podpora: přidat ${esc(t.name)}"${more ? ` disabled title="${esc(more)}"` : ` title="Přidat ${esc(t.name)}"`}>${plus()}</button></span>` : "";
   return `<div class="rg podc"><div class="pg-head">${sym(g.symbol, "sm")}<div><b>${esc(g.name)}</b></div><span class="num">${n}/${g.max}</span>${ctl}</div>
-    <div class="vtypes"><div class="vtype">${t.cars.map(c => carBox(t, c, by)).join("")}</div></div></div>`;
+    <div class="vtypes"><div class="vtype">${t.cars.map(c => carBox(t, c, by)).join("")}</div></div>${buyDetails(g)}</div>`;
 }
 
 function viewRoster(s) {
@@ -421,6 +424,7 @@ function viewRoster(s) {
   // the map form too: picking a known map or "zatím nevím" keeps the sign-ups, cancelling drops them (threat model N1)
   if (!s) return `${head}<p class="note">Otevřená akce (${esc(fmtWhen(ev.starts_at))}) je pro mapu ${esc(ev.strategy_id)}, kterou War Room nezná.</p>${msg}${leadsOps() ? mapTeamForm(ev) : ""}${cancel}`;
   const by = Object.fromEntries(state.claims.map(c => [c.slot_key, c]));
+  state.buy = s.swarm ? nakupGroups(s) : null;
   const filled = state.claims.filter(c => s.roster.some(g => g.slots.some(x => x.key === c.slot_key))).length;
   const total = s.roster.reduce((n, g) => n + g.max, 0);
   // without builders and logistics there is no FOB and no supplies: show the plan's fill order still open
@@ -565,16 +569,51 @@ function nakupList(s) {
   for (const r of rows.values()) r.kdo = !r.unlock ? null : state.claims.filter(c => !c.no_cash && have.get(c.user_id)?.has(r.item)).map(name);
   return { rows: [...rows.values()], bezDat };
 }
+// per squad (Petr 2026-10-28: "nakupni seznamy pro lidi bez penez nebo unlocku per squad ... budou se kupovat lidi mezi sebou
+// ve squadu a odridi si to squad leader ... at SL rychle vi, co je potreba a kdo to z jeho muze koupit"): what each member of a
+// group misses and who of that group has it unlocked; nobody there -> who of the operation could
+function nakupGroups(s) {
+  const have = state.lobbyHave;
+  if (!have) return null;
+  const name = c => (c.members && c.members.name) || "?";
+  const can = (pool, item) => pool.filter(c => !c.no_cash && have.get(c.user_id)?.has(item)).map(name);
+  return new Map(s.roster.map(g => {
+    const keys = new Set(g.slots.map(x => x.key)), people = state.claims.filter(c => keys.has(c.slot_key)), rows = new Map(), bezDat = [];
+    for (const c of people) {
+      const mine = have.get(c.user_id);
+      if (!mine && !c.no_cash) { bezDat.push(name(c)); continue; }
+      for (const e of slotNeeds(g.slots.find(x => x.key === c.slot_key))) {
+        if (!c.no_cash && (!e.unlock || mine.has(e.item))) continue;
+        if (!rows.has(e.item)) rows.set(e.item, { item: e.item, price: e.price, unlock: e.unlock, n: 0, komu: [] });
+        const r = rows.get(e.item); r.n += e.qty; r.komu.push(name(c) + (c.no_cash ? " (bez peněz)" : ""));
+      }
+    }
+    for (const r of rows.values()) {
+      r.kdo = !r.unlock ? null : can(people, r.item);
+      r.jinde = r.kdo && !r.kdo.length ? can(state.claims.filter(c => !keys.has(c.slot_key)), r.item) : [];
+    }
+    return [g.id, { g, rows: [...rows.values()], bezDat }];
+  }).filter(([, x]) => x.rows.length || x.bezDat.length));
+}
+const nameList = names => names.map(esc).join(", ");
+const buyList = x => `<ul class="buy">${x.rows.map(r => `<li${r.kdo && !r.kdo.length ? ' class="nobody"' : ""}><span class="bi"><b>${esc(r.item)}</b> ×${r.n}${r.price == null ? "" : ` <span class="pr">${usd(r.price)}</span>`}</span>
+    <span class="bk">chybí: ${nameList(r.komu)}</span><span class="bw">${!r.kdo ? "koupí si sám" : r.kdo.length ? `koupí: <b>${nameList(r.kdo)}</b>` : `<b class="nobuy">nikdo ve squadu</b>${r.jinde.length ? `, z akce: ${nameList(r.jinde)}` : ", nikdo z akce"}`}</span></li>`).join("")}</ul>
+  ${x.bezDat.length ? `<p class="note">Bez dat z Trackeru: ${nameList(x.bezDat)}.</p>` : ""}`;
+// the squad's own list in its card, for its SL; red when nobody of the squad can buy something
+function buyDetails(g) {
+  const x = state.buy && state.buy.get(g.id);
+  if (!x) return "";
+  const stuck = x.rows.some(r => r.kdo && !r.kdo.length);
+  return `<details class="sq-buy${stuck ? " warn" : ""}"><summary>Nákup squadu <span class="num">${x.rows.length}</span>${stuck ? '<span class="nobuy">někdo musí koupit mimo squad</span>' : ""}</summary>${buyList(x)}</details>`;
+}
 function nakupBlock(s) {
   if (!s.swarm || !state.claims.length) return "";
   const l = nakupList(s), head = '<section class="block" id="nakup"><h2>Nákupní seznam</h2>';
-  if (!l) return `${head}<p class="err">Nákupní seznam se nepodařilo načíst, zkus to znovu.</p></section>`;
-  const list = names => names.map(esc).join(", ");
-  return `${head}<p class="note">Co z nákupního minima rolí zapsaní nemají odemčené. Koupit to může jen ten, kdo to má odemčené; kdo komu koupí, domluvte na Briefingu.</p>
-    ${l.rows.length ? `<div class="tblw"><table class="data nakup"><thead><tr><th>Položka</th><th class="num">Kusů</th><th>Komu chybí</th><th>Může koupit</th><th class="num">Za kus</th></tr></thead><tbody>${l.rows.map(r =>
-      `<tr><td>${esc(r.item)}</td><td class="num">${r.n}</td><td>${list(r.komu)}</td><td>${!r.kdo ? "kdokoli" : r.kdo.length ? list(r.kdo) : '<b class="nobuy">nikdo z akce</b>'}</td><td class="num">${r.price == null ? "–" : usd(r.price)}</td></tr>`).join("")}</tbody></table></div>`
+  if (!l || !state.buy) return `${head}<p class="err">Nákupní seznam se nepodařilo načíst, zkus to znovu.</p></section>`;
+  return `${head}<p class="note">Co zapsaným z nákupního minima chybí, po squadech. Kupuje se uvnitř squadu, řídí to SL: koupit může jen ten, kdo to má odemčené.</p>
+    ${state.buy.size ? [...state.buy.values()].map(x => { const lead = x.g.sq && leadOf(x.g);
+      return `<div class="buy-g"><h3>${esc(x.g.name)}${lead ? ` <small>SL ${esc(lead.members.name)}</small>` : ""}</h3>${buyList(x)}</div>`; }).join("")
       : '<p class="note">Zapsaným nic z minima nechybí.</p>'}
-    ${l.bezDat.length ? `<p class="note">Bez dat z Trackeru (nevím, co mají odemčené): ${list(l.bezDat)}. Ať si Tracker synchronizují.</p>` : ""}
     ${leadsOps() ? `<p class="note nocash">Bez peněz (označuje jen velení, členům se koupí celé minimum): ${state.claims.map(c =>
       `<button type="button" class="act" data-nocash="${esc(c.user_id)}:${c.no_cash ? 0 : 1}" aria-pressed="${!!c.no_cash}">${esc((c.members && c.members.name) || "?")}</button>`).join(" ")}</p>` : ""}
     <p class="note">Kdo kupuje pro jiné, potřebuje bednu a vozidlo, kterým ji koupí: ${D.nakup.rezie.map(e => `${esc(e.item)} ${e.price == null ? "" : usd(e.price)}`).join(", ")}.</p></section>`;
