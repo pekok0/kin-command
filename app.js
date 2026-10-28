@@ -264,23 +264,26 @@ function slotRow(x, c, sq) {
   // V4: the Commander moves someone already in the operation onto a free command slot (it stands for "volné" there)
   const others = !c && need && state.me.is_commander ? state.claims.filter(o => o.slot_key !== x.key) : [];
   const moveto = others.length ? `<select class="moveto" data-moveto="${esc(x.key)}" aria-label="Dosadit na ${esc(x.label)}"><option value="">Dosadit</option>${others.map(o => `<option value="${esc(o.user_id)}">${esc(o.members.name)}</option>`).join("")}</select>` : "";
-  const who = c ? `<img src="${esc(c.members.avatar_url)}" alt="" loading="lazy"><span class="nm">${esc(c.members.name)}</span>${sq && c.lead ? '<span class="slb" title="Squad leader">SL</span>' : ""}`
+  const cmd = state.me.is_commander, can = cmd || rankAt(state.me, "operator");
+  // the Commander's SL on another's row is the badge itself (Petr 2026-10-28: fewer loud buttons): solid = leads, a click
+  // takes it off; a ghost "SL" on the others while the squad has none
+  const cmdSl = sq && c && cmd && !mine;
+  const who = c ? `<img src="${esc(c.members.avatar_url)}" alt="" loading="lazy"><span class="nm">${esc(c.members.name)}</span>${sq && c.lead && !cmdSl ? '<span class="slb" title="Squad leader">SL</span>' : ""}`
     : moveto ? "" : `<span class="free">${locked ? (need === "veteran" ? "od Veterána" : "od Operátora") : "volné"}</span>`;
   const act = mine ? `data-unclaim="${esc(c.user_id)}" title="Odhlásit se"` : c || locked ? "disabled" : `data-claim="${esc(x.key)}"`;
   // an x on my own place too (UAT C-03: on a phone "click your slot to leave" was invisible); the Commander's on anyone's
   const kick = c && (mine || state.me.is_commander)
     ? `<button type="button" class="kick" data-unclaim="${esc(c.user_id)}" aria-label="${mine ? "Odhlásit se z místa" : `Odhlásit ${esc(c.members.name)}`}" title="${mine ? "Odhlásit se z místa" : ""}">${cross()}</button>` : "";
   // the badge, one per squad (011): Operator and up on their own row, the Commander on anyone's (specs/hodnosti H2)
-  const cmd = state.me.is_commander, can = cmd || rankAt(state.me, "operator");
   const lead = !sq || !c ? "" : mine ? (c.lead ? '<button type="button" class="act lead" data-lead="0">Předat SL</button>'
       : sq.led || !can ? "" : '<button type="button" class="act lead" data-lead="1">Povedu squad</button>')
-    : !cmd ? "" : c.lead ? `<button type="button" class="act lead" data-leadfor="${esc(c.user_id)}:0">Sundat SL</button>`
-    : sq.led ? "" : `<button type="button" class="act lead" data-leadfor="${esc(c.user_id)}:1">Dát SL</button>`;
+    : !cmd ? "" : c.lead ? `<button type="button" class="slbtn" data-leadfor="${esc(c.user_id)}:0" aria-label="Sundat SL: ${esc(c.members.name)}" title="Sundat SL"><span class="slb">SL</span></button>`
+    : sq.led ? "" : `<button type="button" class="slbtn" data-leadfor="${esc(c.user_id)}:1" aria-label="Dát SL: ${esc(c.members.name)}" title="Dát SL"><span class="slg">SL</span></button>`;
   // a Velitel moves people too (Petr 2026-10-25 D39, migration 031): a plain place only -- not an SL, not onto a command slot
   const sqd = (cmd || state.me.is_officer) && state.event && isSq(state.event), movable = c && (cmd || !c.lead);
   const mv = sqd && movable ? (state.moving === c.user_id
-      ? `<button type="button" class="act mv" data-move="${esc(c.user_id)}" aria-pressed="true">Zrušit přesun</button>`
-      : `<button type="button" class="act mv" data-move="${esc(c.user_id)}" aria-label="Přesunout ${esc(c.members.name)}">Přesunout</button>`)
+      ? `<button type="button" class="ib mv" data-move="${esc(c.user_id)}" aria-pressed="true" aria-label="Zrušit přesun" title="Zrušit přesun">${moveIco()}</button>`
+      : `<button type="button" class="ib mv" data-move="${esc(c.user_id)}" aria-label="Přesunout ${esc(c.members.name)}" title="Přesunout">${moveIco()}</button>`)
     : sqd && !c && state.moving && !locked && (cmd || !need) ? `<button type="button" class="act mvto" data-movehere="${esc(x.key)}" aria-label="Přesunout sem: ${esc(x.label)}">Sem</button>` : "";
   const drag = sqd && movable ? ` draggable="true" data-drag="${esc(c.user_id)}"` : sqd && !c && (cmd || !need) ? " data-free" : "";
   return `<li data-key="${esc(x.key)}"${drag}${mine ? ' class="is-me"' : ""}><button type="button" class="rslot" ${act}><span class="lbl">${x.role ? `<span class="rid">${esc(x.role)}</span>` : ""}${esc(x.label)}</span>${who}</button>${lead}${moveto}${mv}${kick}</li>`;
@@ -326,43 +329,51 @@ function squadCard(g, by) {
     const less = g.slots.length <= 1 ? "squad potřebuje aspoň 1 místo" : "";
     const more = c >= 12 ? "nejvýš 12" : g.slots.length >= 20 ? "squad má nejvýš 20 míst" : "";
     const ctl = cmd ? `<span class="swctl">
-      <button type="button" class="act" data-role="${g.idx}:${ro.kit}:-1" aria-label="${esc(g.name)}: ubrat ${esc(ro.label)}${taken ? ` (vyhodí ${esc(taken.members.name)})` : ""}"${less ? ` disabled title="${esc(less)}"` : ""}>−</button>
-      <button type="button" class="act" data-role="${g.idx}:${ro.kit}:1" aria-label="${esc(g.name)}: přidat ${esc(ro.label)}"${more ? ` disabled title="${esc(more)}"` : ""}>+</button></span>` : "";
-    return `<div class="sqp${c ? "" : " off"}">${esc(ro.label)} <b>${c}</b>${ctl}</div>${c ? `<ul>${xs.map(x => slotRow(x, by[x.key], sq)).join("")}</ul>` : ""}`;
+      <button type="button" class="ib" data-role="${g.idx}:${ro.kit}:-1" aria-label="${esc(g.name)}: ubrat ${esc(ro.label)}${taken ? ` (vyhodí ${esc(taken.members.name)})` : ""}"${less ? ` disabled title="${esc(less)}"` : ""}>${minus()}</button>
+      <b>${c}</b><button type="button" class="ib" data-role="${g.idx}:${ro.kit}:1" aria-label="${esc(g.name)}: přidat ${esc(ro.label)}"${more ? ` disabled title="${esc(more)}"` : ""}>${plus()}</button></span>` : `<b>${c}</b>`;
+    return `<div class="sqp ro-${esc(ro.kit)}">${roleMark(ro.kit)}<span class="rn">${esc(ro.label)}</span>${ctl}</div><ul class="ro-${esc(ro.kit)}">${xs.map(x => slotRow(x, by[x.key], sq)).join("")}</ul>`;
   }).join("");
-  const last = g.idx === rosterOf(state.event).squads.length - 1;
-  const drop = cmd && last && g.idx > 0 ? `<button type="button" class="act sqdrop" data-squad="drop">Zrušit ${esc(g.name)}${n ? ` (vyhodí ${n})` : ""}</button>` : "";
-  const add = cmd && last && g.idx < 11 ? `<button type="button" class="act sqadd" data-squad="add">+ Další squad</button>` : "";
+  // Petr 2026-10-28: any squad goes by its x, not only the last; with people in it the first click asks (they get dropped)
+  const live = plan.roster.filter(q => q.sq).length, armed = state.sqArm === g.idx;
+  const drop = cmd && live > 1 ? `<button type="button" class="${armed ? "act sqx armed" : "ib sqx"}" data-sqdrop="${g.idx}" aria-label="Zrušit ${esc(g.name)}${n ? ` (vyhodí ${n})` : ""}" title="Zrušit squad">${armed ? `Zrušit? vyhodí ${n}` : cross()}</button>` : "";
   const title = cmd ? `<input class="sqname" data-sqname="${g.idx}" value="${esc(g.name)}" maxlength="24" aria-label="Název squadu ${g.idx + 1}">` : `<b>${esc(g.name)}</b>`;
-  const free = (cw ? D.doktrina.cw.roles : roles).filter(ro => !g.slots.some(x => x.kit === ro.kit));
+  const free = roles.filter(ro => !g.slots.some(x => x.kit === ro.kit));
   const addRole = cmd && free.length && g.slots.length < 20 ? `<select class="addrole" data-addrole="${g.idx}" aria-label="${esc(g.name)}: přidat roli"><option value="">+ Přidat roli</option>${free.map(ro => `<option value="${esc(ro.kit)}">${esc(ro.label)}</option>`).join("")}</select>` : "";
   const veli = lead ? `Velí: <span class="who">${esc(lead.members.name)}</span>` : "Velí: nikdo, kdokoli ze squadu si vezme SL";
-  return `<div class="rg sqc"><div class="pg-head">${sym(g.symbol, "sm")}<div>${title}<small class="veli${!lead && n ? " none" : ""}">${veli}</small></div><span class="num">${n}/${g.max}</span></div>
-    ${lines}${addRole}${drop || add ? `<div class="sqtools">${drop}${add}</div>` : ""}</div>`;
+  return `<div class="rg sqc"><div class="pg-head">${sym(g.symbol, "sm")}<div>${title}<small class="veli${!lead && n ? " none" : ""}">${veli}</small></div><span class="num">${n}/${g.max}</span>${drop}</div>
+    ${lines}${addRole}</div>`;
+}
+// the Commander's add plate at the end of the lobby (Petr 2026-10-28): a squad into the first gap, and every vehicle type
+// the operation has none of yet; a type with vehicles keeps its - / + on its own card
+function addPlate() {
+  if (!state.me.is_commander) return "";
+  const r = rosterOf(state.event), gap = r.squads.some(q => !Object.keys(q).length) || r.squads.length < 12;
+  const t = D.doktrina.swarm.sestava, none = t.podpora.map((p, ti) => [p, ti]).filter(([p]) => !(r.vehicles[p.kit] || []).length);
+  return `<div class="rg sqnew"><p class="sqnew-k">Přidat do sestavy</p><div class="sqnew-b">
+    <button type="button" class="act sqadd" data-squad="add"${gap ? "" : ' disabled title="Nejvýš 12 squadů"'}>${plus()} Squad</button>
+    ${none.map(([p, ti]) => `<button type="button" class="act" data-support="${ti}:1" aria-label="Podpora: přidat ${esc(p.name)}">${plus()} ${esc(p.name)}</button>`).join("")}</div></div>`;
 }
 
 // SWARM Podpora (specs/swarm-squady P2-P3): a vehicle = its crew, framed like a unit; the Commander adds and removes
 // vehicles per type, "-" only the last one and only while its whole crew is free (as "- Swarm")
 // one vehicle with its crew; the optional seat (Petr 2026-10-22: Tank Gunner, a helicopter's second crew member) closes only free
 function carBox(t, c, by) {
+  // the optional seat is a small + / - by the vehicle's name (Petr 2026-10-28: "jenom nejakej malej symbol ... plusko")
   const seat = () => { if (!state.me.is_commander || t.min === t.seats.length) return "";
-    const on = c.open > t.min, name = t.seats[t.min], busy = on && by[c.slots[c.slots.length - 1].key];
-    return `<button type="button" class="act seatt" data-seat="${t.kit}:${c.v}:${on ? -1 : 1}" aria-pressed="${on}"${busy ? ` disabled title="${esc(name)} je obsazený"` : ""}>${esc(name)}: ${on ? "zavřít" : "otevřít"}</button>`; };
-  return `<div class="veh" data-veh="${esc(c.slots[0].key)}"><div class="vh">${sym(t.symbol, "sm")}<b class="vn">${esc(c.name)}</b><span class="num">${c.slots.filter(x => by[x.key]).length}/${c.slots.length}</span></div>
-    <ul>${c.slots.map(x => slotRow(x, by[x.key])).join("")}</ul>${seat()}</div>`;
+    const on = c.open > t.min, name = t.seats[t.min], busy = on && by[c.slots[c.slots.length - 1].key], what = `${esc(name)}: ${on ? "zavřít" : "otevřít"}`;
+    return `<button type="button" class="ib seatt" data-seat="${t.kit}:${c.v}:${on ? -1 : 1}" aria-pressed="${on}" aria-label="${what}" title="${busy ? `${esc(name)} je obsazený` : what}"${busy ? " disabled" : ""}>${on ? minus() : plus()}</button>`; };
+  return `<div class="veh" data-veh="${esc(c.slots[0].key)}"><div class="vh">${sym(t.symbol, "sm")}<b class="vn">${esc(c.name)}</b><span class="num">${c.slots.filter(x => by[x.key]).length}/${c.slots.length}</span>${seat()}</div>
+    <ul>${c.slots.map(x => slotRow(x, by[x.key])).join("")}</ul></div>`;
 }
 function podporaCard(g, by) {
-  if (!g.slots.length && !state.me.is_commander) return "";  // a vehicle squad without vehicles: only the Commander adds one
+  if (!g.slots.length) return "";  // a vehicle type the operation has none of: the Commander adds it on the add plate
   const n = g.slots.filter(x => by[x.key]).length;
   const types = g.vehicles.map(t => {
     if (g.ctl === false) return `<div class="vtype">${t.cars.map(c => carBox(t, c, by)).join("")}</div>`;  // one tank of several: + / - on the last
-    const all = g.all || t.cars, last = all[all.length - 1], wid = `why-POD-${t.kit}`;
-    const less = !last ? `žádný ${t.name}` : "";
     const more = t.n >= t.max ? `${t.name}: nejvýš ${t.max}` : "";
-    const why = [less, more].filter(Boolean).join(", ");
-    const ctl = state.me.is_commander ? `<div class="sqp">${esc(t.name)} <b>${esc(t.n)}</b><span class="swctl">
-      <button type="button" class="act" data-support="${t.ti}:-1" aria-label="Podpora: ubrat ${esc(t.name)}"${less ? ` disabled aria-describedby="${esc(wid)}"` : ""}>\u2212 ${esc(t.name)}</button>
-      <button type="button" class="act" data-support="${t.ti}:1" aria-label="Podpora: přidat ${esc(t.name)}"${more ? ` disabled aria-describedby="${esc(wid)}"` : ""}>+ ${esc(t.name)}</button></span></div>${why ? `<p class="why" id="${esc(wid)}">${esc(why)}</p>` : ""}` : "";
+    const ctl = state.me.is_commander ? `<div class="sqp">${esc(t.name)}<span class="swctl">
+      <button type="button" class="ib" data-support="${t.ti}:-1" aria-label="Podpora: ubrat ${esc(t.name)}" title="Ubrat ${esc(t.name)}">${minus()}</button>
+      <b>${esc(t.n)}</b><button type="button" class="ib" data-support="${t.ti}:1" aria-label="Podpora: přidat ${esc(t.name)}"${more ? ` disabled title="${esc(more)}"` : ` title="Přidat ${esc(t.name)}"`}>${plus()}</button></span></div>` : "";
     const cars = t.cars.map(c => carBox(t, c, by)).join("");
     return ctl || cars ? `<div class="vtype">${ctl}${cars}</div>` : "";
   }).join("");
@@ -410,7 +421,7 @@ function viewRoster(s) {
     <div class="op-me">${mine}${rsvpBar()}</div>
     ${state.me.is_commander ? `<div class="op-cmd" role="group" aria-label="Příkazy Commandera">${mapTeamForm(ev)}${closeEventForm(s)}<a class="act" href="#/briefing">Protokol briefingu</a>${cancel}</div>` : ""}</div>
     ${msg}
-    <div class="ros${s.swarm ? " swarm" : ""}">${s.roster.map(g => g.sq ? squadCard(g, by) : g.vehicles ? podporaCard(g, by) : rosterGroup(g, by)).join("")}</div>
+    <div class="ros${s.swarm ? " swarm" : ""}">${s.roster.map(g => g.sq ? squadCard(g, by) : g.vehicles ? podporaCard(g, by) : rosterGroup(g, by)).join("")}${s.swarm ? addPlate() : ""}</div>
     ${s.base && state.me.is_commander && s.base.length > s.roster.length ? `<div class="sqtools hidden-g">Skryté: ${s.base.filter(b => !s.roster.some(g => g.id === b.id)).map(b =>
       `<button type="button" class="act sqadd" data-fx="${b.id}:hide:0">+ ${esc(b.name)}</button>`).join("")}</div>` : ""}
     ${nakupBlock(s)}`;
@@ -777,13 +788,22 @@ const setRole = async (i, kit, d) => {
   if (xs.length && !await dropFrom([xs[xs.length - 1].key])) return;
   return writeRoster(r => { r.squads[i][kit] = (r.squads[i][kit] || 0) + d; if (!r.squads[i][kit]) delete r.squads[i][kit]; });
 };
-const setSquad = async op => {
-  if (op !== "add" && !await dropFrom(plan.roster.filter(g => g.sq).pop().slots.map(x => x.key))) return;
+// a dropped squad stays as {} (036): the ones after it keep their number, slot keys and Discord room; a new squad fills
+// the first gap, trailing gaps go (Petr 2026-10-28)
+const setSquad = async (op, i) => {
+  const g = op === "drop" && plan.roster.find(q => q.sq && q.idx === i);
+  if (g && !await dropFrom(g.slots.map(x => x.key))) return;
+  state.sqArm = null;
   return writeRoster(r => { const t = D.doktrina.swarm.sestava, cw = cwEv();
     if (op === "add") {
-      r.squads.push(cw ? { ...D.doktrina.cw.squad } : Object.fromEntries([...t.core.map(c => [c.kit, 1]), [t.swarm.kit, t.swarm.default]]));
-      if (r.names) r.names.push(`Squad ${r.squads.length}`);
-    } else { r.squads.pop(); if (r.names) r.names.pop(); }
+      const gap = r.squads.findIndex(q => !Object.keys(q).length), k = gap < 0 ? r.squads.length : gap;
+      r.squads[k] = cw ? { ...D.doktrina.cw.squad } : Object.fromEntries([...t.core.map(c => [c.kit, 1]), [t.swarm.kit, t.swarm.default]]);
+      if (r.names) r.names[k] = `Squad ${k + 1}`;
+    } else {
+      r.squads[i] = {};
+      if (r.names) r.names[i] = `Squad ${i + 1}`;
+      while (r.squads.length > 1 && !Object.keys(r.squads.at(-1)).length) { r.squads.pop(); if (r.names) r.names.pop(); }
+    }
   });
 };
 const setName = (i, v) => writeRoster(r => { r.names = r.names || r.squads.map((_, k) => `Squad ${k + 1}`); r.names[i] = v.trim().slice(0, 24) || `Squad ${i + 1}`; });
@@ -1059,24 +1079,25 @@ let plan = null;
 // each vehicle]}}; an event from before 017 keeps its Swarm sizes and vehicle counts with every seat open
 function rosterOf(ev) {
   if (ev.roster) return ev.roster;
-  // the default draft (Petr 2026-10-25 D33): Public Ops [cw] squad, SWARM core + Swarm; the Commander reworks it from there
-  const t = D.doktrina.swarm.sestava, po = ev.doctrine === "cw" && D.doktrina.cw.squad;
-  return { squads: Array.from({ length: t.squads }, (_, i) => po ? { ...po }
-      : { [t.core[0].kit]: 1, [t.core[1].kit]: 1, [t.swarm.kit]: (ev.squad_swarm && ev.squad_swarm[i]) || t.swarm.default }),
+  // the default draft (Petr 2026-10-25 D33, 2026-10-28): Public Ops [cw] squady, SWARM core + Swarm; the Commander reworks it
+  const t = D.doktrina.swarm.sestava;
+  return { squads: ev.doctrine === "cw" ? D.doktrina.cw.squady.map(q => ({ ...q })) : Array.from({ length: t.squads }, (_, i) =>
+      ({ [t.core[0].kit]: 1, [t.core[1].kit]: 1, [t.swarm.kit]: (ev.squad_swarm && ev.squad_swarm[i]) || t.swarm.default })),
     vehicles: Object.fromEntries(t.podpora.map((p, i) => [p.kit, Array(ev.squad_support?.[i] ?? p.default).fill(p.seats.length)])) };
 }
 // keys stay as before 017, so sign-ups survive the switch: SW-Q<squad>-<KIT><n> (the first without n), and seat i of
 // vehicle v is SW-<KIT><(v-1)*all seats + i> (a closed optional seat is just a key not offered)
-// the roles a squad may hold: SWARM's kits; CW the Vybava roles (Petr 2026-10-25, migration 028), SWARM kits there only
-// still shown where a roster has them, never offered ("raketomet i rocketeer, to je to samé", migration 030)
-const squadRoles = cw => cw ? [...D.doktrina.cw.roles, ...D.doktrina.swarm.sestava.roles] : D.doktrina.swarm.sestava.roles;
+// the roles a squad may hold: SWARM's kits; CW the Vybava roles only (Petr 2026-10-25, migration 028; 2026-10-28 no Swarm
+// "ani teoreticky", the database refuses it: 035)
+const squadRoles = cw => cw ? D.doktrina.cw.roles : D.doktrina.swarm.sestava.roles;
 function swarmRoster(k, r, cw = false) {
   const t = k.sestava;
   return [...r.squads.map((sq, idx) => { const n = idx + 1;
     const slots = squadRoles(cw).flatMap(ro => Array.from({ length: sq[ro.kit] || 0 }, (_, i) => ({ key: `SW-Q${n}-${ro.kit}${i ? i + 1 : ""}`, label: ro.label, role: null, kit: ro.kit, stat: ro.label,
       cls: ro.class, sqd: ro.squad })));
-    return { id: `Q${n}`, name: (r.names && r.names[idx]) || `Squad ${n}`, symbol: "infantry", max: slots.length, idx, sq, slots };
-  }), ...t.podpora.flatMap((p, ti) => { const g = podporaGroup([p], r.vehicles, ti), cars = g.vehicles[0].cars;
+    const recon = slots.length && slots.every(x => x.kit === "RC" || x.kit === "RS");
+    return { id: `Q${n}`, name: (r.names && r.names[idx]) || `Squad ${n}`, symbol: recon ? "recon" : "infantry", max: slots.length, idx, sq, slots };
+  }).filter(g => g.slots.length), ...t.podpora.flatMap((p, ti) => { const g = podporaGroup([p], r.vehicles, ti), cars = g.vehicles[0].cars;
     // every tank its own squad (Petr 2026-10-25: "co tank to squad"); + / - for tanks on the last one
     return p.kit !== "TK" || !cars.length ? [g] : cars.map((c, i) => ({ ...g, id: `POD-TK-${c.v + 1}`, name: c.name, max: c.slots.length, slots: c.slots,
       vehicles: [{ ...g.vehicles[0], cars: [c] }], ctl: i === cars.length - 1, all: cars })); })];
@@ -1166,6 +1187,19 @@ function sym(kind, cls = "") {
   }[kind] || "";
   return `<svg class="sym ${cls}" viewBox="0 -6 48 50" aria-hidden="true"><circle class="ech" cx="24" cy="0" r="2.4"/><rect x="6" y="6" width="36" height="24"/>${icon}</svg>`;
 }
+// a role in the lobby (Petr 2026-10-28 "kazda role jinou barvu ... ikonky symbolicky v designu War Roomu"): the APP-6
+// friendly frame with the role's branch mark, stroked in the role's hue (--rc from .ro-<kit>, DESIGN.md Role Hue exception)
+const ROLE_MARK = {
+  RF: "M2 2 L22 14 M22 2 L2 14", MK: "M12 4 V6.5 M12 9.5 V12 M7 8 H9.5 M14.5 8 H17 M15 8 A3 3 0 1 1 9 8 A3 3 0 1 1 15 8",
+  RK: "M3 14 L12 3 L21 14", GR: "M12 6.5 V4 H15 M14.5 10 A2.5 2.5 0 1 1 9.5 10 A2.5 2.5 0 1 1 14.5 10", MD: "M12 3.5 V12.5 M7.5 8 H16.5",
+  HM: "M12 13 V3.5 M9 6.5 L12 3.5 L15 6.5 M8 10 H16", BD: "M6 5 H18 M6 5 V11 M12 5 V11 M18 5 V11", RC: "M2 14 L22 2", LG: "M2 11 H22",
+  SW: "M7 8 H7.1 M12 8 H12.1 M17 8 H17.1", AA: "M6 13 A6 6 0 0 1 18 13",
+};
+ROLE_MARK.AT = ROLE_MARK.RK; ROLE_MARK.RS = ROLE_MARK.RC; ROLE_MARK.MG = ROLE_MARK.HM;
+const roleMark = kit => `<svg class="rmark" viewBox="0 0 24 16" aria-hidden="true"><rect x="1" y="1" width="22" height="14"/><path d="${ROLE_MARK[kit] || ""}"/></svg>`;
+const plus = () => '<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 V14 M2 8 H14"/></svg>';
+const minus = () => '<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8 H14"/></svg>';
+const moveIco = () => '<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 5 H13 M10 2 L13 5 L10 8 M14 11 H3 M6 8 L3 11 L6 14"/></svg>';
 const arrow = () => '<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M1 8 H14 M9 3 L14 8 L9 13"/></svg>';
 const cross = () => '<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3 L13 13 M13 3 L3 13"/></svg>';
 const out = () => '<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3 H13 V10 M13 3 L4 12"/></svg>';
@@ -1634,7 +1668,7 @@ async function loadUnlocks() {
 }
 // a re-render replaces the focused control: put keyboard focus back on its twin
 function keepFocus(fn) {
-  const a = document.activeElement, k = a && ["data-tracker", "data-nova", "data-rsvp", "data-trsvp", "data-role", "data-squad", "data-seat", "data-fx", "data-support"].find(x => a.hasAttribute(x));
+  const a = document.activeElement, k = a && ["data-tracker", "data-nova", "data-rsvp", "data-trsvp", "data-role", "data-squad", "data-sqdrop", "data-seat", "data-fx", "data-support"].find(x => a.hasAttribute(x));
   const sel = k && `[${k}="${CSS.escape(a.getAttribute(k))}"]`, i = sel ? [...document.querySelectorAll(sel)].indexOf(a) : -1;
   fn();
   if (sel) document.querySelectorAll(sel)[i]?.focus({ preventScroll: true });
@@ -1994,6 +2028,8 @@ function viewPlayer(m, rows, season, have, prog, merits = [], done = new Set(), 
 // ---------- shell ----------
 // one item per question a member asks (Petr 2026-10-19, specs/akce-flow rozhodnuti 8)
 const NAV = [["akce", "Akce"], ["mapy", "Mapy"], ["vybava", "Výbava"], ["doktrina", "Doktrína"]];
+// the Commander's own item after Doktrina (specs/ukoly-velitele U1), with the count of what waits for him
+const navCmd = () => !state.me || !state.me.is_commander ? [] : [["moje-ukoly", "Úkoly", state.cmdTasks ? state.cmdTasks.filter(x => x.state === "open").length : 0]];
 function renderNav(active) {
   navActive = active;
   const mine = me.get(), [msid, mrid] = (mine || "/").split("/"), ms = S(msid), mr = ms && roleOf(ms, mrid);
@@ -2001,7 +2037,7 @@ function renderNav(active) {
   const onMine = mr && location.hash === roleHref(ms, mr);
   document.getElementById("nav").innerHTML =
     (mr ? `<a class="mine" href="${roleHref(ms, mr)}"${onMine ? ' aria-current="page"' : ""}>Moje role<b>${esc(mr.id)}</b></a>` : "") +
-    NAV.map(([k, l]) => `<a href="#/${k}"${!onMine && active === k ? ' aria-current="page"' : ""}>${l}</a>`).join("");
+    [...NAV, ...navCmd()].map(([k, l, n]) => `<a href="#/${k}"${!onMine && active === k ? ' aria-current="page"' : ""}>${l}${n ? `<b class="nav-n">${n}</b>` : ""}</a>`).join("");
   navToCurrent();
 }
 
@@ -2018,6 +2054,44 @@ async function loadVycvik() {
   if (error) console.error(error);
   state.vycvik = data && data.data || false;
   if (["#/vycvik", "#/doktrina/vycvik"].includes(location.hash)) render();
+}
+// the Commander's tasks from the KIN kernel (specs/ukoly-velitele, 037): what waits for him first, newest first; "Odbav ty"
+// hands a task to the Claude session running in wardogs (ceo/ukoly.py --vezmi), "Hotovo" closes it. Loaded once after
+// login, then on every change in the database (the session closing a task shows here at once)
+const TASK_KIND = { plan: "Plán", llm: "Běh", bot: "Bot", strop: "Útrata", uvod: "Kernel" };
+const taskKind = x => x.kind === "nalez" ? "Nález" : TASK_KIND[x.typ] || "Úkol";
+async function loadCmdTasks(first) {
+  const { data, error } = await sb.from("cmd_tasks").select("id, kind, typ, text, state, note, created_at, updated_at").order("created_at", { ascending: false });
+  if (error) console.error(error);
+  state.cmdTasks = error ? false : data.slice().sort((a, b) => b.created_at.localeCompare(a.created_at));
+  if (first) sb.channel("ukoly").on("postgres_changes", { event: "*", schema: "public", table: "cmd_tasks" }, () => loadCmdTasks()).subscribe();
+  renderNav(navActive);
+  if (location.hash === "#/moje-ukoly") $app.innerHTML = viewCmdTasks();  // in place: a click does not jump to the top
+}
+async function setTask(id, st) {
+  const x = state.cmdTasks.find(y => y.id === id), was = x.state;
+  x.state = st; x.updated_at = new Date().toISOString(); state.taskErr = null;
+  $app.innerHTML = viewCmdTasks(); renderNav(navActive);
+  const { data, error } = await sb.from("cmd_tasks").update({ state: st, updated_at: x.updated_at }).eq("id", id).select("id");
+  if (error || !data.length) { x.state = was; state.taskErr = "Úkol se nepodařilo uložit, zkus to znovu."; $app.innerHTML = viewCmdTasks(); renderNav(navActive); }
+}
+function viewCmdTasks() {
+  if (!state.me || !state.me.is_commander) return '<p class="note">Úkoly z kernelu jsou jen pro Commandera.</p>';
+  const xs = state.cmdTasks, head = `<header class="unit-head"><div><h1>Úkoly</h1><p class="lede">Co ti posílá KIN kernel. Tlačítko „Odbav ty“ předá úkol Claudovi: vezme si ho session, která právě běží ve wardogs.</p></div></header>`;
+  if (xs === undefined) return head + '<p class="note">Načítám…</p>';
+  if (xs === false) return head + '<p class="err">Úkoly se nenačetly, obnov stránku (F5).</p>';
+  const btn = (x, st, l, cls = "") => `<button type="button" class="act${cls}" data-ctask="${esc(x.id)}:${st}">${l}</button>`;
+  const row = x => `<li class="tk" data-task-id="${esc(x.id)}"><div class="tk-meta"><span class="tk-kind">${esc(taskKind(x))}</span><time datetime="${esc(x.created_at)}">${esc(ago(x.created_at))}</time>
+      ${x.state === "prace" ? '<span class="tk-st">Rozpracováno</span>' : x.state === "claude" ? '<span class="tk-st">Čeká na session</span>' : ""}</div>
+    <div class="tk-body"><p class="tk-text">${esc(x.text)}</p>${x.note ? `<p class="tk-note"><b>Claude:</b> ${esc(x.note)}</p>` : ""}</div>
+    <div class="tk-act">${x.state === "open" ? btn(x, "claude", "Odbav ty", " tk-cl") + btn(x, "done", "Hotovo")
+      : x.state === "claude" ? btn(x, "open", "Vrátit") + btn(x, "done", "Hotovo") : x.state === "done" ? btn(x, "open", "Otevřít") : ""}</div></li>`;
+  const sec = (k, h, list, empty) => `<section class="block tks-sec" data-tsec="${k}"><h2>${h} <span class="num">${list.length}</span></h2>${list.length ? `<ul class="tks">${list.map(row).join("")}</ul>` : `<p class="note">${empty}</p>`}</section>`;
+  const done = xs.filter(x => x.state === "done");
+  return head + (state.taskErr ? `<p class="err" role="alert">${esc(state.taskErr)}</p>` : "")
+    + sec("open", "Čeká na tebe", xs.filter(x => x.state === "open"), "Nic nečeká.")
+    + sec("claude", "U Clauda", xs.filter(x => x.state === "claude" || x.state === "prace"), "Claude teď nic nedělá.")
+    + `<details class="block tks-sec tks-done" data-tsec="done"><summary><h2>Hotovo <span class="num">${done.length}</span>${arrow()}</h2></summary>${done.length ? `<ul class="tks">${done.map(row).join("")}</ul>` : ""}</details>`;
 }
 // the Commander's briefing protocol (Petr 2026-10-21 "uvidim to jenom ja"): the row 'velitel' is readable by the
 // Commander only (014), so a member gets no data, not just no link; the HTML is built from klan/briefing-protokol.md
@@ -2093,6 +2167,8 @@ function render() {
     cur = plan && !plan.swarm && !plan.nomap ? plan : null;  // the build order's role chips trace on this plan
     html = viewAkce(); active = "akce"; title = "Akce · KIN";
     if (sb && state.me && !p[1]) setTimeout(() => loadHist(["historie"]));
+  } else if (p[0] === "moje-ukoly") {
+    html = viewCmdTasks(); active = "moje-ukoly"; title = "Úkoly · KIN";
   } else if (p[0] === "briefing") {
     active = "akce"; title = "Briefing · KIN";
     html = sb && state.me && state.me.is_commander ? '<p class="note">Načítám…</p>' : '<p class="note">Protokol briefingu je jen pro Commandera.</p>';
@@ -2103,6 +2179,7 @@ function render() {
     if (sb && state.me) setTimeout(() => loadHist(p));
   }
   else html = viewHome();
+  if (sb && state.me && state.me.is_commander && !state.cmdAsked) { state.cmdAsked = true; setTimeout(() => loadCmdTasks(true)); }
   $app.innerHTML = html;
   document.title = title;
   renderNav(active);
@@ -2112,14 +2189,20 @@ function render() {
 }
 
 $app.addEventListener("click", e => {
-  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-kit],[data-role],[data-move],[data-movehere],[data-squad],[data-seat],[data-fx],[data-leadfor],[data-nocash],[data-merit-del],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker],[data-nova]");
+  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-kit],[data-role],[data-move],[data-movehere],[data-squad],[data-sqdrop],[data-seat],[data-fx],[data-leadfor],[data-nocash],[data-merit-del],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker],[data-nova],[data-ctask]");
+  if (state.sqArm != null && !(t && t.dataset.sqdrop)) { state.sqArm = null; renderRoster(); }  // a click elsewhere: no drop
   if (!t) return;
+  if (t.dataset.ctask) { const [id, st] = t.dataset.ctask.split(":"); setTask(id, st); return; }
   if (t.dataset.trsvp) { const [id, st] = t.dataset.trsvp.split(":"); rsvpTraining(Number(id), st); return; }
   if (t.dataset.tclose) { t.disabled = true; const [id, st] = t.dataset.tclose.split(":"); closeTraining(Number(id), st); return; }
   if (t.dataset.role) { const [i, kit, d] = t.dataset.role.split(":"); setRole(Number(i), kit, Number(d)); return; }
   if (t.dataset.move) { state.moving = state.moving === t.dataset.move ? null : t.dataset.move; renderRoster(); return; }
   if (t.dataset.movehere) { const uid = state.moving; state.moving = null; moveTo(uid, t.dataset.movehere); return; }
   if (t.dataset.squad) { setSquad(t.dataset.squad); return; }
+  if (t.dataset.sqdrop) { const i = Number(t.dataset.sqdrop), g = plan.roster.find(q => q.sq && q.idx === i);
+    // with people in it the first click only asks (the x turns into "Zrušit? vyhodí n"), the second drops
+    if (g && g.slots.some(x => state.claims.some(c => c.slot_key === x.key)) && state.sqArm !== i) { state.sqArm = i; renderRoster(); return; }
+    setSquad("drop", i); return; }
   if (t.dataset.leadfor) { const [uid, on] = t.dataset.leadfor.split(":"); giveLead(uid, on === "1"); return; }
   if (t.dataset.nocash) { const [uid, on] = t.dataset.nocash.split(":"); setNoCash(uid, on === "1"); return; }
   if (t.dataset.meritDel) { sb.from("merits").delete().eq("id", t.dataset.meritDel).then(({ error }) => { if (error) console.error(error); render(); }); return; }

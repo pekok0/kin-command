@@ -38,6 +38,9 @@
   --panel-2: oklch(0.235 0.055 248);
   --rule: oklch(0.45 0.08 228);
   --rule-soft: oklch(0.31 0.055 242);
+  /* role hues in the lobby only (Petr 2026-10-28, DESIGN.md Role Hue exception): off the affiliation hues and gold */
+  --r-RF: oklch(0.85 0.025 240); --r-MK: oklch(0.80 0.14 305); --r-RK: oklch(0.80 0.15 55); --r-GR: oklch(0.80 0.14 350); --r-MD: oklch(0.96 0.01 240);
+  --r-HM: oklch(0.78 0.12 268); --r-BD: oklch(0.82 0.08 70); --r-RC: oklch(0.82 0.10 175); --r-LG: oklch(0.80 0.07 120);
   --acetate: oklch(0.18 0.045 250 / 0.8);
   --bar-bg: oklch(0.12 0.03 255 / 0.84);
   --slot-bg: oklch(0.16 0.04 252 / 0.82);
@@ -527,15 +530,9 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .sqc li { flex-wrap: wrap; }
 .ros.swarm .sqc .rslot .lbl { flex: 0 0 5em; min-width: 0; }  /* names line up under each other */
 .ros.swarm .sqc .rslot .nm { flex: 0 1 auto; }  /* the SL badge right after the name */
-.sqc li.is-me .rslot { flex-basis: 100%; }  /* "Povedu squad" / "Předat SL" under my name: in a 300 px column the nick keeps its room */
 .slb { flex: none; font: 700 13px/1 var(--cond); letter-spacing: .06em; color: var(--ground); background: var(--ink); padding: 4px 5px 3px; }
 .rg li .lead { flex: none; min-height: 44px; margin: 4px 0 2px auto; }
 .rg li .mv, .rg li .mvto { flex: none; min-height: 44px; margin: 4px 0 2px 4px; }
-/* the name keeps its room, the Commander's buttons (Přesunout, Dát SL, x) go under it in a narrow card (Petr 2026-10-25: "text nazvu clena je rozsypany") */
-.ros.swarm .rg li { flex-wrap: wrap; }
-.ros.swarm .rg li .rslot { flex: 1 1 11em; }
-.ros.swarm .rg li:has(.mv) .rslot, .ros.swarm .rg li:has(.mvto) .rslot { flex-basis: 100%; }  /* Commander's row: name across the card, buttons under it */
-.ros.swarm .rg li:has(.mv) .lead, .ros.swarm .rg li:has(.mv) .mv { margin-left: auto; }
 .ros.swarm .rslot .nm { overflow-wrap: break-word; min-width: 0; }  /* a long nick wraps at words, never cut (Petr 2026-10-18) */
 .rg li[data-drag] { cursor: grab; }
 .addrole { display: block; margin: 8px 0 4px; min-height: 44px; font: inherit; color: var(--ink); background: var(--panel-2); border: 1px solid var(--rule); padding: 0 8px; max-width: 100%; }
@@ -547,7 +544,6 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .podc { min-width: 0; }  /* every vehicle type is its own squad card (Petr 2026-10-25 D20), in the grid like a squad */
 .vtypes { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 0 24px; align-items: start; }
 .podc .sqp { flex-wrap: wrap; row-gap: 4px; }
-.podc .swctl .act { white-space: nowrap; }  /* on a phone "+ Combat heli" goes under the type, not over two lines */
 .veh { margin: 8px 0 10px; padding: 0 8px 6px; border: 1px solid var(--rule); }
 .vh { display: flex; align-items: center; gap: 8px; padding: 8px 0 6px; margin-bottom: 4px; border-bottom: 1px solid var(--rule-soft); }
 .vh .vn { font: 700 16px/1 var(--cond); letter-spacing: .04em; text-transform: uppercase; }
@@ -682,11 +678,9 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .sqp .swctl .act { min-width: 40px; justify-content: center; }
 .sqtools { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .sqadd { border-color: var(--fr); color: var(--fr); }
-.seatt { margin-top: 8px; font-size: 13px; }
-.sqtools .act, .seatt { min-height: 44px; }
+.sqtools .act { min-height: 44px; }
 .rx-off { flex: none; width: 44px; height: 44px; margin-left: 4px; border: 1px solid var(--rule); background: none; color: var(--ink-3); font-size: 20px; cursor: pointer; }
 .rx-off:hover { color: var(--ho); border-color: var(--ho); }  /* a finger on a phone (WCAG 2.5.5) */
-.seatt[aria-pressed="false"] { opacity: .75; }
 
 /* the event rail (Petr 2026-10-22): lit tiles under the nav on every page but Akce and home; scrolls sideways when many */
 .evrail { display: flex; gap: 10px; margin: 14px 0 4px; padding: 2px 2px 8px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: thin; }
@@ -1070,6 +1064,79 @@ li.fx-new { animation: fx-unfold 520ms var(--ease) both; }
   .ops *, .ops::after, #app > *, li.fx-claim .rslot, li.fx-claim::after, .veh.fx-new::after, li.fx-free .rslot, li.fx-new, .veh.fx-new, .slb.fx-lead { animation: none !important; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+/* Lobby v2 (Petr 2026-10-28: "lip pracovat s prostorem ... mega dobry UX"): one line per place, the Commander's controls
+   as small icon buttons at its end, every role in its own hue and APP-6 mark (DESIGN.md Role Hue exception) */
+.ro-RF, .ro-SW { --rc: var(--r-RF); } .ro-MK, .ro-AA { --rc: var(--r-MK); } .ro-RK, .ro-AT { --rc: var(--r-RK); } .ro-GR { --rc: var(--r-GR); }
+.ro-MD { --rc: var(--r-MD); } .ro-HM, .ro-MG { --rc: var(--r-HM); } .ro-BD { --rc: var(--r-BD); } .ro-RC, .ro-RS { --rc: var(--r-RC); } .ro-LG { --rc: var(--r-LG); }
+.rmark { width: 24px; height: 16px; flex: none; overflow: visible; }
+.rmark rect { fill: color-mix(in oklch, var(--rc) 14%, transparent); stroke: var(--rc); stroke-width: 1.5; }
+.rmark path { fill: none; stroke: var(--rc); stroke-width: 1.7; stroke-linecap: square; }
+.ro-SW .rmark path { stroke-width: 3; stroke-linecap: round; }
+.ros .sqp { gap: 8px; margin: 14px 0 6px; font-size: 13px; color: var(--rc, var(--ink-3)); }
+.ros .sqp .rn { flex: 1; min-width: 0; }
+.sqc ul[class*="ro-"] { padding-left: 6px; border-left: 2px solid var(--rc); }
+.ros .swctl { align-items: center; gap: 2px; }
+.ros .swctl b { min-width: 2.2ch; text-align: center; font: 700 16px/1 var(--cond); color: var(--ink); }
+.ib { display: inline-grid; place-items: center; flex: none; width: 32px; height: 32px; color: var(--ink-2); border: 1px solid transparent; }
+.ib:hover:not(:disabled) { color: var(--fr); border-color: oklch(0.86 0.15 205 / 0.5); background: var(--fr-fill); }
+.ib:disabled { opacity: .35; cursor: default; }
+.ib[aria-pressed="true"].mv { color: var(--ground); background: var(--fr); border-color: var(--fr); }
+.swctl .ib { border-color: var(--rule-soft); }
+.ros.swarm .rg li { flex-wrap: wrap; gap: 0 2px; }
+.ros.swarm .rg li .rslot { flex: 1 1 8em; min-height: 36px; padding: 4px 6px; gap: 8px; }
+.ros.swarm .kick { min-width: 32px; min-height: 32px; padding: 0; display: inline-grid; place-items: center; }
+.sqc .rslot .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }  /* the role header names it */
+.slbtn { display: inline-grid; place-items: center; flex: none; min-width: 32px; min-height: 32px; }
+.slbtn:hover .slb { background: var(--ink-2); }
+.slg { font: 700 13px/1 var(--cond); letter-spacing: .06em; color: var(--ink-3); border: 1px dashed var(--ink-3); padding: 3px 4px 2px; }
+.slbtn:hover .slg { color: var(--fr); border-color: var(--fr); }
+.rg li .lead { min-height: 32px; margin: 2px 0; padding: 6px 8px 5px; font-size: 12px; }
+.rg li .mvto { min-height: 32px; margin: 2px 0; padding: 6px 10px 5px; }
+.sqc .pg-head { align-items: flex-start; }
+.sqc .pg-head > div { flex: 1; min-width: 0; }
+.sqname { width: 100%; max-width: 13em; min-height: 32px; padding: 4px 4px 3px; font: 700 18px/1.1 var(--cond); letter-spacing: .04em; text-transform: uppercase;
+  color: var(--ink); background: transparent; border: 1px solid transparent; border-bottom: 1px dashed var(--rule); }
+.sqname:hover { border-color: var(--rule); }
+.sqname:focus { background: var(--panel-2); border-color: var(--rule); }
+.sqx:hover:not(:disabled) { color: var(--ho); border-color: var(--ho); background: oklch(0.72 0.19 25 / 0.12); }
+.act.sqx.armed { flex: none; color: var(--ho); border-color: var(--ho); font-size: 12px; padding: 7px 8px 6px; white-space: nowrap; }
+.addrole { display: inline-block; min-height: 32px; margin: 12px 0 2px; padding: 0 6px; font: 700 13px/1 var(--cond); letter-spacing: .06em; text-transform: uppercase;
+  color: var(--fr); background: transparent; border: 1px solid oklch(0.86 0.15 205 / 0.5); }
+.vh .seatt { margin-left: 2px; border-color: var(--rule-soft); }
+.podc .sqp { flex-wrap: nowrap; }
+.sqnew { display: grid; align-content: center; gap: 10px; background: none !important; box-shadow: none !important; outline: 1px dashed var(--rule); outline-offset: -1px; }
+.sqnew-k { margin: 0; font: 700 13px/1 var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+.sqnew-b { display: flex; flex-wrap: wrap; gap: 6px; }
+.sqnew .act { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; }
+.sqnew .sqadd { color: var(--fr); border-color: var(--fr); }
+/* a finger on the phone: every control of the lobby 44 px (WCAG 2.5.5), the desktop 32 px (2.5.8 asks 24) */
+@media (max-width: 720px) {
+  .ib, .ros.swarm .kick, .slbtn { width: 44px; height: 44px; min-width: 44px; }
+  .ros.swarm .rg li .rslot, .rg li .lead, .rg li .mvto, .addrole, .act.sqx.armed { min-height: 44px; }
+}
+/* the Commander's tasks (specs/ukoly-velitele): rows between hairlines, kind and age left, the two answers right; on a
+   phone the answers are full-width finger buttons under the text */
+.bar nav a .nav-n { margin-left: 5px; padding: 2px 4px 1px; font-size: 12px; color: var(--ground); background: var(--fr); }
+.tks-sec { max-width: 1100px; }
+.tks { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
+.tk { display: grid; grid-template-columns: 8.5em minmax(0, 1fr) auto; gap: 8px 18px; align-items: start; padding: 14px 0; border-bottom: 1px solid var(--rule-soft); }
+.tk-meta { display: grid; gap: 6px; justify-items: start; font: 600 13px/1.2 var(--cond); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.tk-kind { padding: 3px 5px 2px; border: 1px solid var(--rule); color: var(--ink-2); }
+.tk-st { color: var(--fr); }
+.tk-text { margin: 0; max-width: 78ch; overflow-wrap: anywhere; }
+.tk-note { margin: 6px 0 0; max-width: 78ch; font-size: 15px; color: var(--ink-2); }
+.tk-note b { color: var(--fr); font-weight: 600; }
+.tk-act { display: flex; gap: 6px; }
+.tk-act .act { min-height: 40px; white-space: nowrap; }
+.tk-act .tk-cl { color: var(--fr); border-color: var(--fr); }
+.tks-done > summary { list-style: none; cursor: pointer; }
+.tks-done > summary h2 { display: inline-flex; align-items: center; gap: 8px; }
+.tks-done[open] > summary .ico { transform: rotate(180deg); }
+@media (max-width: 720px) {
+  .tk { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .tk-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+  .tk-act .act { flex: 1; min-height: 44px; justify-content: center; }
+}
 </style>
 </head>
 <body>
