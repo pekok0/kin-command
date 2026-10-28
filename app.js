@@ -202,6 +202,9 @@ const RANKS = [["rekrut", "Rekrut", "zápis na akce"], ["operator", "Operátor",
 const rankIdx = r => Math.max(0, RANKS.findIndex(x => x[0] === r));
 const rankAt = (m, r) => !!m && rankIdx(m.rank) >= rankIdx(r);
 // specs/vycvik-draft (Petr 2026-10-27): the Vycvik section is a draft from Veteran up, its row 'vycvik' too (034)
+// 038 (Petr 2026-10-28 "Wampalimu dej stejne moznosti kolem akci jako me"): a Velitel runs every event like the
+// Commander; the Commander's own (his tasks, merits, the briefing protocol) stay his
+const leadsOps = () => !!state.me && (state.me.is_commander || state.me.is_officer);
 const vycvikOk = () => !!state.me && (state.me.is_commander || rankAt(state.me, "veteran"));
 // what the next rank takes; Veteran also merits for the clan, which the Commander judges
 const NEXT = { rekrut: [["Odehrané akce", "ops", 5]], operator: [["Odehrané akce", "ops", 10], ["Tréninky a kurzy", "trainings", 5]] };
@@ -260,33 +263,23 @@ async function addMerit(f) {
 const slotRank = k => k === "CMD" ? "veteran" : /^AS[0-9]+-V$/.test(k) ? "operator" : null;
 function slotRow(x, c, sq) {
   const mine = c && c.user_id === state.me.user_id;
-  const need = slotRank(x.key), locked = !c && need && !state.me.is_commander && !rankAt(state.me, need);
+  const need = slotRank(x.key), locked = !c && need && !leadsOps() && !rankAt(state.me, need);
   // V4: the Commander moves someone already in the operation onto a free command slot (it stands for "volné" there)
-  const others = !c && need && state.me.is_commander ? state.claims.filter(o => o.slot_key !== x.key) : [];
+  const others = !c && need && leadsOps() ? state.claims.filter(o => o.slot_key !== x.key) : [];
   const moveto = others.length ? `<select class="moveto" data-moveto="${esc(x.key)}" aria-label="Dosadit na ${esc(x.label)}"><option value="">Dosadit</option>${others.map(o => `<option value="${esc(o.user_id)}">${esc(o.members.name)}</option>`).join("")}</select>` : "";
-  const cmd = state.me.is_commander, can = cmd || rankAt(state.me, "operator");
-  // the Commander's SL on another's row is the badge itself (Petr 2026-10-28: fewer loud buttons): solid = leads, a click
-  // takes it off; a ghost "SL" on the others while the squad has none
-  const cmdSl = sq && c && cmd && !mine;
-  const who = c ? `<img src="${esc(c.members.avatar_url)}" alt="" loading="lazy"><span class="nm">${esc(c.members.name)}</span>${sq && c.lead && !cmdSl ? '<span class="slb" title="Squad leader">SL</span>' : ""}`
+  const cmd = leadsOps();
+  const who = c ? `<img src="${esc(c.members.avatar_url)}" alt="" loading="lazy"><span class="nm">${esc(c.members.name)}</span>${sq && c.lead ? '<span class="slb" title="Squad leader">SL</span>' : ""}`
     : moveto ? "" : `<span class="free">${locked ? (need === "veteran" ? "od Veterána" : "od Operátora") : "volné"}</span>`;
-  const act = mine ? `data-unclaim="${esc(c.user_id)}" title="Odhlásit se"` : c || locked ? "disabled" : `data-claim="${esc(x.key)}"`;
+  // a Velitel moves people too (Petr 2026-10-25 D39, migration 031): a plain place only -- not an SL, not onto a command
+  // slot. Petr 2026-10-28: no move button, the player himself is carried (drag, or click and click a free place: carry below)
+  const sqd = (cmd || state.me.is_officer) && state.event && isSq(state.event), lift = sqd && c && (cmd || !c.lead);
+  const act = lift ? `data-lift="${esc(c.user_id)}" aria-label="Přesunout ${esc(c.members.name)}" title="Přesunout: táhni na volné místo, nebo klikni a pak klikni na místo"`
+    : mine ? `data-unclaim="${esc(c.user_id)}" title="Odhlásit se"` : c || locked ? "disabled" : `data-claim="${esc(x.key)}"`;
   // an x on my own place too (UAT C-03: on a phone "click your slot to leave" was invisible); the Commander's on anyone's
-  const kick = c && (mine || state.me.is_commander)
+  const kick = c && (mine || leadsOps())
     ? `<button type="button" class="kick" data-unclaim="${esc(c.user_id)}" aria-label="${mine ? "Odhlásit se z místa" : `Odhlásit ${esc(c.members.name)}`}" title="${mine ? "Odhlásit se z místa" : ""}">${cross()}</button>` : "";
-  // the badge, one per squad (011): Operator and up on their own row, the Commander on anyone's (specs/hodnosti H2)
-  const lead = !sq || !c ? "" : mine ? (c.lead ? '<button type="button" class="act lead" data-lead="0">Předat SL</button>'
-      : sq.led || !can ? "" : '<button type="button" class="act lead" data-lead="1">Povedu squad</button>')
-    : !cmd ? "" : c.lead ? `<button type="button" class="slbtn" data-leadfor="${esc(c.user_id)}:0" aria-label="Sundat SL: ${esc(c.members.name)}" title="Sundat SL"><span class="slb">SL</span></button>`
-    : sq.led ? "" : `<button type="button" class="slbtn" data-leadfor="${esc(c.user_id)}:1" aria-label="Dát SL: ${esc(c.members.name)}" title="Dát SL"><span class="slg">SL</span></button>`;
-  // a Velitel moves people too (Petr 2026-10-25 D39, migration 031): a plain place only -- not an SL, not onto a command slot
-  const sqd = (cmd || state.me.is_officer) && state.event && isSq(state.event), movable = c && (cmd || !c.lead);
-  const mv = sqd && movable ? (state.moving === c.user_id
-      ? `<button type="button" class="ib mv" data-move="${esc(c.user_id)}" aria-pressed="true" aria-label="Zrušit přesun" title="Zrušit přesun">${moveIco()}</button>`
-      : `<button type="button" class="ib mv" data-move="${esc(c.user_id)}" aria-label="Přesunout ${esc(c.members.name)}" title="Přesunout">${moveIco()}</button>`)
-    : sqd && !c && state.moving && !locked && (cmd || !need) ? `<button type="button" class="act mvto" data-movehere="${esc(x.key)}" aria-label="Přesunout sem: ${esc(x.label)}">Sem</button>` : "";
-  const drag = sqd && movable ? ` draggable="true" data-drag="${esc(c.user_id)}"` : sqd && !c && (cmd || !need) ? " data-free" : "";
-  return `<li data-key="${esc(x.key)}"${drag}${mine ? ' class="is-me"' : ""}><button type="button" class="rslot" ${act}><span class="lbl">${x.role ? `<span class="rid">${esc(x.role)}</span>` : ""}${esc(x.label)}</span>${who}</button>${lead}${moveto}${mv}${kick}</li>`;
+  const drag = lift ? ` data-drag="${esc(c.user_id)}"` : sqd && !c && !locked && (cmd || !need) ? " data-free" : "";
+  return `<li data-key="${esc(x.key)}"${drag}${mine ? ' class="is-me"' : ""}><button type="button" class="rslot" ${act}><span class="lbl">${x.role ? `<span class="rid">${esc(x.role)}</span>` : ""}${esc(x.label)}</span>${who}</button>${moveto}${kick}</li>`;
 }
 
 function rosterGroup(g, by) {
@@ -295,11 +288,11 @@ function rosterGroup(g, by) {
     <ul>${g.slots.map(x => slotRow(x, by[x.key]).replace(/<\/li>$/, roleOffBtn(g, x, by) + "</li>")).join("")}</ul>${fortressTools(g, by)}</div>`;
 }
 // a free plan role: the Commander switches it off right on its row (the row says what it is, no extra words)
-const roleOffBtn = (g, x, by) => state.me.is_commander && plan && plan.base && x.role && !by[x.key]
+const roleOffBtn = (g, x, by) => leadsOps() && plan && plan.base && x.role && !by[x.key]
   ? `<button type="button" class="rx-off" data-fx="${g.id}:off:${esc(x.role)}" aria-label="Vypnout roli ${esc(x.role)}" title="Vypnout roli">×</button>` : "";
 function fortressTools(g, by) {
   const base = plan && plan.base && plan.base.find(b => b.id === g.id);
-  if (!state.me.is_commander || !base) return "";
+  if (!leadsOps() || !base) return "";
   const free = g.slots.filter(x => !x.role), last = free[free.length - 1], label = (base.slots.find(x => !x.role) || {}).label || "člen";
   const off = base.slots.filter(x => x.role && !g.slots.some(y => y.key === x.key));
   return `<div class="sqtools">
@@ -320,7 +313,7 @@ const leadOf = g => state.claims.find(c => c.lead && squadOf(c.slot_key) === g.i
 // the head. The Commander adds and removes a role's places ("-" only the last and only while free), the last squad
 // when it is empty, and a new squad at the end
 function squadCard(g, by) {
-  const cmd = state.me.is_commander, n = g.slots.filter(x => by[x.key]).length, lead = leadOf(g), sq = { led: !!lead };
+  const cmd = leadsOps(), n = g.slots.filter(x => by[x.key]).length, lead = leadOf(g), sq = { led: !!lead };
   const cw = state.event.doctrine === "cw";  // D33: the same editor for SWARM and Public Ops, only the roles on offer differ
   const roles = squadRoles(cw);
   const lines = roles.map(ro => {
@@ -339,14 +332,28 @@ function squadCard(g, by) {
   const title = cmd ? `<input class="sqname" data-sqname="${g.idx}" value="${esc(g.name)}" maxlength="24" aria-label="Název squadu ${g.idx + 1}">` : `<b>${esc(g.name)}</b>`;
   const free = roles.filter(ro => !g.slots.some(x => x.kit === ro.kit));
   const addRole = cmd && free.length && g.slots.length < 20 ? `<select class="addrole" data-addrole="${g.idx}" aria-label="${esc(g.name)}: přidat roli"><option value="">+ Přidat roli</option>${free.map(ro => `<option value="${esc(ro.kit)}">${esc(ro.label)}</option>`).join("")}</select>` : "";
-  const veli = lead ? `Velí: <span class="who">${esc(lead.members.name)}</span>` : "Velí: nikdo, kdokoli ze squadu si vezme SL";
-  return `<div class="rg sqc"><div class="pg-head">${sym(g.symbol, "sm")}<div>${title}<small class="veli${!lead && n ? " none" : ""}">${veli}</small></div><span class="num">${n}/${g.max}</span>${drop}</div>
-    ${lines}${addRole}</div>`;
+  return `<div class="rg sqc"><div class="pg-head">${sym(g.symbol, "sm")}<div>${title}</div><span class="num">${n}/${g.max}</span>${drop}</div>
+    ${slPlate(g, by, lead, n)}${lines}${addRole}</div>`;
+}
+// the squad's command seat (Petr 2026-10-28: "Veli: nikdo ... by taky mohla vypadat jinak nez text, co zmizi"): a plate
+// under the name, dashed while nobody leads (hostile red once people are in), solid with the SL when someone does; the
+// badge stamps onto it. One per squad (011): a member of the squad from Operator takes it here (specs/hodnosti H2), the
+// SL hands it over here, the Commander picks one of the squad or takes it off
+function slPlate(g, by, lead, n) {
+  const cmd = leadsOps(), me = state.me.user_id, people = g.slots.map(x => by[x.key]).filter(Boolean);
+  const head = `<span class="slp-k" aria-hidden="true">SL</span>`;
+  if (lead) return `<div class="slplate on" data-slq="${g.id}">${head}<img src="${esc(lead.members.avatar_url)}" alt="" loading="lazy"><b class="who" title="Squad leader">${esc(lead.members.name)}</b>
+    ${lead.user_id === me ? '<button type="button" class="act lead" data-lead="0">Předat SL</button>'
+      : cmd ? `<button type="button" class="ib" data-leadfor="${esc(lead.user_id)}:0" aria-label="Sundat SL: ${esc(lead.members.name)}" title="Sundat SL">${cross()}</button>` : ""}</div>`;
+  const take = people.some(c => c.user_id === me) && (cmd || rankAt(state.me, "operator"));
+  return `<div class="slplate ${n ? "need" : "idle"}" data-slq="${g.id}">${head}<span class="who-none">${n ? "Squad nemá SL" : "SL squadu"}</span>
+    ${take ? '<button type="button" class="act lead" data-lead="1">Povedu squad</button>'
+      : cmd && people.length ? `<select class="slpick" data-slpick aria-label="${esc(g.name)}: vybrat SL"><option value="">Vybrat SL</option>${people.map(c => `<option value="${esc(c.user_id)}">${esc(c.members.name)}</option>`).join("")}</select>` : ""}</div>`;
 }
 // the Commander's add plate at the end of the lobby (Petr 2026-10-28): a squad into the first gap, and every vehicle type
 // the operation has none of yet; a type with vehicles keeps its - / + on its own card
 function addPlate() {
-  if (!state.me.is_commander) return "";
+  if (!leadsOps()) return "";
   const r = rosterOf(state.event), gap = r.squads.some(q => !Object.keys(q).length) || r.squads.length < 12;
   const t = D.doktrina.swarm.sestava, none = t.podpora.map((p, ti) => [p, ti]).filter(([p]) => !(r.vehicles[p.kit] || []).length);
   return `<div class="rg sqnew"><p class="sqnew-k">Přidat do sestavy</p><div class="sqnew-b">
@@ -359,7 +366,7 @@ function addPlate() {
 // one vehicle with its crew; the optional seat (Petr 2026-10-22: Tank Gunner, a helicopter's second crew member) closes only free
 function carBox(t, c, by) {
   // the optional seat is a small + / - by the vehicle's name (Petr 2026-10-28: "jenom nejakej malej symbol ... plusko")
-  const seat = () => { if (!state.me.is_commander || t.min === t.seats.length) return "";
+  const seat = () => { if (!leadsOps() || t.min === t.seats.length) return "";
     const on = c.open > t.min, name = t.seats[t.min], busy = on && by[c.slots[c.slots.length - 1].key], what = `${esc(name)}: ${on ? "zavřít" : "otevřít"}`;
     return `<button type="button" class="ib seatt" data-seat="${t.kit}:${c.v}:${on ? -1 : 1}" aria-pressed="${on}" aria-label="${what}" title="${busy ? `${esc(name)} je obsazený` : what}"${busy ? " disabled" : ""}>${on ? minus() : plus()}</button>`; };
   return `<div class="veh" data-veh="${esc(c.slots[0].key)}"><div class="vh">${sym(t.symbol, "sm")}<b class="vn">${esc(c.name)}</b><span class="num">${c.slots.filter(x => by[x.key]).length}/${c.slots.length}</span>${seat()}</div>
@@ -367,18 +374,14 @@ function carBox(t, c, by) {
 }
 function podporaCard(g, by) {
   if (!g.slots.length) return "";  // a vehicle type the operation has none of: the Commander adds it on the add plate
-  const n = g.slots.filter(x => by[x.key]).length;
-  const types = g.vehicles.map(t => {
-    if (g.ctl === false) return `<div class="vtype">${t.cars.map(c => carBox(t, c, by)).join("")}</div>`;  // one tank of several: + / - on the last
-    const more = t.n >= t.max ? `${t.name}: nejvýš ${t.max}` : "";
-    const ctl = state.me.is_commander ? `<div class="sqp">${esc(t.name)}<span class="swctl">
+  const n = g.slots.filter(x => by[x.key]).length, t = g.vehicles[0];  // one vehicle type per card (D20)
+  // the type's - n + sits in the card's head (Petr 2026-10-28: the space the row buttons gave back); tanks: on the last
+  const more = t.n >= t.max ? `${t.name}: nejvýš ${t.max}` : "";
+  const ctl = leadsOps() && g.ctl !== false ? `<span class="swctl">
       <button type="button" class="ib" data-support="${t.ti}:-1" aria-label="Podpora: ubrat ${esc(t.name)}" title="Ubrat ${esc(t.name)}">${minus()}</button>
-      <b>${esc(t.n)}</b><button type="button" class="ib" data-support="${t.ti}:1" aria-label="Podpora: přidat ${esc(t.name)}"${more ? ` disabled title="${esc(more)}"` : ` title="Přidat ${esc(t.name)}"`}>${plus()}</button></span></div>` : "";
-    const cars = t.cars.map(c => carBox(t, c, by)).join("");
-    return ctl || cars ? `<div class="vtype">${ctl}${cars}</div>` : "";
-  }).join("");
-  return `<div class="rg podc"><div class="pg-head">${sym(g.symbol, "sm")}<div><b>${esc(g.name)}</b><small>${esc(g.squad)}</small></div><span class="num">${n}/${g.max}</span></div>
-    <div class="vtypes">${types}</div></div>`;
+      <b>${esc(t.n)}</b><button type="button" class="ib" data-support="${t.ti}:1" aria-label="Podpora: přidat ${esc(t.name)}"${more ? ` disabled title="${esc(more)}"` : ` title="Přidat ${esc(t.name)}"`}>${plus()}</button></span>` : "";
+  return `<div class="rg podc"><div class="pg-head">${sym(g.symbol, "sm")}<div><b>${esc(g.name)}</b><small>${esc(g.squad)}</small></div><span class="num">${n}/${g.max}</span>${ctl}</div>
+    <div class="vtypes"><div class="vtype">${t.cars.map(c => carBox(t, c, by)).join("")}</div></div></div>`;
 }
 
 function viewRoster(s) {
@@ -389,9 +392,9 @@ function viewRoster(s) {
   const ev = state.event;
   if (!ev) return state.evErr ? `${head}${msg}`
     : `${head}<p class="note">Žádná akce není otevřená.</p>${msg}`;
-  const cancel = state.me.is_commander ? cancelEventForm() : "";
+  const cancel = leadsOps() ? cancelEventForm() : "";
   // the map form too: picking a known map or "zatím nevím" keeps the sign-ups, cancelling drops them (threat model N1)
-  if (!s) return `${head}<p class="note">Otevřená akce (${esc(fmtWhen(ev.starts_at))}) je pro mapu ${esc(ev.strategy_id)}, kterou War Room nezná.</p>${msg}${state.me.is_commander ? mapTeamForm(ev) : ""}${cancel}`;
+  if (!s) return `${head}<p class="note">Otevřená akce (${esc(fmtWhen(ev.starts_at))}) je pro mapu ${esc(ev.strategy_id)}, kterou War Room nezná.</p>${msg}${leadsOps() ? mapTeamForm(ev) : ""}${cancel}`;
   const by = Object.fromEntries(state.claims.map(c => [c.slot_key, c]));
   const filled = state.claims.filter(c => s.roster.some(g => g.slots.some(x => x.key === c.slot_key))).length;
   const total = s.roster.reduce((n, g) => n + g.max, 0);
@@ -408,7 +411,7 @@ function viewRoster(s) {
     : myr ? `<p class="mine-kit">Máš místo: <b>${esc(myr.id)} · ${esc(mys.g.name)}</b>${s.nomap ? "" : ` <a class="kitl" href="${roleHref(s, myr)}">Tvoje karta: nákup a kroky</a>`}</p>` : "";
   const miss = s.swarm ? slBar(filled)
     : missing.length
-    ? `<p class="miss">Chybí: ${missing.slice(0, 6).map(r => (n => !n || state.me.is_commander || rankAt(state.me, n)  // a command slot above my rank: named, not offered (022)
+    ? `<p class="miss">Chybí: ${missing.slice(0, 6).map(r => (n => !n || leadsOps() || rankAt(state.me, n)  // a command slot above my rank: named, not offered (022)
       ? `<button type="button" class="rid" data-claim="${esc(r.id)}" title="${esc(r.id)} – ${esc(r.name)}">${esc(r.id)}</button>`
       : `<span class="rid" title="${esc(r.id)} – ${esc(r.name)}, ${n === "veteran" ? "od Veterána" : "od Operátora"}">${esc(r.id)}</span>`)(slotRank(r.id))).join(" ")}${missing.length > 6 ? ` <span class="more">a dalších ${missing.length - 6}</span>` : ""}</p>`
     : '<p class="miss ok">Všechny role z plánu obsazené.</p>';
@@ -419,10 +422,10 @@ function viewRoster(s) {
     <div class="op-fill"><span class="num">${filled} <small>/ ${total}</small></span><span class="gauge" style="--p:${pct}%" aria-hidden="true"></span><small>zapsaných</small></div></div>
     <div class="op-status">${miss}</div>
     <div class="op-me">${mine}${rsvpBar()}</div>
-    ${state.me.is_commander ? `<div class="op-cmd" role="group" aria-label="Příkazy Commandera">${mapTeamForm(ev)}${closeEventForm(s)}<a class="act" href="#/briefing">Protokol briefingu</a>${cancel}</div>` : ""}</div>
+    ${leadsOps() ? `<div class="op-cmd" role="group" aria-label="Příkazy velení">${mapTeamForm(ev)}${closeEventForm(s)}${state.me.is_commander ? '<a class="act" href="#/briefing">Protokol briefingu</a>' : ""}${cancel}</div>` : ""}</div>
     ${msg}
     <div class="ros${s.swarm ? " swarm" : ""}">${s.roster.map(g => g.sq ? squadCard(g, by) : g.vehicles ? podporaCard(g, by) : rosterGroup(g, by)).join("")}${s.swarm ? addPlate() : ""}</div>
-    ${s.base && state.me.is_commander && s.base.length > s.roster.length ? `<div class="sqtools hidden-g">Skryté: ${s.base.filter(b => !s.roster.some(g => g.id === b.id)).map(b =>
+    ${s.base && leadsOps() && s.base.length > s.roster.length ? `<div class="sqtools hidden-g">Skryté: ${s.base.filter(b => !s.roster.some(g => g.id === b.id)).map(b =>
       `<button type="button" class="act sqadd" data-fx="${b.id}:hide:0">+ ${esc(b.name)}</button>`).join("")}</div>` : ""}
     ${nakupBlock(s)}`;
 }
@@ -542,7 +545,7 @@ function nakupBlock(s) {
       `<tr><td>${esc(r.item)}</td><td class="num">${r.n}</td><td>${list(r.komu)}</td><td>${!r.kdo ? "kdokoli" : r.kdo.length ? list(r.kdo) : '<b class="nobuy">nikdo z akce</b>'}</td><td class="num">${r.price == null ? "–" : usd(r.price)}</td></tr>`).join("")}</tbody></table></div>`
       : '<p class="note">Zapsaným nic z minima nechybí.</p>'}
     ${l.bezDat.length ? `<p class="note">Bez dat z Trackeru (nevím, co mají odemčené): ${list(l.bezDat)}. Ať si Tracker synchronizují.</p>` : ""}
-    ${state.me.is_commander ? `<p class="note nocash">Bez peněz (označuješ jen ty, členům se koupí celé minimum): ${state.claims.map(c =>
+    ${leadsOps() ? `<p class="note nocash">Bez peněz (označuje jen velení, členům se koupí celé minimum): ${state.claims.map(c =>
       `<button type="button" class="act" data-nocash="${esc(c.user_id)}:${c.no_cash ? 0 : 1}" aria-pressed="${!!c.no_cash}">${esc((c.members && c.members.name) || "?")}</button>`).join(" ")}</p>` : ""}
     <p class="note">Kdo kupuje pro jiné, potřebuje bednu a vozidlo, kterým ji koupí: ${D.nakup.rezie.map(e => `${esc(e.item)} ${e.price == null ? "" : usd(e.price)}`).join(", ")}.</p></section>`;
 }
@@ -599,6 +602,7 @@ function renderRoster() {
   keepView(el, () => keepFocus(() => { el.innerHTML = akceBody(); }));
   restore();
   markChanges(el);
+  carryMarks();  // a change pushed while a player is carried: the hole and the free places stay lit
 }
 
 // a rebuilt roster keeps the row I was looking at where it was on screen: innerHTML drops the browser's own scroll
@@ -631,12 +635,14 @@ function markChanges(el) {
     if (!was.keys.has(k)) { mark(li, "fx-new", "add"); continue; }
     if (now.by[k] && now.by[k] !== was.by[k]) mark(li, "fx-claim", "claim");
     else if (!now.by[k] && was.by[k]) mark(li, "fx-free", "free");
-    if (now.leads.has(k) && !was.leads.has(k)) mark(li.querySelector(".slb"), "fx-lead", "lead");
+    const plate = el.querySelector(`.slplate[data-slq="${squadOf(k)}"]`);
+    if (now.leads.has(k) && !was.leads.has(k)) { mark(li.querySelector(".slb"), "fx-lead", "lead"); mark(plate, "fx-lead", "lead"); }
+    else if (was.leads.has(k) && !now.leads.has(k) && now.by[k]) mark(plate, "fx-unlead", "unlead");
   }
   for (const v of el.querySelectorAll(".veh[data-veh]")) if (!was.vehs.has(v.dataset.veh)) mark(v, "fx-new", "vehicle");
   if ([...was.keys].some(k => !now.keys.has(k))) fired.add("remove");
   if (now.flash && now.flash !== was.flash) fired.add("error");
-  const cue = ["error", "vehicle", "lead", "claim", "add", "free", "remove"].find(c => fired.has(c));
+  const cue = ["error", "vehicle", "lead", "unlead", "claim", "add", "free", "remove"].find(c => fired.has(c));
   if (cue) sound(cue);
 }
 
@@ -644,13 +650,20 @@ function markChanges(el) {
 let actx = null;
 let soundPref = null;  // private window without localStorage: the toggle still works for this visit
 const soundOn = () => { try { return (localStorage.getItem("kin-sound") || soundPref) !== "off"; } catch { return soundPref !== "off"; } };
-const CUES = {  // [start Hz, end Hz, seconds, wave, delay s]
+const CUES = {  // [start Hz, end Hz, seconds, wave, delay s, peak gain (default: sine .09, else .035)]
   claim: [[520, 880, .07, "square", 0], [1320, 1320, .08, "sine", .07]],
   free: [[660, 330, .16, "triangle", 0]],
   add: [[1800, 1800, .02, "square", 0], [990, 990, .09, "sine", .04]],
   remove: [[440, 220, .1, "square", 0]],
   vehicle: [[80, 150, .26, "sawtooth", 0], [740, 740, .12, "sine", .14]],
-  lead: [[660, 660, .12, "sine", 0], [880, 880, .12, "sine", .07], [1320, 1320, .2, "sine", .14]],
+  // Petr 2026-10-28 ("sound pro oznaceni SL je lackluster"): the badge stamps down (a low thump and a click), then a
+  // rising major call C-E-G-C with the octave ringing on; losing it falls back down
+  lead: [[150, 50, .16, "sine", 0, .3], [2400, 300, .03, "square", 0, .05], [523, 523, .12, "triangle", .08, .12],
+    [659, 659, .12, "triangle", .16, .12], [784, 784, .14, "triangle", .24, .12], [1047, 1047, .45, "triangle", .32, .14], [2094, 2094, .4, "sine", .32, .04]],
+  unlead: [[784, 523, .18, "triangle", 0, .1], [392, 262, .25, "triangle", .1, .1]],
+  lift: [[220, 560, .08, "triangle", 0, .08]],  // a player taken off his place; tick: over a free place; back: put back
+  tick: [[2200, 2200, .015, "square", 0, .012]],
+  back: [[560, 220, .09, "triangle", 0, .06]],
   error: [[150, 120, .2, "square", 0]],
 };
 function sound(name) {
@@ -659,13 +672,13 @@ function sound(name) {
     actx = actx || new (window.AudioContext || window.webkitAudioContext)();
     if (actx.state === "suspended") actx.resume();  // allowed after the first click; before it the cue just stays silent
     const t0 = actx.currentTime;
-    for (const [f0, f1, dur, type, at] of CUES[name]) {
+    for (const [f0, f1, dur, type, at, peak] of CUES[name]) {
       const o = actx.createOscillator(), g = actx.createGain();
       o.type = type;
       o.frequency.setValueAtTime(f0, t0 + at);
       o.frequency.exponentialRampToValueAtTime(f1, t0 + at + dur);
       g.gain.setValueAtTime(0.0001, t0 + at);
-      g.gain.exponentialRampToValueAtTime(type === "sine" ? 0.09 : 0.035, t0 + at + 0.01);
+      g.gain.exponentialRampToValueAtTime(peak || (type === "sine" ? 0.09 : 0.035), t0 + at + 0.01);
       g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + dur);
       o.connect(g).connect(actx.destination);
       o.start(t0 + at);
@@ -866,7 +879,7 @@ const pickFields = (s, ev) => `<label>Mapa <select name="map"><option value="">z
 // one form in Akce for both doctrines (rozhodnuti 8); founding ahead, the map and team are not known yet (specs/akce-mapa-tym)
 let novaKind = "operace";
 function newPanel() {
-  const cmd = state.me.is_commander, op = cmd || rankAt(state.me, "veteran"), tr = cmd || state.me.is_officer || rankAt(state.me, "operator");
+  const cmd = leadsOps(), op = cmd || rankAt(state.me, "veteran"), tr = cmd || state.me.is_officer || rankAt(state.me, "operator");
   const kinds = [["operace", "Operace", "velká akce klanu"], ["trenink", "Trénink", "pro všechny"], ["kurz", "Kurz", "omezený počet míst"]].filter(([k]) => k === "operace" ? op : tr);
   if (!kinds.length) return "";
   const k = kinds.some(x => x[0] === novaKind) ? novaKind : kinds[0][0];
@@ -940,7 +953,7 @@ function trainingRow(tr) {
   const mine = (tr.rsvps.find(r => r.user_id === state.me.user_id) || {}).status;
   // T4: no "Prijdu" on a full course unless I already have a place; the capacity trigger refuses it anyway
   const full = tr.capacity && by.yes.length >= tr.capacity && mine !== "yes";
-  const ctl = state.me.is_commander || tr.created_by === state.me.user_id ? `<details class="t${id}"><summary>Uzavřít nebo zrušit</summary>
+  const ctl = leadsOps() || tr.created_by === state.me.user_id ? `<details class="t${id}"><summary>Uzavřít nebo zrušit</summary>
       ${by.yes.length ? `<fieldset class="atts"><legend>Kdo byl</legend>${tr.rsvps.filter(r => r.status === "yes").map(r =>
         `<label class="att"><input type="checkbox" name="tatt_${esc(r.user_id)}" checked>${esc(r.members.name)}</label>`).join("")}</fieldset>` : ""}
       <button type="button" class="act" data-tclose="${id}:closed">Proběhl, uzavřít</button> <button type="button" class="act" data-tclose="${id}:cancelled">Zrušit</button></details>` : "";
@@ -1010,12 +1023,82 @@ document.addEventListener("change", e => { if (e.target.name === "kind" && e.tar
 document.addEventListener("change", e => { if (e.target.dataset.moveto && e.target.value) moveTo(e.target.value, e.target.dataset.moveto); });
 document.addEventListener("change", e => { if (e.target.dataset.sqname !== undefined) setName(Number(e.target.dataset.sqname), e.target.value); });
 document.addEventListener("change", e => { if (e.target.dataset.addrole !== undefined && e.target.value) setRole(Number(e.target.dataset.addrole), e.target.value, 1); });
+document.addEventListener("change", e => { if (e.target.dataset.slpick !== undefined && e.target.value) giveLead(e.target.value, true); });
 // the Commander drags a member onto a free place (Petr 2026-10-25 C5); "Přesunout" / "Sem" does the same without a mouse
-document.addEventListener("dragstart", e => { const li = e.target.closest?.("li[data-drag]"); if (li) { state.moving = li.dataset.drag; e.dataTransfer.setData("text/plain", li.dataset.drag); } });
-document.addEventListener("dragend", () => { if (state.moving) { state.moving = null; renderRoster(); } });
-document.addEventListener("dragover", e => { if (state.moving && e.target.closest?.("li[data-free]")) e.preventDefault(); });
-document.addEventListener("drop", e => { const li = e.target.closest?.("li[data-free]"); if (!li || !state.moving) return;
-  e.preventDefault(); const uid = state.moving; state.moving = null; moveTo(uid, li.dataset.key); });
+// carrying a player (Petr 2026-10-28: "zvednuti hrace ze slotu, pohyb s hracem mysi, pri najeti mysi na slot, pri
+// pusteni hrace na slot"): a mouse press and drag lifts him, a click or a tap (or Enter) lifts him until the next click;
+// he rides on a card under the pointer, the place he left stays a dashed hole, free places light up and the one under
+// him glows; a free place takes him, anything else (or Esc) puts him back. A phone scrolls as before: there a tap lifts
+let carry = null, pressed = null, swallow = false;
+const FREE = ".ros li[data-free]";
+function carryMarks() {
+  if (!carry) return;
+  document.querySelector(`.ros li[data-key="${CSS.escape(carry.from)}"]`)?.classList.add("lifted");
+  document.querySelectorAll(FREE).forEach(li => li.classList.add("drop-ok"));
+}
+function lift(li, x, y, sticky) {
+  const r = li.getBoundingClientRect(), ghost = document.createElement("div"), w = Math.min(r.width, 300);
+  ghost.className = "carry-ghost";
+  ghost.innerHTML = li.querySelector(".rslot").innerHTML;
+  ghost.querySelector(".lbl")?.remove();  // the player, not his place
+  ghost.setAttribute("aria-hidden", "true");
+  ghost.style.width = `${w}px`;
+  document.body.append(ghost);
+  carry = { uid: li.dataset.drag, from: li.dataset.key, ghost, sticky, dx: Math.min(x - r.left, w - 16), dy: y - r.top, hot: null };
+  document.body.classList.add("carrying");
+  carryMarks();
+  follow(x, y);
+  requestAnimationFrame(() => ghost.classList.add("up"));
+  sound("lift");
+}
+function follow(x, y) {
+  carry.ghost.style.transform = `translate(${x - carry.dx}px, ${y - carry.dy}px)`;
+  const hot = document.elementFromPoint(x, y)?.closest(FREE) || null;
+  if (hot === carry.hot) return;
+  carry.hot?.classList.remove("drop-hot");
+  hot?.classList.add("drop-hot");
+  carry.hot = hot;
+  if (hot) sound("tick");
+}
+function putDown(target) {
+  const c = carry, back = document.querySelector(`.ros li[data-key="${CSS.escape(c.from)}"]`), to = (target || back)?.getBoundingClientRect();
+  carry = null;
+  document.body.classList.remove("carrying");
+  document.querySelectorAll(".ros .lifted, .ros .drop-ok, .ros .drop-hot").forEach(li => li.classList.remove("lifted", "drop-ok", "drop-hot"));
+  c.ghost.classList.add("landing");
+  if (to) { c.ghost.style.transform = `translate(${to.left}px, ${to.top}px)`; c.ghost.style.width = `${to.width}px`; }
+  setTimeout(() => c.ghost.remove(), 220);
+  if (target) moveTo(c.uid, target.dataset.key); else sound("back");
+}
+document.addEventListener("pointerdown", e => {
+  if (carry || e.button !== 0 || e.pointerType === "touch") return;
+  const li = e.target.closest?.(".ros li[data-drag]");
+  pressed = li && e.target.closest(".rslot") ? { li, x: e.clientX, y: e.clientY } : null;
+});
+document.addEventListener("pointermove", e => {
+  if (pressed && !carry && Math.hypot(e.clientX - pressed.x, e.clientY - pressed.y) > 6) {
+    lift(pressed.li, pressed.x, pressed.y, false);
+    document.getSelection()?.removeAllRanges();
+  }
+  if (carry) follow(e.clientX, e.clientY);
+});
+document.addEventListener("pointerup", e => {
+  pressed = null;
+  if (!carry || carry.sticky) return;
+  swallow = true;  // the click this release makes is the drop, not a sign-up
+  putDown(document.elementFromPoint(e.clientX, e.clientY)?.closest(FREE) || null);
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape" && carry) putDown(null); });
+// capture: while a player is carried, the click is the drop; a click on a player lifts him
+document.addEventListener("click", e => {
+  if (swallow) { swallow = false; e.preventDefault(); e.stopPropagation(); return; }
+  if (carry) { e.preventDefault(); e.stopPropagation(); putDown(e.target.closest?.(FREE) || null); return; }
+  const b = e.target.closest?.(".ros [data-lift]");
+  if (!b) return;
+  e.stopPropagation();
+  const li = b.closest("li"), r = li.getBoundingClientRect();
+  lift(li, e.clientX || r.left + 24, e.clientY || r.top + r.height / 2, true);
+}, true);
 
 document.addEventListener("submit", async e => {
   const f = e.target.closest("form[data-form]");
@@ -1199,7 +1282,6 @@ ROLE_MARK.AT = ROLE_MARK.RK; ROLE_MARK.RS = ROLE_MARK.RC; ROLE_MARK.MG = ROLE_MA
 const roleMark = kit => `<svg class="rmark" viewBox="0 0 24 16" aria-hidden="true"><rect x="1" y="1" width="22" height="14"/><path d="${ROLE_MARK[kit] || ""}"/></svg>`;
 const plus = () => '<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 V14 M2 8 H14"/></svg>';
 const minus = () => '<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8 H14"/></svg>';
-const moveIco = () => '<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 5 H13 M10 2 L13 5 L10 8 M14 11 H3 M6 8 L3 11 L6 14"/></svg>';
 const arrow = () => '<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M1 8 H14 M9 3 L14 8 L9 13"/></svg>';
 const cross = () => '<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3 L13 13 M13 3 L3 13"/></svg>';
 const out = () => '<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3 H13 V10 M13 3 L4 12"/></svg>';
@@ -2189,15 +2271,13 @@ function render() {
 }
 
 $app.addEventListener("click", e => {
-  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-kit],[data-role],[data-move],[data-movehere],[data-squad],[data-sqdrop],[data-seat],[data-fx],[data-leadfor],[data-nocash],[data-merit-del],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker],[data-nova],[data-ctask]");
+  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-kit],[data-role],[data-squad],[data-sqdrop],[data-seat],[data-fx],[data-leadfor],[data-nocash],[data-merit-del],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker],[data-nova],[data-ctask]");
   if (state.sqArm != null && !(t && t.dataset.sqdrop)) { state.sqArm = null; renderRoster(); }  // a click elsewhere: no drop
   if (!t) return;
   if (t.dataset.ctask) { const [id, st] = t.dataset.ctask.split(":"); setTask(id, st); return; }
   if (t.dataset.trsvp) { const [id, st] = t.dataset.trsvp.split(":"); rsvpTraining(Number(id), st); return; }
   if (t.dataset.tclose) { t.disabled = true; const [id, st] = t.dataset.tclose.split(":"); closeTraining(Number(id), st); return; }
   if (t.dataset.role) { const [i, kit, d] = t.dataset.role.split(":"); setRole(Number(i), kit, Number(d)); return; }
-  if (t.dataset.move) { state.moving = state.moving === t.dataset.move ? null : t.dataset.move; renderRoster(); return; }
-  if (t.dataset.movehere) { const uid = state.moving; state.moving = null; moveTo(uid, t.dataset.movehere); return; }
   if (t.dataset.squad) { setSquad(t.dataset.squad); return; }
   if (t.dataset.sqdrop) { const i = Number(t.dataset.sqdrop), g = plan.roster.find(q => q.sq && q.idx === i);
     // with people in it the first click only asks (the x turns into "Zrušit? vyhodí n"), the second drops
@@ -2210,7 +2290,7 @@ $app.addEventListener("click", e => {
   if (t.dataset.seat) { const [kit, v, d] = t.dataset.seat.split(":"); setSeat(kit, Number(v), Number(d)); return; }
   if (t.dataset.support) { const [i, d] = t.dataset.support.split(":").map(Number); setSupport(i, d); return; }
   if (t.dataset.lead) {  // the button flips between "Povedu squad" and "Předat SL": keep focus on my row
-    takeLead(t.dataset.lead === "1").then(() => document.querySelector(".ros li.is-me [data-lead], .ros li.is-me .rslot")?.focus({ preventScroll: true }));
+    takeLead(t.dataset.lead === "1").then(() => document.querySelector(".ros .slplate [data-lead], .ros li.is-me .rslot")?.focus({ preventScroll: true }));
     return;
   }
   if (t.dataset.kit) { document.getElementById("kit-" + t.dataset.kit)?.scrollIntoView(); return; }

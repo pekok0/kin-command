@@ -512,9 +512,6 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .rg li.is-me .rslot { background: var(--fr-fill); box-shadow: inset 0 0 0 1px var(--fr); }
 /* SWARM squad (specs/swarm-squady): the fixed core on a solid bracket, the Swarm body on a dashed one (Dashed Outline
    Rule: not fixed) with the Commander's + / - beside its count; SL is a badge on a person, bone like the key chip, never gold */
-.sqc .veli { display: block; margin-top: 5px; font: 500 14px/1.3 var(--sans); letter-spacing: 0; text-transform: none; color: var(--ink-2); }
-.sqc .veli .who { font-weight: 600; color: var(--ink); }
-.sqc .veli.none { color: var(--ho); }
 .sqp { display: flex; align-items: center; gap: 6px; margin: 12px 0 4px; font: 700 12px/1 var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
 .sqp b { font-size: 15px; color: var(--ink); }
 .swctl { display: flex; gap: 6px; margin-left: auto; }
@@ -526,15 +523,13 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .sqc ul.body { border-left-style: dashed; }
 .ros.swarm .rslot, .ros.swarm .kick { min-height: 44px; }
 .ros.swarm .kick { min-width: 44px; }
-.ros.swarm { grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); }  /* label, avatar, nick, SL badge and the kick in one row */
+.ros.swarm { grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); }  /* avatar, nick, SL badge and the kick in one row: no move or SL buttons since 2026-10-28, so 280 px holds it */
 .sqc li { flex-wrap: wrap; }
 .ros.swarm .sqc .rslot .lbl { flex: 0 0 5em; min-width: 0; }  /* names line up under each other */
 .ros.swarm .sqc .rslot .nm { flex: 0 1 auto; }  /* the SL badge right after the name */
 .slb { flex: none; font: 700 13px/1 var(--cond); letter-spacing: .06em; color: var(--ground); background: var(--ink); padding: 4px 5px 3px; }
-.rg li .lead { flex: none; min-height: 44px; margin: 4px 0 2px auto; }
-.rg li .mv, .rg li .mvto { flex: none; min-height: 44px; margin: 4px 0 2px 4px; }
 .ros.swarm .rslot .nm { overflow-wrap: break-word; min-width: 0; }  /* a long nick wraps at words, never cut (Petr 2026-10-18) */
-.rg li[data-drag] { cursor: grab; }
+.rg li[data-drag] .rslot { cursor: grab; touch-action: manipulation; }
 .addrole { display: block; margin: 8px 0 4px; min-height: 44px; font: inherit; color: var(--ink); background: var(--panel-2); border: 1px solid var(--rule); padding: 0 8px; max-width: 100%; }
 .sqname { font: inherit; font-weight: 700; color: var(--ink); background: var(--panel-2); border: 1px solid var(--rule); padding: 2px 6px; min-height: 44px; max-width: 14em; }
 /* the Commander's "Dosadit" on a free command slot (specs/velitelske-sloty V4): a finger-sized select like the form ones */
@@ -955,7 +950,6 @@ h1 { text-shadow: 0 0 28px oklch(0.86 0.15 205 / 0.18); }
 .ros.swarm { background: none; box-shadow: none; padding: 0; }
 .rg .pg-head b { letter-spacing: .04em; text-shadow: 0 0 16px oklch(0.86 0.15 205 / 0.25); }
 .rg .pg-head .num, .ros-head .num { color: var(--fr); text-shadow: 0 0 14px var(--fr-glow); }
-.sqc .veli.none { color: var(--ho); text-shadow: 0 0 12px oklch(0.72 0.19 25 / 0.45); }
 .sqc ul { border-left-color: oklch(0.86 0.15 205 / 0.55); }
 .sqc ul.body { border-left-color: oklch(0.86 0.15 205 / 0.35); }
 .veh { border: 0; background: oklch(0.13 0.03 254 / 0.6); box-shadow: inset 0 0 0 1px var(--rule-soft), inset 0 1px 0 oklch(0.86 0.15 205 / 0.2); }
@@ -1072,7 +1066,7 @@ li.fx-new { animation: fx-unfold 520ms var(--ease) both; }
 .rmark rect { fill: color-mix(in oklch, var(--rc) 14%, transparent); stroke: var(--rc); stroke-width: 1.5; }
 .rmark path { fill: none; stroke: var(--rc); stroke-width: 1.7; stroke-linecap: square; }
 .ro-SW .rmark path { stroke-width: 3; stroke-linecap: round; }
-.ros .sqp { gap: 8px; margin: 14px 0 6px; font-size: 13px; color: var(--rc, var(--ink-3)); }
+.ros .sqp { gap: 8px; margin: 10px 0 4px; font-size: 13px; color: var(--rc, var(--ink-3)); }
 .ros .sqp .rn { flex: 1; min-width: 0; }
 .sqc ul[class*="ro-"] { padding-left: 6px; border-left: 2px solid var(--rc); }
 .ros .swctl { align-items: center; gap: 2px; }
@@ -1080,19 +1074,34 @@ li.fx-new { animation: fx-unfold 520ms var(--ease) both; }
 .ib { display: inline-grid; place-items: center; flex: none; width: 32px; height: 32px; color: var(--ink-2); border: 1px solid transparent; }
 .ib:hover:not(:disabled) { color: var(--fr); border-color: oklch(0.86 0.15 205 / 0.5); background: var(--fr-fill); }
 .ib:disabled { opacity: .35; cursor: default; }
-.ib[aria-pressed="true"].mv { color: var(--ground); background: var(--fr); border-color: var(--fr); }
 .swctl .ib { border-color: var(--rule-soft); }
 .ros.swarm .rg li { flex-wrap: wrap; gap: 0 2px; }
-.ros.swarm .rg li .rslot { flex: 1 1 8em; min-height: 36px; padding: 4px 6px; gap: 8px; }
+.ros.swarm .rg li .rslot { flex: 1 1 8em; min-height: 32px; padding: 3px 6px; gap: 8px; }
+.ros.swarm .rg { padding: 12px 14px; }
 .ros.swarm .kick { min-width: 32px; min-height: 32px; padding: 0; display: inline-grid; place-items: center; }
 .sqc .rslot .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }  /* the role header names it */
-.slbtn { display: inline-grid; place-items: center; flex: none; min-width: 32px; min-height: 32px; }
-.slbtn:hover .slb { background: var(--ink-2); }
-.slg { font: 700 13px/1 var(--cond); letter-spacing: .06em; color: var(--ink-3); border: 1px dashed var(--ink-3); padding: 3px 4px 2px; }
-.slbtn:hover .slg { color: var(--fr); border-color: var(--fr); }
-.rg li .lead { min-height: 32px; margin: 2px 0; padding: 6px 8px 5px; font-size: 12px; }
-.rg li .mvto { min-height: 32px; margin: 2px 0; padding: 6px 10px 5px; }
-.sqc .pg-head { align-items: flex-start; }
+/* the squad's command seat (Petr 2026-10-28): dashed while empty (Dashed Outline Rule), hostile red once the squad has
+   people and no SL, solid with the SL on it; the badge stamps down, the name slides in, a lost SL glitches out */
+.slplate { display: flex; align-items: center; gap: 8px; margin: 8px 0 2px; padding: 4px 8px; min-height: 40px; border: 1px dashed var(--rule); background: oklch(0.13 0.03 254 / 0.5); }
+.slp-k { flex: none; font: 700 13px/1 var(--cond); letter-spacing: .06em; padding: 4px 5px 3px; color: var(--ink-3); border: 1px dashed var(--ink-3); }
+.slplate .who-none { flex: 1; min-width: 0; font: 600 13px/1.2 var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.slplate.need { border-color: oklch(0.72 0.19 25 / 0.7); background: oklch(0.72 0.19 25 / 0.07); }
+.slplate.need .slp-k, .slplate.need .who-none { color: var(--ho); border-color: var(--ho); }
+.slplate.on { border: 1px solid oklch(0.86 0.15 205 / 0.55); background: linear-gradient(90deg, oklch(0.86 0.15 205 / 0.16), oklch(0.86 0.15 205 / 0.03)); }
+.slplate.on .slp-k { color: var(--ground); background: var(--ink); border: 1px solid var(--ink); }
+.slplate img { width: 24px; height: 24px; border-radius: 50%; flex: none; }
+.slplate .who { flex: 1; min-width: 0; font: 700 17px/1.1 var(--cond); letter-spacing: .03em; color: var(--ink); overflow-wrap: anywhere; }
+.slplate .lead { flex: none; margin: 0; min-height: 32px; padding: 6px 8px 5px; font-size: 12px; }
+.slpick { flex: none; max-width: 11em; min-height: 32px; font: 700 13px/1 var(--cond); letter-spacing: .06em; text-transform: uppercase; color: var(--fr); background: transparent; border: 1px solid oklch(0.86 0.15 205 / 0.5); padding: 0 6px; }
+.slplate.fx-lead { animation: sl-seat 900ms var(--ease) both; }
+.slplate.fx-lead .slp-k { animation: fx-stamp 650ms var(--ease) both; }
+.slplate.fx-lead .who { animation: sl-name 700ms var(--ease) 120ms both; }
+.slplate.fx-unlead { animation: fx-free 600ms steps(6, end); }
+@keyframes sl-seat { 0% { box-shadow: inset 0 0 0 2px var(--fr), 0 0 40px 4px var(--fr-glow); filter: brightness(1.6); } 100% { box-shadow: none; filter: none; } }
+@keyframes sl-name { from { clip-path: inset(0 100% 0 0); opacity: .3; } to { clip-path: inset(0); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .slplate.fx-lead, .slplate.fx-lead *, .slplate.fx-unlead { animation: none !important; } }
+.sqc .pg-head, .podc .pg-head { align-items: center; }
+.podc .pg-head .swctl { margin-left: 8px; }
 .sqc .pg-head > div { flex: 1; min-width: 0; }
 .sqname { width: 100%; max-width: 13em; min-height: 32px; padding: 4px 4px 3px; font: 700 18px/1.1 var(--cond); letter-spacing: .04em; text-transform: uppercase;
   color: var(--ink); background: transparent; border: 1px solid transparent; border-bottom: 1px dashed var(--rule); }
@@ -1111,9 +1120,26 @@ li.fx-new { animation: fx-unfold 520ms var(--ease) both; }
 .sqnew .sqadd { color: var(--fr); border-color: var(--fr); }
 /* a finger on the phone: every control of the lobby 44 px (WCAG 2.5.5), the desktop 32 px (2.5.8 asks 24) */
 @media (max-width: 720px) {
-  .ib, .ros.swarm .kick, .slbtn { width: 44px; height: 44px; min-width: 44px; }
-  .ros.swarm .rg li .rslot, .rg li .lead, .rg li .mvto, .addrole, .act.sqx.armed { min-height: 44px; }
+  .ib, .ros.swarm .kick { width: 44px; height: 44px; min-width: 44px; }
+  .ros.swarm .rg li .rslot, .addrole, .act.sqx.armed, .slplate .lead, .slpick { min-height: 44px; }
 }
+/* carrying a player (Petr 2026-10-28): the card lifts off its place and rides under the pointer, the place stays a
+   dashed hole, free places light up and the one under him glows; on the drop the card flies into its place */
+body.carrying, body.carrying * { cursor: grabbing !important; user-select: none; }
+.carry-ghost { position: fixed; left: 0; top: 0; z-index: 1000; pointer-events: none; display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 6px 10px;
+  font-weight: 600; color: var(--ink); background: linear-gradient(90deg, oklch(0.32 0.08 215 / 0.96), oklch(0.22 0.06 240 / 0.96));
+  box-shadow: 0 0 0 1px var(--fr), 0 0 28px -6px var(--fr-glow); opacity: .9; will-change: transform; }
+.carry-ghost.up { box-shadow: 0 0 0 1px var(--fr), 0 22px 40px -14px rgba(0, 0, 0, .85), 0 0 34px -4px var(--fr-glow); opacity: 1; }
+.carry-ghost img { width: 24px; height: 24px; border-radius: 50%; flex: none; }
+.carry-ghost .nm { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.carry-ghost.landing { transition: transform 200ms var(--ease), width 200ms var(--ease), opacity 200ms; opacity: 0; }
+.ros li.lifted .rslot { opacity: .45; background: none !important; box-shadow: inset 0 0 0 1px oklch(0.86 0.15 205 / 0.6) !important; outline: 1px dashed var(--fr); outline-offset: -4px; }
+.ros li.drop-ok .rslot { background: oklch(0.86 0.15 205 / 0.05); box-shadow: inset 0 0 0 1px oklch(0.86 0.15 205 / 0.35); transition: background 120ms, box-shadow 120ms; }
+.ros li.drop-ok .free { border-color: oklch(0.86 0.15 205 / 0.7); color: var(--fr); }
+.ros li.drop-hot .rslot { background: oklch(0.86 0.15 205 / 0.2); box-shadow: inset 0 0 0 2px var(--fr), 0 0 26px -6px var(--fr-glow); }
+.ros li.drop-hot .free { color: var(--ground); background: var(--fr); border-style: solid; }
+@media (prefers-reduced-motion: reduce) { .carry-ghost.landing { transition: none; } }
+
 /* the Commander's tasks (specs/ukoly-velitele): rows between hairlines, kind and age left, the two answers right; on a
    phone the answers are full-width finger buttons under the text */
 .bar nav a .nav-n { margin-left: 5px; padding: 2px 4px 1px; font-size: 12px; color: var(--ground); background: var(--fr); }
