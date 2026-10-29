@@ -1395,6 +1395,8 @@ const roleHref = (s, r) => `#/s/${s.id}/role/${r.id}`;
 const sideLabel = s => `${s.map} · ${s.color}`;
 const SQ = id => D.squads.find(q => q.id === id);
 const classOf = (q, id) => q.classes.find(c => c.id === id);
+// the roles Vybava lists; mapy = only behind the FORTRESS map roles (Petr 2026-10-29, vybava-role-v3 R1), its page stays
+const roles = q => q.classes.filter(c => !c.mapy);
 const OLD_ROLE = { sniper: "recon", spotter: "recon", marksman: "recon", "logistics-ground": "logistics", "logistics-air": "air-logistics" };  // Vybava v3 (D24), Marksman gone (D35)
 const classById = id => { for (const q of D.squads) { const c = classOf(q, id); if (c) return [q, c]; } return []; };
 const classHref = (q, c) => `#/squad/${q.id}/${c.id}`;
@@ -1709,6 +1711,10 @@ function packBag(bag, list) {
   return out.map(e => ({ ...e, qty: e.fill ? Math.max(e.units, e.min || 0) * per(e) : e.drop ? Math.min(e.want, e.units * per(e)) : e.want,
     cut: !!e.drop && e.units * per(e) < e.want }));
 }
+// Petr 2026-10-29 (vybava-role-v3 R2): the ordinary magazine I have (30-35 rounds), not the heavy 50/60 that slows ADS;
+// a weapon without one (SV98 10) takes the biggest I have
+const ordinaryMag = mags => { const own = mags.filter(m => !m.unlock || owned(m.item)), ok = own.filter(m => m.capacity >= 30);
+  return ok.length ? ok.reduce((a, b) => b.capacity < a.capacity ? b : a) : own.at(-1); };
 function myKit(c) {
   const lads = c.ladders || [], entry = lad => { const i = mineIdx(lad); return { lad, st: lad.steps[i] || null, i, g: grade(lad, i), top: lad.steps.at(-1) }; };
   const slots = Object.fromEntries(Object.keys(SLOT_LABEL).map(k => [k, (l => l && entry(l))(lads.find(l => l.slot === k))]));
@@ -1717,7 +1723,7 @@ function myKit(c) {
   const slingOk = !!(slots.backpack && slots.backpack.st && slots.backpack.st.slings);
   const gun = slots.slot1 && slots.slot1.st, gun2 = slingOk && slots.sling ? slots.sling.st : null, store = [], mq = c.mags || { qty: MAGS };
   for (const g of [gun, gun2]) {
-    const mag = g && g.mags && g.mags[g.mags.map(m => !m.unlock || owned(m.item)).lastIndexOf(true)];
+    const mag = g && g.mags && ordinaryMag(g.mags);
     if (mag && mq.qty) store.push({ st: { ...mag, qty: mq.qty, cost: pieceCost(mag, mq.qty) }, g: null, drop: mq.drop });
   }
   for (const lad of lads.filter(l => l.slot === "storage")) {
@@ -1972,13 +1978,13 @@ function viewSquads() {
   return `<header class="unit-head"><div><h1>Výbava</h1><p>Tvůj loadout pro každou roli, podle toho, co máš odemčené</p></div></header>
     <p class="note">Kolik nás co má: <a class="act" href="#/pokryti">Pokrytí rolí</a></p>
     ${trackerBox()}
-    <section class="block"><h2>Role</h2><ul class="cls">${D.squads.flatMap(q => q.classes.map(c => `<li><a href="${classHref(q, c)}"><b>${esc(c.name)}</b></a></li>`)).join("")}</ul></section>`;
+    <section class="block"><h2>Role</h2><ul class="cls">${D.squads.flatMap(q => roles(q).map(c => `<li><a href="${classHref(q, c)}"><b>${esc(c.name)}</b></a></li>`)).join("")}</ul></section>`;
 }
 function viewSquadPage(q) {
   return `<p class="crumb"><a href="#/vybava">Výbava</a> / ${esc(q.name)}</p>
-    <header class="unit-head">${sym(q.symbol, "lg")}<div><h1>${esc(q.name)}</h1><p>${q.classes.length} sub-class · platí pro všechny mapy</p></div></header>
+    <header class="unit-head">${sym(q.symbol, "lg")}<div><h1>${esc(q.name)}</h1><p>${roles(q).length} sub-class · platí pro všechny mapy</p></div></header>
     <p class="goal">${esc(q.goal)}</p><ul class="bullets block" style="margin-top:16px">${q.points.map(x => `<li>${esc(x)}</li>`).join("")}</ul>
-    ${q.classes.map(c => loadoutCard(q, c)).join("")}`;
+    ${roles(q).map(c => loadoutCard(q, c)).join("")}`;
 }
 // ---------- ladders (hub/specs/vybava-zebricky): best step per level range, mine and the next one ----------
 const SRC = { A: "A", B: "B", C: "C", ODVOZENO: "odvozeno" };
@@ -2184,7 +2190,7 @@ function viewCoverage(season, members) {
   return `${head}
     <p class="note">Členů s daty: <b>${users.length}</b>. Kdo nemá propojený ${TRK_LINK}, v počtech chybí (propojení je ve <a href="#/vybava">Výbavě</a>).</p>
     <section class="block"><h2>Sub-classy</h2><table class="data cov"><thead><tr><th>Sub-class</th><th>Cíl</th><th class="num">Mají</th></tr></thead><tbody>
-    ${D.squads.map(q => q.classes.map(c => { const top = keyLadder(c).steps.at(-1);
+    ${D.squads.map(q => roles(q).map(c => { const top = keyLadder(c).steps.at(-1);
       return `<tr><td><a href="${classHref(q, c)}">${esc(q.name)} · ${esc(c.name)}</a></td><td>${esc(top.item)}</td><td class="num"><b>${top.unlock ? users.filter(h => h.has(top.item)).length : users.length}</b></td></tr>`; }).join("")).join("")}
     </tbody></table></section>
     <section class="block"><h2>Kdo má odemčeno</h2><table class="data cov"><thead><tr><th>Předmět</th><th class="num">Mají</th><th>Kdo</th></tr></thead><tbody>
@@ -2229,10 +2235,10 @@ function unlockSection(m, season, have) {
   const own = state.me && state.me.user_id === m.user_id;
   if (!have.size) return `<section class="block"><h2>Odemčeno · ${esc(season.name)}</h2><p class="note">Zatím žádná data z WARDOGS Trackeru.${own ? ' Propoj ho ve <a href="#/vybava">Výbavě</a>.' : ""}</p></section>`;
   // the best step of each sub-class's key ladder this player unlocked (vybava-zebricky v2: everyone can play every class)
-  const rows = D.squads.flatMap(q => q.classes.map(c => { const lad = keyLadder(c), i = lad.steps.map(st => !st.unlock || have.has(st.item)).lastIndexOf(true);
+  const rows = D.squads.flatMap(q => roles(q).map(c => { const lad = keyLadder(c), i = lad.steps.map(st => !st.unlock || have.has(st.item)).lastIndexOf(true);
     return { q, c, st: lad.steps[i], top: i === lad.steps.length - 1 }; })).filter(x => x.st);
   return `<section class="block"><h2>Odemčeno · ${esc(season.name)}</h2>
-    <p class="lede">Odemčené předměty z klanového seznamu: <b>${have.size}</b> · u ${rows.filter(x => x.top).length} z ${D.squads.reduce((a, q) => a + q.classes.length, 0)} sub-class má cíl hlavního žebříčku</p>
+    <p class="lede">Odemčené předměty z klanového seznamu: <b>${have.size}</b> · u ${rows.filter(x => x.top).length} z ${D.squads.reduce((a, q) => a + roles(q).length, 0)} sub-class má cíl hlavního žebříčku</p>
     <ul class="cls">${rows.map(x => `<li><a href="${classHref(x.q, x.c)}"><b>${esc(x.c.name)}</b><span>${esc(x.st.item)}${x.top ? " · cíl" : ""}</span></a></li>`).join("")}</ul></section>`;
 }
 
