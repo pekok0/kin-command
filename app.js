@@ -1664,9 +1664,13 @@ function shopList(s, r, skip = null) {
 const MAGS = 3;  // ponytail: spare magazines per primary as the S1 screenshots had them; per class when Petr wants
 const mineIdx = lad => lad.steps.map(st => !st.unlock || owned(st.item)).lastIndexOf(true);
 const pieceCost = (x, qty) => x.price == null ? 0 : Math.round(x.price * qty / (x.per || 1));
-// the Munice ladder of a class follows my primary: same counts and reasons, rounds of my weapon's calibre
+// the Munice ladder of a class follows my primary: same counts and reasons, rounds of my weapon's calibre and of the same
+// type (FMJ, AP, HP) -- by type, not by place: an AP-only ladder must not turn into FMJ (Petr 2026-10-30, sniper AP only)
+const ammoType = n => (n.match(/\((FMJ|AP|HP)\)/) || [])[1];
 function municeFor(lad, gun) {
-  return gun && gun.ammo && gun.ammo.length ? { ...lad, steps: lad.steps.slice(0, gun.ammo.length).map((st, i) => ({ ...st, ...gun.ammo[i], qty: st.qty, cost: pieceCost(gun.ammo[i], st.qty) })) } : lad;
+  if (!gun || !gun.ammo || !gun.ammo.length) return lad;
+  return { ...lad, steps: lad.steps.flatMap(st => { const a = gun.ammo.find(x => ammoType(x.item) === ammoType(st.item));
+    return a ? [{ ...st, ...a, qty: st.qty, cost: pieceCost(a, st.qty) }] : []; }) };
 }
 // how far my step is from the clan's goal (Petr 2026-10-22: the page must frown when I lack the role's best gear):
 // ok = the goal, mid = better than the start, low = the start or nothing; optional and free slots are not judged
