@@ -530,7 +530,8 @@ function swarmMyKit() {
   const k = D.doktrina.swarm, myc = myPlace(state.claims);
   const slot = myc && plan.roster.flatMap(g => g.slots).find(x => x.key === myc.slot_key);
   const r = slot && k.slots.find(r => r.id === slot.kit), cls = slot && slot.cls;
-  const [cq, cc] = cls ? classById(cls) : r && !r.own_kit ? classById(r.class) : [], skip = cc ? myKit(cc).names : new Set();
+  // a crew seat (own_kit) shows its Vybava role too: Tank, Artilerie (Petr 2026-10-29), the slot is the vehicle's kit
+  const [cq, cc] = cls ? classById(cls) : r && r.class ? classById(r.class) : [], skip = cc ? myKit(cc).names : new Set();
   // CW buys by the Vybava role, the SWARM base is SWARM's (Petr 2026-10-25: "porad sleduje doktrinu swarm")
   const cw = state.event.doctrine === "cw";
   return `<section class="block" id="swarm-kit"><h2>Tvůj nákup</h2>${cc ? loadoutCard(cq, cc, "h3") : ""}${r && r.own_kit || cw ? "" : kitBase(k, skip)}
@@ -2427,10 +2428,8 @@ function render() {
     return;
   }
   const [h, qs = ""] = location.hash.replace(/^#/, "").split("?");
-  if (!h) {
-    const [sid, rid] = (me.get() || "/").split("/"), s = S(sid);
-    if (s && roleOf(s, rid)) { location.replace(`#/s/${sid}/role/${rid}`); return; }
-  }
+  // no redirect to "Moje role" any more: a role kept from an old FORTRESS event hid the home page for good (Juro, Petr
+  // 2026-10-29); "Moje role" stays a link in the nav
   const p = h.split("/").filter(Boolean);
   if (p[0] === "historie") { location.replace("#/akce"); return; }  // links in Discord debrief threads
   let html, active = null, title = "KIN War Room";
