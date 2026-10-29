@@ -1984,8 +1984,7 @@ function ladderBlock(lad, lv) {
     <ol class="lad-steps">${lad.steps.map((st, i) => { const can = i > mine && reach[i] && !have[i];
       return `<li class="st${i === mine ? " mine" : ""}${can ? " can" : ""}${i === next ? " next" : ""}${i > mine && !reach[i] ? " locked" : ""}">
       ${itemIcon(st.icon)}<span class="st-n">${esc(st.item)}</span><span class="st-u">${st.unlock ? `${esc(st.unlock.track)} ${st.unlock.level} · ${usd(st.unlock.cash)}` : "hned"}</span>
-      <span class="st-src" title="Síla zdroje · počet zdrojů">${SRC[st.source]} · ${st.n}</span>${i === mine ? '<span class="st-tag">Tvůj</span>' : can ? `<span class="st-tag can" title="Máš level, chybí odemknout za ${usd(st.unlock.cash)}">Odemkni</span>` : ""}</li>`; }).join("")}</ol>
-    <details class="lad-why"><summary>Proč</summary><dl>${lad.steps.map(st => `<dt>${esc(st.item)}</dt><dd>${esc(st.why)}</dd>`).join("")}</dl>${lad.note ? `<p class="note">${esc(lad.note)}</p>` : ""}</details></div>`;
+      <span class="st-src" title="Síla zdroje · počet zdrojů">${SRC[st.source]} · ${st.n}</span>${i === mine ? '<span class="st-tag">Tvůj</span>' : can ? `<span class="st-tag can" title="Máš level, chybí odemknout za ${usd(st.unlock.cash)}">Odemkni</span>` : ""}</li>`; }).join("")}</ol></div>`;  // no "Proc" (Petr 2026-10-30)
 }
 function ladderSection(c) {
   if (!c.ladders || !c.ladders.length) return "";
@@ -2006,7 +2005,7 @@ function doplnkyBlocks(lad) {
       <ol class="lad-steps">${s.items.map((x, i) => `<li class="st${mine(x, i) ? " mine" : ""}">${itemIcon(x.icon)}<span class="st-n">${esc(x.item)}</span><span class="st-u">${x.unlock ? `${esc(x.unlock.track)} ${x.unlock.level} · ${usd(x.unlock.cash)}` : "hned"}</span>
         <span class="st-src">${s.podle_mapy ? "Podle mapy" : i ? `Náhrada ${i}` : "Hlavní"}</span>${mine(x, i) ? '<span class="st-tag">Tvůj</span>' : ""}</li>`).join("")}</ol>
       ${s.note ? `<p class="note">${esc(s.note)}</p>` : ""}${k ? "" : `<p class="note">${b.note ? esc(b.note) + " " : ""}Zdroj: ${esc(b.source)}.</p>`}
-      ${s.items.some(x => x.why) ? `<details class="lad-why"><summary>Proč</summary><dl>${s.items.map(x => `<dt>${esc(x.item)}</dt><dd>${esc(x.why || "")}</dd>`).join("")}</dl></details>` : ""}</div>`;
+</div>`;
   }).join("")).join("");
 }
 

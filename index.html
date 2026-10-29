@@ -672,7 +672,7 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 /* N-04 (UAT 2026-10-22): phone touch targets of at least 32 px for standalone links and disclosures */
 @media (max-width: 720px) {
   .bar nav a { display: inline-flex; align-items: center; min-height: 40px; }
-  .lad-why > summary, .rk-all > summary { display: flex; align-items: center; min-height: 40px; }
+  .rk-all > summary { display: flex; align-items: center; min-height: 40px; }
   #app h2 > a, .hp-links a, .tasks a { display: inline-flex; align-items: center; min-height: 36px; }
   #app a.rid, #app button.rid { display: inline-flex; align-items: center; justify-content: center; min-height: 32px; min-width: 32px; }
   .ros .kick { min-height: 40px; min-width: 40px; }
@@ -780,11 +780,6 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .st-tag.can { color: var(--fr); background: none; box-shadow: inset 0 0 0 1px var(--fr); }
 .st.next { border-style: dashed; border-color: oklch(0.86 0.15 205 / 0.55); }
 .st.locked:not(.next) { opacity: .55; }
-.lad-why summary { margin-top: 10px; font: 600 13px/1 var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); cursor: pointer; }
-.lad-why dl { margin-top: 8px; display: grid; grid-template-columns: minmax(90px, max-content) 1fr; gap: 4px 12px; font-size: 14px; }
-.lad-why dt { font-weight: 600; color: var(--ink-2); }
-.lad-why dd { color: var(--ink-2); }
-@media (max-width: 480px) { .lad-why dl { grid-template-columns: 1fr; } .lad-why dd { margin-bottom: 6px; } }
 
 /* WARDOGS Tracker import (specs/odemceno v2): one lit plate on Výbava, role levels as a read-out row */
 .trk { margin-top: 16px; padding: 16px 18px; background: var(--brackets), var(--plate-bg); box-shadow: var(--plate-lift); }
