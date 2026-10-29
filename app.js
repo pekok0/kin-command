@@ -109,7 +109,7 @@ async function loadEvent() {
     // are a list of their own and never state.event
     const [op, tr] = await Promise.all([
       sb.from("events").select("id, strategy_id, doctrine, variant, squad_swarm, squad_support, roster, starts_at, open_to_hosts, leader:members!events_created_by_fkey(name)").eq("status", "open").eq("kind", "operace").order("starts_at"),
-      sb.from("events").select("id, kind, topic, title, description, capacity, starts_at, created_by, leader:members!events_created_by_fkey(name), rsvps(user_id, status, members(name, avatar_url, discord_id))")
+      sb.from("events").select("id, kind, topic, title, description, capacity, invited, starts_at, created_by, leader:members!events_created_by_fkey(name), rsvps(user_id, status, members(name, avatar_url, discord_id))")
         .eq("status", "open").neq("kind", "operace").order("starts_at"),
     ]);
     if (op.error) throw op.error;
@@ -1002,7 +1002,7 @@ const pickFields = (s, ev) => `<label>Mapa <select name="map"><option value="">z
 let novaKind = "operace";
 function newPanel() {
   const cmd = leadsOps(), op = cmd || rankAt(state.me, "veteran"), tr = cmd || state.me.is_officer || rankAt(state.me, "operator");
-  const kinds = [["operace", "Operace", "velká akce klanu"], ["trenink", "Trénink", "pro všechny"], ["kurz", "Kurz", "omezený počet míst"]].filter(([k]) => k === "operace" ? op : tr);
+  const kinds = [["operace", "Operace", "velká akce klanu"], ["trenink", "Trénink", "klan nebo pozvaní"], ["kurz", "Kurz", "omezený počet míst"]].filter(([k]) => k === "operace" ? op : tr);
   if (!kinds.length) return "";
   const k = kinds.some(x => x[0] === novaKind) ? novaKind : kinds[0][0];
   return `<details class="nova" id="nova"${state.novaFlash ? " open" : ""}><summary class="act">+ Nová akce</summary><div class="vbar seg" role="group" aria-label="Typ nové akce">${kinds.map(([id, l, sub]) =>
@@ -1079,7 +1079,7 @@ function trainingRow(tr) {
       ${by.yes.length ? `<fieldset class="atts"><legend>Kdo byl</legend>${tr.rsvps.filter(r => r.status === "yes").map(r =>
         `<label class="att"><input type="checkbox" name="tatt_${esc(r.user_id)}" checked>${esc(r.members.name)}</label>`).join("")}</fieldset>` : ""}
       <button type="button" class="act" data-tclose="${id}:closed">Proběhl, uzavřít</button> <button type="button" class="act" data-tclose="${id}:cancelled">Zrušit</button></details>` : "";
-  return `<li class="tr"><p class="tr-k"><span class="ref">${esc(label(KINDS, tr.kind))}</span>${esc(label(TOPICS, tr.topic))}</p>
+  return `<li class="tr"><p class="tr-k"><span class="ref">${esc(label(KINDS, tr.kind))}</span>${esc(label(TOPICS, tr.topic))}${tr.invited ? "<span>· Jen pro pozvané</span>" : ""}</p>
     <h3>${esc(tr.title)}</h3>
     <p class="tr-m"><time datetime="${esc(tr.starts_at)}">${esc(fmtWhen(tr.starts_at))}</time> · Vede <b>${esc(tr.leader ? tr.leader.name : "?")}</b> · Přijde <b>${trCount(tr)}</b></p>
     ${tr.description ? `<p class="tr-d">${esc(tr.description)}</p>` : ""}
@@ -1096,16 +1096,31 @@ function newTrainingForm(kind) {
     <label>Začátek <input type="datetime-local" name="starts" required min="${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}T00:00"></label>
     <label class="cap"${kind === "kurz" ? "" : " hidden"}>Počet míst <input type="number" name="capacity" min="2" max="12" value="8" required${kind === "kurz" ? "" : " disabled"}></label>
     <label class="wide">Krátký popis <textarea name="description" maxlength="500" rows="2"></textarea></label>
+    <label class="att wide"><input type="checkbox" name="private"> Jen pro pozvané (ostatní ho neuvidí)</label>
+    <fieldset class="atts invl" hidden><legend>Koho zveš</legend>${state.clan ? state.clan.filter(m => m.user_id !== state.me.user_id).map(m =>
+      `<label class="att"><input type="checkbox" name="inv_${esc(m.user_id)}">${esc(m.name)}</label>`).join("") : '<p class="note">Načítám členy…</p>'}</fieldset>
     <button type="submit" class="act">Vypsat</button></form>`;
 }
-// a course has places, a training does not: the field shows and is sent only for a course
-const capToggle = f => { const off = f.elements.kind.value !== "kurz"; f.querySelector(".cap").hidden = off; f.elements.capacity.disabled = off; };
+// a course has places, a training does not: the field shows and is sent only for a course; a private one (043) lists
+// the clan to invite from, loaded the first time it is ticked
+const capToggle = f => { const off = f.elements.kind.value !== "kurz"; f.querySelector(".cap").hidden = off; f.elements.capacity.disabled = off;
+  f.querySelector(".invl").hidden = !f.elements.private.checked; if (f.elements.private.checked && state.clan === undefined) loadClan(); };
+// a failed load leaves the list empty until a reload (a retry from the next render would loop)
+async function loadClan() {
+  state.clan = null;
+  const { data, error } = await sb.from("members").select("user_id, name").eq("active", true).order("name");
+  state.clan = error ? [] : data;
+  if (error) state.novaFlash = "Seznam členů se nepodařilo načíst, obnov stránku.";
+  renderRoster();
+}
 
 // T2: the Commander and officers; the database refuses anyone else, and an operation from an officer
 async function createTraining(f) {
   const v = Object.fromEntries(new FormData(f)), kind = v.kind === "kurz" ? "kurz" : "trenink";
+  const invited = f.elements.private.checked ? [...f.querySelectorAll('input[name^="inv_"]:checked')].map(x => x.name.slice(4)) : null;
+  if (invited && !invited.length) { state.novaFlash = "Vyber, koho zveš."; return; }
   const { error } = await sb.from("events").insert({ kind, topic: v.topic, title: v.title.trim(), starts_at: new Date(v.starts).toISOString(),
-    description: v.description.trim() || null, capacity: kind === "kurz" ? Number(v.capacity) : null });
+    description: v.description.trim() || null, capacity: kind === "kurz" ? Number(v.capacity) : null, invited });
   state.novaFlash = !error ? null : error.code === "42501" ? "Trénink nebo kurz vypíše člen od hodnosti Operátor." : saveErr(error);
   if (!error) { f.reset(); capToggle(f); }  // the next one starts from an empty form
 }
@@ -1141,7 +1156,7 @@ function newHint(f) {
   if (b) b.textContent = f.dataset.form === "new" ? newLabel(f.elements.doctrine.value, s) : saveLabel(s);
 }
 document.addEventListener("change", e => { if (["doctrine", "map", "team"].includes(e.target.name) && ["new", "mapteam"].includes(e.target.form?.dataset.form)) newHint(e.target.form); });
-document.addEventListener("change", e => { if (e.target.name === "kind" && e.target.form?.dataset.form === "training") capToggle(e.target.form); });
+document.addEventListener("change", e => { if (["kind", "private"].includes(e.target.name) && e.target.form?.dataset.form === "training") capToggle(e.target.form); });
 document.addEventListener("change", e => { if (e.target.dataset.moveto && e.target.value) moveTo(e.target.value, e.target.dataset.moveto); });
 document.addEventListener("change", e => { if (e.target.dataset.sqname !== undefined) setName(Number(e.target.dataset.sqname), e.target.value); });
 document.addEventListener("change", e => { if (e.target.dataset.addrole !== undefined && e.target.value) setRole(Number(e.target.dataset.addrole), e.target.value, 1); });
