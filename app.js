@@ -61,7 +61,7 @@ async function onAuth(session) {
     try { back = sessionStorage.getItem(BACK); sessionStorage.removeItem(BACK); } catch { /* storage blocked */ }
     if (back && back !== location.hash) location.hash = back;
   }
-  const { data, error } = await sb.from("members").select("user_id, discord_id, name, avatar_url, is_commander, is_officer, rank")
+  const { data, error } = await sb.from("members").select("user_id, discord_id, name, avatar_url, is_commander, is_officer, is_sl, rank")
     .eq("user_id", session.user.id).maybeSingle();
   if (error) throw error;
   if (!data) { state.error = "Nejsi ověřený člen KIN. Přihlas se znovu."; await sb.auth.signOut(); return; }
@@ -205,7 +205,7 @@ function subscribe() {
 
 // sq = the SWARM squad of the row ({ led }), else undefined: only squads have the SL badge (specs/swarm-squady)
 // ranks (Petr 2026-10-22, specs/hodnosti, 019): the Discord role decides, the database enforces it
-const RANKS = [["rekrut", "Rekrut", "zápis na akce"], ["operator", "Operátor", "SL v kterékoli doktríně, tréninky a kurzy"],
+const RANKS = [["rekrut", "Rekrut", "zápis na akce"], ["operator", "Operátor", "tréninky a kurzy"],
   ["veteran", "Veterán", "zakládá a vede operace"], ["velitel", "Velitel", "vede klan s Commanderem"]];
 const rankIdx = r => Math.max(0, RANKS.findIndex(x => x[0] === r));
 const rankAt = (m, r) => !!m && rankIdx(m.rank) >= rankIdx(r);
@@ -345,15 +345,15 @@ function squadCard(g, by) {
 }
 // the squad's command seat (Petr 2026-10-28: "Veli: nikdo ... by taky mohla vypadat jinak nez text, co zmizi"): a plate
 // under the name, dashed while nobody leads (hostile red once people are in), solid with the SL when someone does; the
-// badge stamps onto it. One per squad (011): a member of the squad from Operator takes it here (specs/hodnosti H2), the
-// SL hands it over here, the Commander picks one of the squad or takes it off
+// badge stamps onto it. One per squad (011): a member of the squad with the Discord role Squad Leader takes it here (041,
+// Petr 2026-10-29), the SL hands it over here, the Commander or a Velitel picks one of the squad or takes it off
 function slPlate(g, by, lead, n) {
   const cmd = leadsOps(), me = state.me.user_id, people = g.slots.map(x => by[x.key]).filter(Boolean);
   const head = `<span class="slp-k" aria-hidden="true">SL</span>`;
   if (lead) return `<div class="slplate on" data-slq="${g.id}">${head}<img src="${esc(lead.members.avatar_url)}" alt="" loading="lazy"><b class="who" title="Squad leader">${esc(lead.members.name)}</b>
     ${lead.user_id === me ? '<button type="button" class="act lead" data-lead="0">Předat SL</button>'
       : cmd ? `<button type="button" class="ib" data-leadfor="${esc(lead.user_id)}:0" aria-label="Sundat SL: ${esc(lead.members.name)}" title="Sundat SL">${cross()}</button>` : ""}</div>`;
-  const take = people.some(c => c.user_id === me) && (cmd || rankAt(state.me, "operator"));
+  const take = people.some(c => c.user_id === me) && (cmd || state.me.is_sl);
   return `<div class="slplate ${n ? "need" : "idle"}" data-slq="${g.id}">${head}<span class="who-none">${n ? "Squad nemá SL" : "SL squadu"}</span>
     ${take ? '<button type="button" class="act lead" data-lead="1">Povedu squad</button>'
       : cmd && people.length ? `<select class="slpick" data-slpick aria-label="${esc(g.name)}: vybrat SL"><option value="">Vybrat SL</option>${people.map(c => `<option value="${esc(c.user_id)}"><img src="${esc(c.members.avatar_url)}" alt=""><span>${esc(c.members.name)}</span></option>`).join("")}</select>` : ""}</div>`;
