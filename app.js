@@ -267,6 +267,9 @@ async function addMerit(f) {
 
 // command slots of the FORTRESS plans by key, like slot_rank in the database (022, specs/velitelske-sloty)
 // 039: the lobby's Velení places only for the command (Commander, Velitel)
+// 042 (Petr 2026-10-29): a command place (Velení) beside one ordinary place; "my place" is the ordinary one when I hold both
+const isCmd = k => /^SW-CMD[0-9]+$/.test(k);
+const myPlace = (claims, uid = state.me.user_id) => claims.find(c => c.user_id === uid && !isCmd(c.slot_key)) || claims.find(c => c.user_id === uid);
 const slotRank = k => k === "CMD" ? "veteran" : /^AS[0-9]+-V$/.test(k) ? "operator" : /^SW-CMD[1-4]$/.test(k) ? "velitel" : null;
 const rankLock = n => n === "velitel" ? "jen velení" : n === "veteran" ? "od Veterána" : "od Operátora";
 function slotRow(x, c, sq) {
@@ -282,10 +285,10 @@ function slotRow(x, c, sq) {
   // slot. Petr 2026-10-28: no move button, the player himself is carried (drag, or click and click a free place: carry below)
   const sqd = (cmd || state.me.is_officer) && state.event && isSq(state.event), lift = sqd && c && (cmd || !c.lead);
   const act = lift ? `data-lift="${esc(c.user_id)}" aria-label="Přesunout ${esc(c.members.name)}" title="Přesunout: táhni na volné místo, nebo klikni a pak klikni na místo"`
-    : mine ? `data-unclaim="${esc(c.user_id)}" title="Odhlásit se"` : c || locked ? "disabled" : `data-claim="${esc(x.key)}"`;
+    : mine ? `data-unclaim="${esc(x.key)}" title="Odhlásit se"` : c || locked ? "disabled" : `data-claim="${esc(x.key)}"`;
   // an x on my own place too (UAT C-03: on a phone "click your slot to leave" was invisible); the Commander's on anyone's
   const kick = c && (mine || leadsOps())
-    ? `<button type="button" class="kick" data-unclaim="${esc(c.user_id)}" aria-label="${mine ? "Odhlásit se z místa" : `Odhlásit ${esc(c.members.name)}`}" title="${mine ? "Odhlásit se z místa" : ""}">${cross()}</button>` : "";
+    ? `<button type="button" class="kick" data-unclaim="${esc(x.key)}" aria-label="${mine ? "Odhlásit se z místa" : `Odhlásit ${esc(c.members.name)}`}" title="${mine ? "Odhlásit se z místa" : ""}">${cross()}</button>` : "";
   const drag = lift ? ` data-drag="${esc(c.user_id)}"` : sqd && !c && !locked && (cmd || !need) ? " data-free" : "";
   return `<li data-key="${esc(x.key)}"${drag}${mine ? ' class="is-me"' : ""}><button type="button" class="rslot" ${act}><span class="lbl">${x.role ? `<span class="rid">${esc(x.role)}</span>` : ""}${esc(x.label)}</span>${who}</button>${moveto}${kick}</li>`;
 }
@@ -430,7 +433,7 @@ function viewRoster(s) {
   // first 6 only: glanceable at a briefing and fewer chips to hit by mistake on a phone (a tap moves your slot)
   // my slot's shopping list one tap away (denbler 2026-10-19 "at si kazdy hned najde svoje"): SWARM below in Akce,
   // Top defence on my role card of the map
-  const myc = state.claims.find(c => c.user_id === state.me.user_id);
+  const myc = myPlace(state.claims);
   const mys = myc && s.roster.flatMap(g => g.slots.map(x => ({ g, x }))).find(o => o.x.key === myc.slot_key);
   const myr = mys && !s.swarm && mys.x.role && roleOf(s, mys.x.role);
   const mine = !mys ? "" : s.swarm
@@ -505,7 +508,7 @@ function opCards() {
   if (!state.ops.length) return `<section class="block opl-sec"><h2>Operace</h2>${state.evErr ? `<p class="err">${LOAD_ERR}</p>` : '<p class="note">Teď není otevřená žádná operace.</p>'}</section>`;
   return `<section class="block opl-sec"><h2>Operace</h2><div class="opl">${state.ops.map(ev => {
     const s = planOf(ev), total = s ? s.roster.reduce((n, g) => n + g.max, 0) : 0, n = ev.claims.length;
-    const mine = ev.claims.find(c => c.user_id === state.me.user_id), said = (ev.rsvps.find(r => r.user_id === state.me.user_id) || {}).status;
+    const mine = myPlace(ev.claims), said = (ev.rsvps.find(r => r.user_id === state.me.user_id) || {}).status;
     const on = state.focusId === ev.id;
     return `<a class="opc${on ? " on" : ""}" href="#/akce/${ev.id}"${on ? ' aria-current="true"' : ""}>
       <span class="opc-k">${esc(docName(ev.doctrine))}${ev.open_to_hosts ? " · otevřená hostům" : ""}</span>${docEmblem(isSq(ev) ? ev.doctrine : "defence", "sm")}
@@ -524,7 +527,7 @@ function buildOrder(s) {
 
 // the base and my slot's kit; every role's kit is in Doktrina (rozhodnuti 8: not the same list in two places)
 function swarmMyKit() {
-  const k = D.doktrina.swarm, myc = state.claims.find(c => c.user_id === state.me.user_id);
+  const k = D.doktrina.swarm, myc = myPlace(state.claims);
   const slot = myc && plan.roster.flatMap(g => g.slots).find(x => x.key === myc.slot_key);
   const r = slot && k.slots.find(r => r.id === slot.kit), cls = slot && slot.cls;
   const [cq, cc] = cls ? classById(cls) : r && !r.own_kit ? classById(r.class) : [], skip = cc ? myKit(cc).names : new Set();
@@ -628,7 +631,7 @@ function renderEvBar() {
   const items = !state.me || here ? [] : [...state.ops.map(ev => ({ ev, op: true })), ...state.trainings.map(ev => ({ ev, op: false }))]
     .sort((a, b) => a.ev.starts_at.localeCompare(b.ev.starts_at));
   bar.innerHTML = !items.length ? "" : `<nav class="evrail" aria-label="Otevřené akce">${items.map(({ ev, op }, i) => {
-    const mine = op && ev.claims.find(c => c.user_id === state.me.user_id), said = (ev.rsvps.find(r => r.user_id === state.me.user_id) || {}).status;
+    const mine = op && myPlace(ev.claims), said = (ev.rsvps.find(r => r.user_id === state.me.user_id) || {}).status;
     const st = mine ? `Máš místo: ${esc(mine.slot_label)}` : said ? esc((RSVP.find(x => x[0] === said) || [, said])[1]) : "Odpověz, jestli přijdeš";
     return `<a class="evt${i ? "" : " next"}${mine || said ? "" : " need"}" href="${op ? `#/akce/${ev.id}` : "#/akce"}">
       <span class="evt-k">${op ? `Operace · ${esc(docName(ev.doctrine))}${ev.open_to_hosts ? " · otevřená hostům" : ""}` : `${esc(label(KINDS, ev.kind))} · ${esc(ev.title)}`}</span>
@@ -788,10 +791,12 @@ renderBg();
 async function claim(key) {
   const s = plan;  // the page may change while saving (render() resets plan off roster pages, Viktor #029)
   const g = s.roster.find(g => g.slots.some(x => x.key === key)), slot = g.slots.find(x => x.key === key);
-  const { error } = await sb.from("claims").upsert(
-    // SWARM: the role, not "Squad 2 · Raketomet" (stats count labels as roles, Viktor #005)
-    { event_id: state.event.id, slot_key: key, slot_label: s.swarm ? slot.stat : `${g.name} · ${slot.label}`, user_id: state.me.user_id, lead: false },
-    { onConflict: "event_id,user_id" });
+  // SWARM: the role, not "Squad 2 · Raketomet" (stats count labels as roles, Viktor #005)
+  const uid = state.me.user_id, row = { slot_key: key, slot_label: s.swarm ? slot.stat : `${g.name} · ${slot.label}`, lead: false };
+  // 042: a place of the same kind moves (ordinary to ordinary, Velení to Velení), the other kind is added beside it
+  const had = state.claims.find(c => c.user_id === uid && isCmd(c.slot_key) === isCmd(key));
+  const { error } = had ? await sb.from("claims").update(row).eq("event_id", state.event.id).eq("user_id", uid).eq("slot_key", had.slot_key)
+    : await sb.from("claims").insert({ event_id: state.event.id, user_id: uid, ...row });
   await loadEvent();
   if (error && error.code === "23505") {
     const c = state.claims.find(c => c.slot_key === key);
@@ -810,17 +815,18 @@ async function claim(key) {
 // the map after sign-ups, and a card of the old map would have the member study the wrong plan on the briefing
 // (map back to "zatim nevim": no card; a role picked by hand on another map stays)
 function syncMyRole() {
-  const s = planOf(state.event), c = s && state.claims.find(c => c.user_id === state.me.user_id);
+  const s = planOf(state.event), c = s && myPlace(state.claims);
   const slot = c && s.roster.flatMap(g => g.slots).find(x => x.key === c.slot_key);
   if (!slot?.role) return;
   const want = s.nomap ? null : `${s.id}/${slot.role}`, [, rid] = (me.get() || "/").split("/");
   if (me.get() !== want && (want || rid === slot.role)) { me.set(want); renderNav(navActive); }
 }
 
-async function unclaim(userId) {
-  const s = planOf(state.event), c = userId === state.me.user_id && state.claims.find(c => c.user_id === userId);
-  const slot = c && s && s.roster.flatMap(g => g.slots).find(x => x.key === c.slot_key);
-  const { error } = await sb.from("claims").delete().eq("event_id", state.event.id).eq("user_id", userId);
+async function unclaim(key) {  // one place (042: the command one and the ordinary one leave apart)
+  const s = planOf(state.event), c = state.claims.find(c => c.slot_key === key);
+  if (!c) return loadEvent();
+  const slot = c.user_id === state.me.user_id && s && s.roster.flatMap(g => g.slots).find(x => x.key === c.slot_key);
+  const { error } = await sb.from("claims").delete().eq("event_id", state.event.id).eq("slot_key", key).eq("user_id", c.user_id);
   state.flash = !error ? null : error.code === "42501" ? "Akce už je uzavřená." : saveErr(error);
   // leaving my place drops "Moje role" that came from it (UAT C-04); a role picked by hand elsewhere stays
   if (!error && slot?.role && me.get() === `${s.id}/${slot.role}`) { me.set(null); renderNav(navActive); }
@@ -949,31 +955,34 @@ function setFortress(gid, what, arg) {
 
 // the Commander puts the badge on someone else (019 claims_lead_commander; only the badge on another's row)
 // the Commander moves a member's place onto a command slot (022: the database lets him change only that on another's row)
-async function moveTo(uid, key) {
+async function moveTo(uid, key, from = myPlace(state.claims, uid)?.slot_key) {
   const g = plan.roster.find(g => g.slots.some(x => x.key === key)), slot = g.slots.find(x => x.key === key);
   const { data, error } = await sb.from("claims").update({ slot_key: key, slot_label: `${g.name} · ${slot.label}`, lead: false })
-    .eq("event_id", state.event.id).eq("user_id", uid).select("slot_key");
+    .eq("event_id", state.event.id).eq("user_id", uid).eq("slot_key", from).select("slot_key");
   state.flash = error ? (error.code === "23505" ? "Místo už někdo obsadil." : saveErr(error)) : !data.length ? "Přesun se nepodařilo uložit: akce už není otevřená." : null;
   await loadEvent();
   renderRoster();
 }
 async function giveLead(uid, on) {
-  const { data, error } = await sb.from("claims").update({ lead: on }).eq("event_id", state.event.id).eq("user_id", uid).select("slot_key");
+  const { data, error } = await sb.from("claims").update({ lead: on }).eq("event_id", state.event.id).eq("user_id", uid)
+    .eq("slot_key", myPlace(state.claims, uid)?.slot_key).select("slot_key");
   state.flash = error ? (error.code === "23505" ? "Squad už SL má." : saveErr(error)) : !data.length ? "SL se nepodařilo uložit: akce už není otevřená." : null;
   await loadEvent();
 }
 // the Commander marks a member without cash (033: only he may change no_cash); the shopping list buys him the minimum
 async function setNoCash(uid, on) {
-  const { data, error } = await sb.from("claims").update({ no_cash: on }).eq("event_id", state.event.id).eq("user_id", uid).select("slot_key");
+  const { data, error } = await sb.from("claims").update({ no_cash: on }).eq("event_id", state.event.id).eq("user_id", uid)
+    .eq("slot_key", myPlace(state.claims, uid)?.slot_key).select("slot_key");
   state.flash = error ? saveErr(error) : !data.length ? "Značku se nepodařilo uložit: akce už není otevřená." : null;
   await loadEvent();
 }
 // the SL badge on my own row (S4-S5); one per squad: the unique index claims_one_lead refuses a second (23505)
 async function takeLead(on) {
   const uid = state.me.user_id;
-  const { data, error } = await sb.from("claims").update({ lead: on }).eq("event_id", state.event.id).eq("user_id", uid).select("slot_key");
+  const { data, error } = await sb.from("claims").update({ lead: on }).eq("event_id", state.event.id).eq("user_id", uid)
+    .eq("slot_key", myPlace(state.claims)?.slot_key).select("slot_key");
   await loadEvent();
-  const mine = state.claims.find(c => c.user_id === uid);
+  const mine = myPlace(state.claims);
   const other = mine && state.claims.find(c => c.lead && c.user_id !== uid && squadOf(c.slot_key) === squadOf(mine.slot_key));
   state.flash = error ? (error.code === "23505" ? `Squad už vede ${other ? other.members.name : "někdo jiný"}.` : saveErr(error))
     : !data.length ? "SL se nepodařilo uložit: akce už není otevřená." : state.evErr ? state.flash : null;
@@ -1181,7 +1190,7 @@ function putDown(target) {
   c.ghost.classList.add("landing");
   if (to) { c.ghost.style.transform = `translate(${to.left}px, ${to.top}px)`; c.ghost.style.width = `${to.width}px`; }
   setTimeout(() => c.ghost.remove(), 220);
-  if (target) { pinY = { y: scrollY, until: Date.now() + 2500 }; moveTo(c.uid, target.dataset.key); } else sound("back");
+  if (target) { pinY = { y: scrollY, until: Date.now() + 2500 }; moveTo(c.uid, target.dataset.key, c.from); } else sound("back");
 }
 document.addEventListener("pointerdown", e => {
   if (carry || e.button !== 0 || e.pointerType === "touch") return;
@@ -1481,7 +1490,7 @@ function homeEvent() {
   const next = tr ? `<a class="trnext" href="#/akce"><span class="ref">${esc(label(KINDS, tr.kind))}</span><span>${esc(tr.title)} · ${esc(fmtWhen(tr.starts_at))} · přijde ${trCount(tr)}</span></a>` : "";
   if (!ev) return (state.evErr ? `<p class="err home-ev">${LOAD_ERR}</p>` : '<p class="note home-ev">Teď není otevřená žádná akce.</p>') + next;
   const more = state.ops.filter(x => x.id !== ev.id).map(x => `<a class="trnext" href="#/akce/${x.id}"><span class="ref">Operace</span><span>${esc(docName(x.doctrine))} · ${esc(fmtWhen(x.starts_at))}</span></a>`).join("");
-  const mine = state.claims.find(c => c.user_id === state.me.user_id);
+  const mine = myPlace(state.claims);
   const said = (state.rsvps || []).find(r => r.user_id === state.me.user_id);
   const status = mine ? `Máš místo: ${esc(mine.slot_label)}` : said ? `Tvoje odpověď: ${esc((RSVP.find(x => x[0] === said.status) || [, said.status])[1])}` : "Zatím bez odpovědi a bez místa: otevři sestavu";
   return `<a class="cont evc" href="#/akce/${ev.id}"><span class="big">Operace</span><span>${esc(fmtWhen(ev.starts_at))} · ${sideOf(ev.strategy_id, NOPICK)} · ${esc(docName(ev.doctrine))}<small>${status}</small></span></a>${more}${next}`;
