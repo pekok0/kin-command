@@ -137,7 +137,6 @@ async function loadEvent() {
     console.error(e);
     state.evErr = true; state.flash = LOAD_ERR;
   }
-  syncMyRole();  // outside try: a bug here must not show up as a connection outage (OWASP 2026-10-20 L2)
   // the lobby I looked at was closed or cancelled meanwhile: its address shows the history (closed) or Akce
   if (state.focusId && !state.ops.some(e => e.id === state.focusId) && (state.opsLoaded || state.evErr)) { state.focusId = null; render(); return; }
   renderRoster();
@@ -806,31 +805,16 @@ async function claim(key) {
     : slotRank(key) ? `${slot.label}: ${slotRank(key) === "velitel" ? "jen pro velení" : `až ${rankLock(slotRank(key))}`}.` : "Akce už je uzavřená.";
   else {
     if (!state.evErr) state.flash = null;  // saved, but the reload failed: keep the outage message
-    if (slot.role && !s.nomap) { me.set(`${s.id}/${slot.role}`); renderNav(navActive); }  // "Moje role" needs a map's card
   }
   renderRoster();
   if (state.flash) document.querySelector(".ros-msg")?.scrollIntoView({ block: "nearest" });
 }
 
-// "Moje role" follows my slot on the open event's current map (review 2026-10-20 M1): the Commander picks or changes
-// the map after sign-ups, and a card of the old map would have the member study the wrong plan on the briefing
-// (map back to "zatim nevim": no card; a role picked by hand on another map stays)
-function syncMyRole() {
-  const s = planOf(state.event), c = s && myPlace(state.claims);
-  const slot = c && s.roster.flatMap(g => g.slots).find(x => x.key === c.slot_key);
-  if (!slot?.role) return;
-  const want = s.nomap ? null : `${s.id}/${slot.role}`, [, rid] = (me.get() || "/").split("/");
-  if (me.get() !== want && (want || rid === slot.role)) { me.set(want); renderNav(navActive); }
-}
-
 async function unclaim(key) {  // one place (042: the command one and the ordinary one leave apart)
-  const s = planOf(state.event), c = state.claims.find(c => c.slot_key === key);
+  const c = state.claims.find(c => c.slot_key === key);
   if (!c) return loadEvent();
-  const slot = c.user_id === state.me.user_id && s && s.roster.flatMap(g => g.slots).find(x => x.key === c.slot_key);
   const { error } = await sb.from("claims").delete().eq("event_id", state.event.id).eq("slot_key", key).eq("user_id", c.user_id);
   state.flash = !error ? null : error.code === "42501" ? "Akce už je uzavřená." : saveErr(error);
-  // leaving my place drops "Moje role" that came from it (UAT C-04); a role picked by hand elsewhere stays
-  if (!error && slot?.role && me.get() === `${s.id}/${slot.role}`) { me.set(null); renderNav(navActive); }
   await loadEvent();
 }
 
@@ -1290,7 +1274,8 @@ document.addEventListener("click", e => {
   else if (e.target.closest("[data-logout]")) sb.auth.signOut();
 });
 const $app = document.getElementById("app");
-const KEY = "wrd.role";
+// "Moje role" is gone (Petr 2026-10-29): it came only from FORTRESS map events and kept old cards in front of members
+try { localStorage.removeItem("wrd.role"); } catch { /* storage blocked: nothing kept */ }
 let cur = null;    // current strategy
 // the roster Akce signs people up to: the open event's map plan (Top defence) or the SWARM canvas (specs/akce-swarm);
 // only Akce has one (Petr 2026-10-19, specs/akce-flow rozhodnuti 8)
@@ -1383,10 +1368,6 @@ function pickVariant(s, qs) {
 const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]))
   .replace(/ -&gt; /g, " → ").replace(/ - /g, " – ");  // content stays ASCII, display gets real arrows and dashes
 const usd = n => "$" + n.toLocaleString("cs-CZ");
-const me = {
-  get() { try { return localStorage.getItem(KEY); } catch { return null; } },
-  set(v) { try { v ? localStorage.setItem(KEY, v) : localStorage.removeItem(KEY); } catch { /* storage blocked: page still works */ } },
-};
 const S = id => D.strategies.find(s => s.id === id);
 const roleOf = (s, id) => s.roles.find(r => r.id === id);
 const groupOf = (s, id) => s.groups.find(g => g.id === id);
@@ -1576,11 +1557,9 @@ const NAV_TILES = [["akce", "Akce", "Operace, tréninky, zápis a lobby"], ["map
 function homeMe() {
   if (!state.me) return "";
   const r = trk || {}, lv = r.levels ? TRACKS.filter(n => n in r.levels).map(n => `<span>${n} <b>${Number(r.levels[n]) || 0}</b></span>`).join("") : "";
-  const mine = me.get(), [sid, rid] = (mine || "/").split("/"), ms = S(sid), mr = ms && roleOf(ms, rid);
   return `<section class="hp-mod hp-me"><h2>Ty</h2><a class="hp-who" href="#/hrac/${esc(state.me.discord_id)}"><img src="${esc(state.me.avatar_url)}" alt=""><b>${esc(state.me.name)}</b><span>Tvůj profil</span></a>
     ${trk === undefined ? "" : r.status === "ok" ? `<p class="trk-lv">${lv}</p><a class="act" href="#/vybava">Tvůj loadout ve Výbavě</a>`
-      : '<p class="need">Nemáš propojený WARDOGS Tracker: bez něj ti Výbava neukáže, co máš.</p><a class="act" href="#/vybava">Propojit Tracker</a>'}
-    ${mr ? `<a class="cont" href="${roleHref(ms, mr)}"><span class="big">${esc(mr.id)}</span><span>Tvoje role na akci<small>${esc(mr.name)} · ${esc(sideLabel(ms))}</small></span></a>` : ""}</section>`;
+      : '<p class="need">Nemáš propojený WARDOGS Tracker: bez něj ti Výbava neukáže, co máš.</p><a class="act" href="#/vybava">Propojit Tracker</a>'}</section>`;
 }
 function viewHome() {
   const groups = [...new Set((D.odkazy || []).map(x => x.group))];
@@ -2016,12 +1995,14 @@ function ladderSection(c) {
 function doplnkyBlocks(lad) {
   const guns = lad.steps.map(st => st.item);
   return (D.doplnky || []).filter(b => b.weapons.some(w => guns.includes(w))).map(b => b.slots.map((s, k) => {
-    const mine = s.items.findIndex(x => !x.unlock || !!(haveSet && haveSet.has(x.item)));
+    // podle_mapy (Petr 2026-10-29: optics 1.5x or 2.5x by the map): equal choices, each one I have is mine
+    const own = x => !x.unlock || !!(haveSet && haveSet.has(x.item)), first = s.items.findIndex(own);
+    const mine = (x, i) => s.podle_mapy ? own(x) : i === first;
     return `<div class="lad dop"><div class="lad-h"><span class="sl">${esc(s.slot)} · ${esc(b.weapons.join(", "))}</span></div>
-      <ol class="lad-steps">${s.items.map((x, i) => `<li class="st${i === mine ? " mine" : ""}">${itemIcon(x.icon)}<span class="st-n">${esc(x.item)}</span><span class="st-u">${x.unlock ? `${esc(x.unlock.track)} ${x.unlock.level} · ${usd(x.unlock.cash)}` : "hned"}</span>
-        <span class="st-src">${i ? `Náhrada ${i}` : "Hlavní"}</span>${i === mine ? '<span class="st-tag">Tvůj</span>' : ""}</li>`).join("")}</ol>
+      <ol class="lad-steps">${s.items.map((x, i) => `<li class="st${mine(x, i) ? " mine" : ""}">${itemIcon(x.icon)}<span class="st-n">${esc(x.item)}</span><span class="st-u">${x.unlock ? `${esc(x.unlock.track)} ${x.unlock.level} · ${usd(x.unlock.cash)}` : "hned"}</span>
+        <span class="st-src">${s.podle_mapy ? "Podle mapy" : i ? `Náhrada ${i}` : "Hlavní"}</span>${mine(x, i) ? '<span class="st-tag">Tvůj</span>' : ""}</li>`).join("")}</ol>
       ${s.note ? `<p class="note">${esc(s.note)}</p>` : ""}${k ? "" : `<p class="note">${b.note ? esc(b.note) + " " : ""}Zdroj: ${esc(b.source)}.</p>`}
-      <details class="lad-why"><summary>Proč</summary><dl>${s.items.map(x => `<dt>${esc(x.item)}</dt><dd>${esc(x.why)}</dd>`).join("")}</dl></details></div>`;
+      ${s.items.some(x => x.why) ? `<details class="lad-why"><summary>Proč</summary><dl>${s.items.map(x => `<dt>${esc(x.item)}</dt><dd>${esc(x.why || "")}</dd>`).join("")}</dl></details>` : ""}</div>`;
   }).join("")).join("");
 }
 
@@ -2269,12 +2250,8 @@ const NAV = [["akce", "Akce"], ["mapy", "Mapy"], ["vybava", "Výbava"], ["doktri
 const navCmd = () => !state.me || !state.me.is_commander ? [] : [["moje-ukoly", "Úkoly", state.cmdTasks ? state.cmdTasks.filter(x => x.state === "open").length : 0]];
 function renderNav(active) {
   navActive = active;
-  const mine = me.get(), [msid, mrid] = (mine || "/").split("/"), ms = S(msid), mr = ms && roleOf(ms, mrid);
-  // "Moje role" first and current on my own card: a phone shows ~136 px of the sideways nav (Viktor UAT #005)
-  const onMine = mr && location.hash === roleHref(ms, mr);
   document.getElementById("nav").innerHTML =
-    (mr ? `<a class="mine" href="${roleHref(ms, mr)}"${onMine ? ' aria-current="page"' : ""}>Moje role<b>${esc(mr.id)}</b></a>` : "") +
-    [...NAV, ...navCmd()].map(([k, l, n]) => `<a href="#/${k}"${!onMine && active === k ? ' aria-current="page"' : ""}>${l}${n ? `<b class="nav-n">${n}</b>` : ""}</a>`).join("");
+    [...NAV, ...navCmd()].map(([k, l, n]) => `<a href="#/${k}"${active === k ? ' aria-current="page"' : ""}>${l}${n ? `<b class="nav-n">${n}</b>` : ""}</a>`).join("");
   navToCurrent();
 }
 
@@ -2401,10 +2378,8 @@ async function loadBriefing() {
 }
 
 // phones scroll the nav sideways: keep the current page's link in view (again after #who changes width)
-// "Moje role" is first: keep it in view and scroll only when the current link is fully hidden (Viktor #024)
 const navToCurrent = () => {
   const n = document.getElementById("nav"), a = n.querySelector("[aria-current]");
-  if (n.querySelector("a.mine")) n.scrollLeft = 0;
   if (a && a.getBoundingClientRect().left >= n.getBoundingClientRect().right) a.scrollIntoView({ block: "nearest", inline: "nearest" });
 };
 
@@ -2428,14 +2403,12 @@ function render() {
     return;
   }
   const [h, qs = ""] = location.hash.replace(/^#/, "").split("?");
-  // no redirect to "Moje role" any more: a role kept from an old FORTRESS event hid the home page for good (Juro, Petr
-  // 2026-10-29); "Moje role" stays a link in the nav
   const p = h.split("/").filter(Boolean);
   if (p[0] === "historie") { location.replace("#/akce"); return; }  // links in Discord debrief threads
   let html, active = null, title = "KIN War Room";
   cur = null; trace = null; plan = null;
   if (p[0] !== "akce") { state.focusId = null; focusEvent(); }
-  state.drawer = null;  // a panel belongs to the page it was opened on  // elsewhere the nearest operation (home card, bar, Moje role)
+  state.drawer = null;  // a panel belongs to the page it was opened on  // elsewhere the nearest operation (home card, bar)
   if (p[0] === "s" && S(p[1])) {
     const s = S(p[1]); cur = s; active = "mapy"; curVariant = pickVariant(s, qs);
     const r = p[2] === "role" && roleOf(s, p[3]), g = p[2] === "squad" && groupOf(s, p[3]);
