@@ -158,6 +158,9 @@ button.rid[aria-pressed="true"] { background: var(--fr); color: var(--ground); }
 .tabs a { font: 600 16px/1 var(--cond); letter-spacing: .07em; text-transform: uppercase; text-decoration: none; color: var(--ink-3); padding: 12px 14px 11px; white-space: nowrap; }
 .tabs a:hover { color: var(--ink); }
 .tabs a[aria-current] { color: var(--ink); background: var(--panel); box-shadow: inset 0 -2px 0 var(--fr); }
+/* Vycvik (Petr 2026-10-29 "jeden velkej tab ... druhy velkej tab"): BCT and ACT as two wide halves under the doctrine tabs */
+.vy-tabs { margin-top: 10px; }
+.vy-tabs a { flex: 1 1 0; text-align: center; font-size: 19px; padding: 16px 10px 15px; white-space: normal; }
 
 /* ---- plátno ---- */
 .intent { display: grid; grid-template-columns: 120px 1fr; gap: 16px; padding: 18px 0; border-bottom: 1px solid var(--rule-soft); }

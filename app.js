@@ -209,11 +209,9 @@ const RANKS = [["rekrut", "Rekrut", "zápis na akce"], ["operator", "Operátor",
   ["veteran", "Veterán", "zakládá a vede operace"], ["velitel", "Velitel", "vede klan s Commanderem"]];
 const rankIdx = r => Math.max(0, RANKS.findIndex(x => x[0] === r));
 const rankAt = (m, r) => !!m && rankIdx(m.rank) >= rankIdx(r);
-// specs/vycvik-draft (Petr 2026-10-27): the Vycvik section is a draft from Veteran up, its row 'vycvik' too (034)
 // 038 (Petr 2026-10-28 "Wampalimu dej stejne moznosti kolem akci jako me"): a Velitel runs every event like the
 // Commander; the Commander's own (his tasks, merits, the briefing protocol) stay his
 const leadsOps = () => !!state.me && (state.me.is_commander || state.me.is_officer);
-const vycvikOk = () => !!state.me && (state.me.is_commander || rankAt(state.me, "veteran"));
 // what the next rank takes; Veteran also merits for the clan, which the Commander judges
 const NEXT = { rekrut: [["Odehrané akce", "ops", 5]], operator: [["Odehrané akce", "ops", 10], ["Tréninky a kurzy", "trainings", 5]] };
 function rankCard(m, prog, merits) {
@@ -1547,7 +1545,7 @@ const HUD = `<svg class="hud" viewBox="0 0 200 200" aria-hidden="true"><circle c
   <path class="h3" d="M100 6 A94 94 0 0 1 194 100"/><path class="h3 b" d="M100 194 A94 94 0 0 1 6 100"/>
   <g class="ticks">${Array.from({ length: 36 }, (_, i) => `<line x1="100" y1="${i % 3 ? 9 : 4}" x2="100" y2="14" transform="rotate(${i * 10} 100 100)"/>`).join("")}</g></svg>`;
 const NAV_TILES = [["akce", "Akce", "Operace, tréninky, zápis a lobby"], ["mapy", "Mapy", "Battle plan podle týmu a zóny"],
-  ["vybava", "Výbava", "Tvůj loadout a co odemknout"], ["doktrina", "Doktrína", "Jak klan hraje"], ["vycvik", "Výcvik", "Draft: BCT, drily a formace"], ["pokryti", "Pokrytí", "Kdo co má odemčené"]];
+  ["vybava", "Výbava", "Tvůj loadout a co odemknout"], ["doktrina", "Doktrína", "Jak klan hraje"], ["vycvik", "Výcvik", "Basic a Advanced Combat Training"], ["pokryti", "Pokrytí", "Kdo co má odemčené"]];
 function homeMe() {
   if (!state.me) return "";
   const r = trk || {}, lv = r.levels ? TRACKS.filter(n => n in r.levels).map(n => `<span>${n} <b>${Number(r.levels[n]) || 0}</b></span>`).join("") : "";
@@ -1566,7 +1564,7 @@ function viewHome() {
     <div class="hp-grid">
       <section class="hp-mod hp-ev"><h2>Další akce</h2><div id="home-ev">${homeEvent()}</div></section>
       ${homeMe()}
-      <section class="hp-mod hp-nav"><h2>Kam dál</h2><ul class="hp-tiles">${NAV_TILES.filter(([k]) => k !== "vycvik" || vycvikOk()).map(([k, l, sub]) => `<li><a href="#/${k}"><b>${l}</b><span>${sub}</span></a></li>`).join("")}</ul></section>
+      <section class="hp-mod hp-nav"><h2>Kam dál</h2><ul class="hp-tiles">${NAV_TILES.map(([k, l, sub]) => `<li><a href="#/${k}"><b>${l}</b><span>${sub}</span></a></li>`).join("")}</ul></section>
       ${groups.length ? `<section class="hp-mod hp-links"><h2>Užitečné odkazy</h2>${groups.map(g => `<h3>${esc(g)}</h3><ul>${D.odkazy.filter(x => x.group === g).map(x =>
         `<li><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.name)}${out()}</a>${x.note ? `<small>${esc(x.note)}</small>` : ""}</li>`).join("")}</ul>`).join("")}</section>` : ""}
       <details class="hp-mod howto"${matchMedia("(max-width: 720px)").matches ? "" : " open"}><summary><h2 id="h-start">Jak to tu funguje${arrow()}</h2></summary><ol class="proc">
@@ -1844,14 +1842,14 @@ function viewSwarm(k) {
 }
 
 // Petr 2026-10-25 (D17): two doctrines, Fun (SWARM) and CW (Clan War); FORTRESS is gone from the menu
-function viewDoktrina(tab) {
+function viewDoktrina(tab, sub) {
   const k = D.doktrina, cur = ["cw", "vycvik"].includes(tab) ? tab : "swarm";
-  const tabs = [["swarm", `Fun: ${k.swarm.title}`], ["cw", `PO: ${k.cw.title}`], ...vycvikOk() ? [["vycvik", "Výcvik"]] : []];
+  const tabs = [["swarm", `Fun: ${k.swarm.title}`], ["cw", `PO: ${k.cw.title}`], ["vycvik", "Výcvik"]];
   return `
     <div class="narrow">
     <header class="unit-head"><div><h1>Doktrína</h1><p>Platí pro všechny mapy a barvy. Kterou hrajeme, rozhodne Commander před zápasem.</p></div></header>
     <nav class="tabs" aria-label="Doktrína">${tabs.map(([path, label]) => `<a href="#/doktrina${path && "/" + path}"${path === cur ? ' aria-current="page"' : ""}>${esc(label)}</a>`).join("")}</nav>
-    ${cur === "cw" ? viewCw(k.cw) : cur === "vycvik" ? viewVycvik() : viewSwarm(k)}
+    ${cur === "cw" ? viewCw(k.cw) : cur === "vycvik" ? viewVycvik(sub) : viewSwarm(k)}
     </div>`;
 }
 
@@ -2018,16 +2016,15 @@ function applyTrace() {
 
 // ---------- vycvik (karty kresli ../vycvik/build.py do docs/vycvik/) ----------
 const wv = (png, w) => png.replace(/\.png$/, `-${w}.webp`);  // smaller copies for the page; the PNG is for Discord
-function viewVycvik() {
-  if (!vycvikOk()) return '<p class="note">Výcvik je zatím rozpracovaný, vidí ho jen hodnosti od Veterána výš.</p>';
-  const v = state.vycvik;
-  if (!v) return v === undefined ? '<p class="note">Načítám…</p>' : '<p class="err">Výcvik se nenačetl, obnov stránku (F5).</p>';
-  return `<p><span class="draft">DRAFT</span> Rozpracované, vidí jen Veterán, Velitel a Commander.</p>
-    <article class="proto">${v.zamer}${v.bct}<h2>Drily na komunikaci</h2><p>Podklad k bloku B: komunikace na síti.</p>${v.drily}</article>
-    <p class="lede">Pěchotní taktika pro všechny mapy.</p>
-    ${v.lessons.map(l => `<section class="block"><h2>${esc(l.name)}</h2><p class="lede">${esc(l.intro)}</p>
-      <ol class="drill">${l.cards.map(c => `<li><a class="pic" href="${esc(c.file)}" target="_blank" rel="noopener"><img src="${esc(wv(c.file, 1600))}" srcset="${esc(wv(c.file, 800))} 800w, ${esc(wv(c.file, 1600))} 1600w, ${esc(wv(c.file, 2400))} 2400w" sizes="(min-width: 1360px) 1280px, 100vw" width="2400" height="1500" loading="lazy" alt="${esc(c.title)}: ${esc(c.sub)}"></a>
-        <div class="cap"><b>${esc(c.title)}</b><span>${esc(c.sub)}</span><a class="dl" href="${esc(c.file)}" download>PNG pro Discord</a></div></li>`).join("")}</ol></section>`).join("")}`;
+// Petr 2026-10-29: every member goes through the Basic Combat Training first, then the Advanced (a draft for now); the
+// BCT is the shared record the trainer opens at the start and everyone comes back to, so it is in the row 'hub'
+function viewVycvik(sub) {
+  const v = D.vycvik, act = sub === "act";
+  const cards = v.lessons.map(l => `<ol class="drill">${l.cards.map(c => `<li><a class="pic" href="${esc(c.file)}" target="_blank" rel="noopener"><img src="${esc(wv(c.file, 1600))}" srcset="${esc(wv(c.file, 800))} 800w, ${esc(wv(c.file, 1600))} 1600w, ${esc(wv(c.file, 2400))} 2400w" sizes="(min-width: 1360px) 1280px, 100vw" width="2400" height="1500" loading="lazy" alt="${esc(c.title)}: ${esc(c.sub)}"></a>
+        <div class="cap"><b>${esc(c.title)}</b><span>${esc(c.sub)}</span><a class="dl" href="${esc(c.file)}" download>PNG pro Discord</a></div></li>`).join("")}</ol>`).join("");
+  return `<nav class="tabs vy-tabs" aria-label="Výcvik"><a href="#/vycvik"${act ? "" : ' aria-current="page"'}>Basic Combat Training</a><a href="#/vycvik/act"${act ? ' aria-current="page"' : ""}>Advanced Combat Training</a></nav>
+    ${act ? `<p><span class="draft">DRAFT</span> Rozpracované, finalizuje se po BCT.</p><article class="proto">${v.act}</article>`
+      : `<article class="proto">${v.bct.replace("<p>[[formace]]</p>", cards)}</article>`}`;
 }
 
 // ---------- historie (uzavřené akce, hráči; jen pro přihlášené členy, data chrání RLS) ----------
@@ -2256,14 +2253,6 @@ function viewAkce() {
     <section class="sestava" id="sestava">${akceBody()}</section>
     ${histShell(sb && state.me ? '<p class="note">Načítám odehrané akce…</p>' : "")}`;
 }
-// the Vycvik draft (specs/vycvik-draft): the row 'vycvik' gives a member below Veteran no row (034); loaded once,
-// false = failed (the page says reload)
-async function loadVycvik() {
-  const { data, error } = await sb.from("content").select("data").eq("id", "vycvik").maybeSingle();
-  if (error) console.error(error);
-  state.vycvik = data && data.data || false;
-  if (["#/vycvik", "#/doktrina/vycvik"].includes(location.hash)) render();
-}
 // opening an operation unlocks it (Petr 2026-10-28: "jako herni menu ... nacitalo akci ... animace s vasim animovanym
 // logem ... jako otevirajici se zamek, vic otacejicich se prvku ... cool, ale zaroven slick ... od kliku po nastup a
 // odchod"): an iris opens from the clicked card, the crest's three rings spin and lock in one by one like a dial, the pins
@@ -2436,9 +2425,8 @@ function render() {
     const q = SQ(p[1]), c = classOf(q, Object.hasOwn(OLD_ROLE, p[2]) ? OLD_ROLE[p[2]] : p[2]); active = "vybava";
     if (c) { html = viewClass(q, c); title = `${c.name} · KIN`; } else { html = viewSquadPage(q); title = `${q.name} · KIN`; }
   } else if (p[0] === "doktrina" || p[0] === "vycvik") {
-    const tab = p[0] === "vycvik" ? "vycvik" : p[1];
-    html = viewDoktrina(tab); active = "doktrina"; title = (tab === "cw" ? "Public Ops" : tab === "vycvik" ? "Výcvik" : "SWARM") + " · KIN";
-    if (tab === "vycvik" && sb && vycvikOk() && !state.vycvikAsked) { state.vycvikAsked = true; setTimeout(loadVycvik); }
+    const tab = p[0] === "vycvik" ? "vycvik" : p[1], sub = p[0] === "vycvik" ? p[1] : p[2];
+    html = viewDoktrina(tab, sub); active = "doktrina"; title = (tab === "cw" ? "Public Ops" : tab === "vycvik" ? (sub === "act" ? "Advanced Combat Training" : "Basic Combat Training") : "SWARM") + " · KIN";
   } else if (p[0] === "akce" && (!p[1] || /^\d+$/.test(p[1]) && (!state.opsLoaded && !state.evErr || state.ops.some(e => e.id === +p[1])))) {
     state.focusId = p[1] ? +p[1] : null; focusEvent();
     plan = planOf(state.event); if (plan && !plan.swarm) curVariant = state.event.variant || pickVariant(plan, qs);
