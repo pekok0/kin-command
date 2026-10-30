@@ -237,7 +237,9 @@ function rankCard(m, prog, merits) {
 }
 // the member's tasks (specs/ukoly-clenu): Tracker and the first operation War Room sees itself, the rest the member
 // ticks on their own profile
-const taskDone = (x, done, trackerOk, prog) => x.check === "tracker" ? trackerOk : x.check === "ops" ? !!prog && prog.ops >= 1 : done.has(x.id);
+// bct: a closed BCT training the trainer confirmed (045, progress().bct)
+const taskDone = (x, done, trackerOk, prog) => x.check === "tracker" ? trackerOk : x.check === "ops" ? !!prog && prog.ops >= 1
+  : x.check === "bct" ? !!prog && prog.bct >= 1 : done.has(x.id);
 function tasksCard(m, done, trackerOk, prog, owned) {
   // nobody ticks by hand: the database's verifier writes what the sources say (Petr 2026-10-22, specs/ukoly-clenu U8)
   const ok = D.ukoly.map(x => taskDone(x, done, trackerOk, prog));
@@ -285,6 +287,7 @@ const slotCard = k => { let m; return (m = /^SW-Q(\d+)-/.exec(k)) ? `Q${m[1]}` :
   : (m = /^SW-(CP|LP|HV|AR)\d+$/.exec(k)) ? `POD-${m[1]}` : null; };
 const lockedCards = () => new Set((state.event && isSq(state.event) && rosterOf(state.event).locked) || []);
 const LOCKED = "Squad je zamčený: zápis a odchod jen přes velení.";
+const BCT_FIRST = "Na akce od neděle 1. 11. jen po Basic Combat Training: je to úkol na tvém profilu, splníš ho účastí na tréninku BCT.";  // 045
 const padlock = on => `<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 7.5 H12.5 V14 H3.5 Z"/><path d="${on ? "M5.5 7.5 V5 A2.5 2.5 0 0 1 10.5 5 V7.5" : "M5.5 7.5 V5 A2.5 2.5 0 0 1 10.3 4"}"/></svg>`;
 function lockBtn(g) {
   const on = lockedCards().has(g.id);
@@ -830,7 +833,7 @@ async function claim(key) {
   if (error && error.code === "23505") {
     const c = state.claims.find(c => c.slot_key === key);
     state.flash = `Slot už obsadil ${c ? c.members.name : "někdo jiný"}.`;
-  } else if (error) state.flash = /squad_locked/.test(error.message || "") ? LOCKED : error.code !== "42501" ? saveErr(error)  // 022: a command slot above my rank (rank changed meanwhile)
+  } else if (error) state.flash = /squad_locked/.test(error.message || "") ? LOCKED : /bct_required/.test(error.message || "") ? BCT_FIRST : error.code !== "42501" ? saveErr(error)  // 022: a command slot above my rank (rank changed meanwhile)
     : slotRank(key) ? `${slot.label}: ${slotRank(key) === "velitel" ? "jen pro velení" : `až ${rankLock(slotRank(key))}`}.` : "Akce už je uzavřená.";
   else {
     if (!state.evErr) state.flash = null;  // saved, but the reload failed: keep the outage message
@@ -1070,7 +1073,7 @@ async function cancelEvent(btn) {
 
 // ---------- tréninky a kurzy (specs/typy-akci): officers found them beside the operation, members answer in one click ----------
 const KINDS = { trenink: "Trénink", kurz: "Kurz" };
-const TOPICS = { stavba: "Stavba", pechota: "Boj pěchoty", technika: "Technika a vozidla", vrtulniky: "Vrtulníky", jine: "Jiné" };
+const TOPICS = { bct: "Basic Combat Training", stavba: "Stavba", pechota: "Boj pěchoty", technika: "Technika a vozidla", vrtulniky: "Vrtulníky", jine: "Jiné" };  // bct: 045
 const label = (o, k) => Object.hasOwn(o, k) ? o[k] : k;  // a stored value we do not know is shown as stored
 const WHO = [["yes", "Přijdou"], ["maybe", "Možná"], ["no", "Nemůžou"]];  // names of others, so not "Prijdu" as on the buttons
 const goers = tr => tr.rsvps.filter(r => r.status === "yes").length;
