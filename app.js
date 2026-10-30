@@ -271,6 +271,18 @@ const isCmd = k => /^SW-CMD[0-9]+$/.test(k);
 const myPlace = (claims, uid = state.me.user_id) => claims.find(c => c.user_id === uid && !isCmd(c.slot_key)) || claims.find(c => c.user_id === uid);
 const slotRank = k => k === "CMD" ? "veteran" : /^AS[0-9]+-V$/.test(k) ? "operator" : /^SW-CMD[1-4]$/.test(k) ? "velitel" : null;
 const rankLock = n => n === "velitel" ? "jen velení" : n === "veteran" ? "od Veterána" : "od Operátora";
+// 044 (Petr 2026-10-30): the command locks a lobby card (a squad or a vehicle); a member can neither take a place on it,
+// nor leave his, nor move out of it -- the database enforces it (claims_locked), the page only does not offer it
+const slotCard = k => { let m; return (m = /^SW-Q(\d+)-/.exec(k)) ? `Q${m[1]}` : (m = /^SW-TK(\d+)$/.exec(k)) ? `POD-TK-${Math.floor((m[1] - 1) / 3) + 1}`
+  : (m = /^SW-(CP|LP|HV|AR)\d+$/.exec(k)) ? `POD-${m[1]}` : null; };
+const lockedCards = () => new Set((state.event && isSq(state.event) && rosterOf(state.event).locked) || []);
+const LOCKED = "Squad je zamčený: zápis a odchod jen přes velení.";
+const padlock = on => `<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 7.5 H12.5 V14 H3.5 Z"/><path d="${on ? "M5.5 7.5 V5 A2.5 2.5 0 0 1 10.5 5 V7.5" : "M5.5 7.5 V5 A2.5 2.5 0 0 1 10.3 4"}"/></svg>`;
+function lockBtn(g) {
+  const on = lockedCards().has(g.id);
+  if (leadsOps()) return `<button type="button" class="ib lockb${on ? " on" : ""}" data-lock="${esc(g.id)}" aria-pressed="${on}" aria-label="${on ? "Odemknout" : "Zamknout"}: ${esc(g.name)}" title="${on ? "Zamčeno: nikdo se sám nezapíše ani neodejde. Klik odemkne." : "Zamknout: nikdo se sám nezapíše ani neodejde"}">${padlock(on)}</button>`;
+  return on ? `<span class="lockb on" role="img" aria-label="Zamčeno" title="${LOCKED}">${padlock(true)}</span>` : "";
+}
 function slotRow(x, c, sq) {
   const mine = c && c.user_id === state.me.user_id;
   const need = slotRank(x.key), locked = !c && need && !leadsOps() && !rankAt(state.me, need);
@@ -278,15 +290,18 @@ function slotRow(x, c, sq) {
   const others = !c && need && need !== "velitel" && leadsOps() ? state.claims.filter(o => o.slot_key !== x.key) : [];  // Velení: carry, no select
   const moveto = others.length ? `<select class="moveto" data-moveto="${esc(x.key)}" aria-label="Dosadit na ${esc(x.label)}"><option value="">Dosadit</option>${others.map(o => `<option value="${esc(o.user_id)}">${esc(o.members.name)}</option>`).join("")}</select>` : "";
   const cmd = leadsOps();
+  // 044: a locked card shuts for a member, and so does every other place while his own is on one (no moving out)
+  const lk = !cmd && lockedCards(), myc = lk && lk.size && myPlace(state.claims), stuck = !!myc && lk.has(slotCard(myc.slot_key));
+  const shut = !!lk && (lk.has(slotCard(x.key)) || (stuck && !mine));
   const who = c ? `<img src="${esc(c.members.avatar_url)}" alt="" loading="lazy"><span class="nm">${esc(c.members.name)}</span>${sq && c.lead ? '<span class="slb" title="Squad leader">SL</span>' : ""}`
-    : moveto ? "" : `<span class="free">${locked ? rankLock(need) : "volné"}</span>`;
+    : moveto ? "" : `<span class="free">${locked ? rankLock(need) : shut && lk.has(slotCard(x.key)) ? "zamčeno" : "volné"}</span>`;
   // a Velitel moves people too (Petr 2026-10-25 D39, migration 031): a plain place only -- not an SL, not onto a command
   // slot. Petr 2026-10-28: no move button, the player himself is carried (drag, or click and click a free place: carry below)
   const sqd = (cmd || state.me.is_officer) && state.event && isSq(state.event), lift = sqd && c && (cmd || !c.lead);
   const act = lift ? `data-lift="${esc(c.user_id)}" aria-label="Přesunout ${esc(c.members.name)}" title="Přesunout: táhni na volné místo, nebo klikni a pak klikni na místo"`
-    : mine ? `data-unclaim="${esc(x.key)}" title="Odhlásit se"` : c || locked ? "disabled" : `data-claim="${esc(x.key)}"`;
+    : mine ? (shut ? `disabled title="${LOCKED}"` : `data-unclaim="${esc(x.key)}" title="Odhlásit se"`) : c || locked || shut ? "disabled" : `data-claim="${esc(x.key)}"`;
   // an x on my own place too (UAT C-03: on a phone "click your slot to leave" was invisible); the Commander's on anyone's
-  const kick = c && (mine || leadsOps())
+  const kick = c && (mine && !shut || leadsOps())
     ? `<button type="button" class="kick" data-unclaim="${esc(x.key)}" aria-label="${mine ? "Odhlásit se z místa" : `Odhlásit ${esc(c.members.name)}`}" title="${mine ? "Odhlásit se z místa" : ""}">${cross()}</button>` : "";
   const drag = lift ? ` data-drag="${esc(c.user_id)}"` : sqd && !c && !locked && (cmd || !need) ? " data-free" : "";
   return `<li data-key="${esc(x.key)}"${drag}${mine ? ' class="is-me"' : ""}><button type="button" class="rslot" ${act}><span class="lbl">${x.role ? `<span class="rid">${esc(x.role)}</span>` : ""}${esc(x.label)}</span>${who}</button>${moveto}${kick}</li>`;
@@ -342,7 +357,7 @@ function squadCard(g, by) {
   const title = cmd ? `<input class="sqname" data-sqname="${g.idx}" value="${esc(g.name)}" maxlength="24" aria-label="Název squadu ${g.idx + 1}">` : `<b>${esc(g.name)}</b>`;
   const free = roles.filter(ro => !g.slots.some(x => x.kit === ro.kit));
   const addRole = cmd && free.length && g.slots.length < 20 ? `<select class="addrole" data-addrole="${g.idx}" aria-label="${esc(g.name)}: přidat roli"><option value="">+ Přidat roli</option>${free.map(ro => `<option value="${esc(ro.kit)}" class="ro-${esc(ro.kit)}">${roleMark(ro.kit)}<span>${esc(ro.label)}</span></option>`).join("")}</select>` : "";
-  return `<div class="rg sqc"><div class="pg-head">${sym(g.symbol, "sm")}<div>${title}</div><span class="num">${n}/${g.max}</span>${drop}</div>
+  return `<div class="rg sqc${lockedCards().has(g.id) ? " lkd" : ""}"><div class="pg-head">${sym(g.symbol, "sm")}<div>${title}</div><span class="num">${n}/${g.max}</span>${lockBtn(g)}${drop}</div>
     ${slPlate(g, by, lead, n)}${lines}${addRole}${buyDetails(g)}</div>`;
 }
 // the squad's command seat (Petr 2026-10-28: "Veli: nikdo ... by taky mohla vypadat jinak nez text, co zmizi"): a plate
@@ -408,7 +423,7 @@ function podporaCard(g, by) {
   const ctl = leadsOps() && g.ctl !== false ? `<span class="swctl">
       <button type="button" class="ib" data-support="${t.ti}:-1" aria-label="Podpora: ubrat ${esc(t.name)}" title="Ubrat ${esc(t.name)}">${minus()}</button>
       <b>${esc(t.n)}</b><button type="button" class="ib" data-support="${t.ti}:1" aria-label="Podpora: přidat ${esc(t.name)}"${more ? ` disabled title="${esc(more)}"` : ` title="Přidat ${esc(t.name)}"`}>${plus()}</button></span>` : "";
-  return `<div class="rg podc"><div class="pg-head">${sym(g.symbol, "sm")}<div><b>${esc(g.name)}</b></div><span class="num">${n}/${g.max}</span>${ctl}</div>
+  return `<div class="rg podc${lockedCards().has(g.id) ? " lkd" : ""}"><div class="pg-head">${sym(g.symbol, "sm")}<div><b>${esc(g.name)}</b></div><span class="num">${n}/${g.max}</span>${ctl}${lockBtn(g)}</div>
     <div class="vtypes"><div class="vtype">${t.cars.map(c => carBox(t, c, by)).join("")}</div></div>${buyDetails(g)}</div>`;
 }
 
@@ -801,7 +816,7 @@ async function claim(key) {
   if (error && error.code === "23505") {
     const c = state.claims.find(c => c.slot_key === key);
     state.flash = `Slot už obsadil ${c ? c.members.name : "někdo jiný"}.`;
-  } else if (error) state.flash = error.code !== "42501" ? saveErr(error)  // 022: a command slot above my rank (rank changed meanwhile)
+  } else if (error) state.flash = /squad_locked/.test(error.message || "") ? LOCKED : error.code !== "42501" ? saveErr(error)  // 022: a command slot above my rank (rank changed meanwhile)
     : slotRank(key) ? `${slot.label}: ${slotRank(key) === "velitel" ? "jen pro velení" : `až ${rankLock(slotRank(key))}`}.` : "Akce už je uzavřená.";
   else {
     if (!state.evErr) state.flash = null;  // saved, but the reload failed: keep the outage message
@@ -814,7 +829,7 @@ async function unclaim(key) {  // one place (042: the command one and the ordina
   const c = state.claims.find(c => c.slot_key === key);
   if (!c) return loadEvent();
   const { error } = await sb.from("claims").delete().eq("event_id", state.event.id).eq("slot_key", key).eq("user_id", c.user_id);
-  state.flash = !error ? null : error.code === "42501" ? "Akce už je uzavřená." : saveErr(error);
+  state.flash = !error ? null : /squad_locked/.test(error.message || "") ? LOCKED : error.code === "42501" ? "Akce už je uzavřená." : saveErr(error);
   await loadEvent();
 }
 
@@ -2461,7 +2476,7 @@ function render() {
 }
 
 $app.addEventListener("click", e => {
-  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-drawer],[data-role],[data-squad],[data-sqdrop],[data-cmd],[data-seat],[data-fx],[data-leadfor],[data-nocash],[data-merit-del],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker],[data-nova],[data-ctask]");
+  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-drawer],[data-role],[data-squad],[data-lock],[data-sqdrop],[data-cmd],[data-seat],[data-fx],[data-leadfor],[data-nocash],[data-merit-del],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker],[data-nova],[data-ctask]");
   if (state.sqArm != null && !(t && t.dataset.sqdrop)) { state.sqArm = null; renderRoster(); }  // a click elsewhere: no drop
   if (!t) return;
   if (t.dataset.ctask) { const [id, st] = t.dataset.ctask.split(":"); setTask(id, st); return; }
@@ -2469,6 +2484,8 @@ $app.addEventListener("click", e => {
   if (t.dataset.tclose) { t.disabled = true; const [id, st] = t.dataset.tclose.split(":"); closeTraining(Number(id), st); return; }
   if (t.dataset.role) { const [i, kit, d] = t.dataset.role.split(":"); setRole(Number(i), kit, Number(d)); return; }
   if (t.dataset.squad) { setSquad(t.dataset.squad); return; }
+  if (t.dataset.lock) { const id = t.dataset.lock; writeRoster(r => { const on = new Set(r.locked || []);  // 044
+    on.has(id) ? on.delete(id) : on.add(id); if (on.size) r.locked = [...on]; else delete r.locked; }); return; }
   if (t.dataset.cmd) { setCmd(Number(t.dataset.cmd)); return; }
   if (t.dataset.sqdrop) { const i = Number(t.dataset.sqdrop), g = plan.roster.find(q => q.sq && q.idx === i);
     // with people in it the first click only asks (the x turns into "Zrušit? vyhodí n"), the second drops

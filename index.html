@@ -1081,6 +1081,10 @@ li.fx-new { animation: fx-unfold 520ms var(--ease) both; }
 .ib { display: inline-grid; place-items: center; flex: none; width: 32px; height: 32px; color: var(--ink-2); border: 1px solid transparent; }
 .ib:hover:not(:disabled) { color: var(--fr); border-color: oklch(0.86 0.15 205 / 0.5); background: var(--fr-fill); }
 .ib:disabled { opacity: .35; cursor: default; }
+/* 044 (Petr 2026-10-30): the padlock in a lobby card's corner, gold like the command's strip; a locked card gets a gold edge */
+.lockb { display: inline-grid; place-items: center; flex: none; width: 32px; height: 32px; color: var(--ink-3); }
+.lockb.on { color: var(--gold); border-color: var(--gold-thread); background: oklch(0.8 0.12 85 / 0.1); }
+.rg.lkd { box-shadow: inset 0 0 0 1px var(--gold-thread); }
 .swctl .ib { border-color: var(--rule-soft); }
 .ros.swarm .rg li { flex-wrap: wrap; gap: 0 2px; }
 .ros.swarm .rg li .rslot { flex: 1 1 8em; min-height: 32px; padding: 3px 6px; gap: 8px; }
