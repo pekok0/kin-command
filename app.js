@@ -483,7 +483,7 @@ function viewRoster(s) {
     <div class="op-fill"><span class="num">${filled} <small>/ ${total}</small></span><span class="gauge" style="--p:${pct}%" aria-hidden="true"></span><small>zapsaných</small></div></div>
     ${miss ? `<div class="op-status">${miss}</div>` : ""}
     <div class="op-me">${mine || (s.swarm ? `<p class="mine-kit">${KIT_BTN}</p>` : "")}${rsvpBar()}</div>
-    ${leadsOps() ? `<div class="op-cmd" role="group" aria-label="Příkazy velení">${mapTeamForm(ev)}${closeEventForm(s)}<button type="button" class="act" data-drawer="brief">Protokol briefingu</button>${cancel}</div>` : ""}</div>
+    ${leadsOps() ? `<div class="op-cmd" role="group" aria-label="Příkazy velení">${mapTeamForm(ev)}${closeEventForm(s)}<button type="button" class="act" data-briefwin title="Otevře se ve vlastním okně, mimo stream">Protokol briefingu</button>${cancel}</div>` : ""}</div>
     ${msg}
     <div class="ros${s.swarm ? " swarm" : ""}">${s.roster.map(g => g.cmdg ? cmdCard(g, by) : g.sq ? squadCard(g, by) : g.vehicles ? podporaCard(g, by) : rosterGroup(g, by)).join("")}${s.swarm ? addPlate() : ""}</div>
     ${s.base && leadsOps() && s.base.length > s.roster.length ? `<div class="sqtools hidden-g">Skryté: ${s.base.filter(b => !s.roster.some(g => g.id === b.id)).map(b =>
@@ -859,7 +859,7 @@ const KIT_BTN = '<button type="button" class="kitl" data-drawer="kit"><svg class
 function drawers(s) {
   const d = state.drawer, one = (k, title, body) => `<aside class="dw${d === k ? " open" : ""}" id="dw-${k}" role="dialog" aria-labelledby="dw-${k}-h"${d === k ? "" : " inert"}>
     <header class="dw-h"><h2 id="dw-${k}-h">${title}</h2><button type="button" class="ib dw-x" data-dwclose aria-label="Zavřít panel">${cross()}</button></header><div class="dw-b">${body}</div></aside>`;
-  return `<div class="dws"><div class="dw-shade${d ? " open" : ""}" data-dwclose></div>${s && s.swarm ? one("kit", "Tvůj nákup", swarmMyKit()) : ""}${one("rsvp", "Kdo se ozval", rsvpWho())}${leadsOps() ? one("brief", "Protokol briefingu", briefList()) : ""}</div>`;
+  return `<div class="dws"><div class="dw-shade${d ? " open" : ""}" data-dwclose></div>${s && s.swarm ? one("kit", "Tvůj nákup", swarmMyKit()) : ""}${one("rsvp", "Kdo se ozval", rsvpWho())}</div>`;
 }
 // the panels sit outside #app (renderDrawers), so their x and shade need their own listener (Petr 2026-10-28: "nejde zavrit
 // krizkem ani klikem mimo"); buttons inside a panel that act on the lobby go through the same handler as #app
@@ -877,28 +877,6 @@ function setDrawer(k) {
   document.querySelectorAll(".dw").forEach(a => { const on = a.id === `dw-${state.drawer}`; a.classList.toggle("open", on); a.inert = !on; });
   document.querySelector(".dw-shade")?.classList.toggle("open", !!state.drawer);
   if (state.drawer) document.querySelector(`#dw-${state.drawer} .dw-x`)?.focus({ preventScroll: true });
-  if (state.drawer === "brief" && state.brief === undefined) loadBrief();
-}
-async function loadBrief() {
-  state.brief = null;
-  const { data, error } = await sb.from("content").select("data").eq("id", "velitel").maybeSingle();
-  if (error) console.error(error);
-  state.brief = data && data.data && data.data.briefing ? briefOutline(data.data.briefing) : false;
-  const b = document.querySelector("#dw-brief .dw-b");
-  if (b) b.innerHTML = briefList();
-}
-const briefList = () => state.brief === undefined || state.brief === null ? '<p class="note">Načítám…</p>'
-  : state.brief === false ? '<p class="err">Protokol se nenačetl, obnov stránku (F5).</p>' : state.brief;
-// the protocol's sections as headings with their points, no prose (Petr: "jednodussi prostsi seznam"); the whole one stays on #/briefing
-function briefOutline(html) {
-  const doc = new DOMParser().parseFromString(html, "text/html"), out = [];
-  let cur = null;
-  for (const el of doc.body.querySelectorAll("h2, li")) {
-    if (el.tagName === "H2") out.push(cur = { h: el.innerHTML, items: [] });
-    else if (cur && !el.parentElement.closest("li")) cur.items.push(el.innerHTML);
-  }
-  return out.map(x => `<section class="bf"><h3>${x.h}</h3>${x.items.length ? `<ul>${x.items.map(i => `<li>${i}</li>`).join("")}</ul>` : ""}</section>`).join("")
-    + '<p class="note"><a href="#/briefing">Celý protokol</a></p>';
 }
 
 // the Commander shapes the roster (specs/akce-v2 A6); the database refuses a shape outside the rules (017 roster_ok)
@@ -2551,7 +2529,7 @@ function render() {
 }
 
 $app.addEventListener("click", e => {
-  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-drawer],[data-role],[data-squad],[data-lock],[data-sqdrop],[data-cmd],[data-seat],[data-fx],[data-leadfor],[data-nocash],[data-merit-del],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker],[data-nova],[data-ctask]");
+  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-drawer],[data-role],[data-squad],[data-lock],[data-briefwin],[data-sqdrop],[data-cmd],[data-seat],[data-fx],[data-leadfor],[data-nocash],[data-merit-del],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker],[data-nova],[data-ctask]");
   if (state.sqArm != null && !(t && t.dataset.sqdrop)) { state.sqArm = null; renderRoster(); }  // a click elsewhere: no drop
   if (!t) return;
   if (t.dataset.ctask) { const [id, st] = t.dataset.ctask.split(":"); setTask(id, st); return; }
@@ -2559,6 +2537,8 @@ $app.addEventListener("click", e => {
   if (t.dataset.tclose) { t.disabled = true; const [id, st] = t.dataset.tclose.split(":"); closeTraining(Number(id), st); return; }
   if (t.dataset.role) { const [i, kit, d] = t.dataset.role.split(":"); setRole(Number(i), kit, Number(d)); return; }
   if (t.dataset.squad) { setSquad(t.dataset.squad); return; }
+  // Petr 2026-10-30: the protocol in its own window, so a streamed War Room never shows it
+  if (t.hasAttribute("data-briefwin")) { window.open("#/briefing", "kin-briefing", "popup,width=560,height=900"); return; }
   if (t.dataset.lock) { const id = t.dataset.lock; writeRoster(r => { const on = new Set(r.locked || []);  // 044
     on.has(id) ? on.delete(id) : on.add(id); if (on.size) r.locked = [...on]; else delete r.locked; }); return; }
   if (t.dataset.cmd) { setCmd(Number(t.dataset.cmd)); return; }
