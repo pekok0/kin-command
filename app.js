@@ -96,6 +96,8 @@ async function loadContent() {
 // the year only when it is not this year (an old or mistyped event must not read as current, Viktor UAT #013)
 const fmtWhen = iso => { const d = new Date(iso), y = d.getFullYear() !== new Date().getFullYear();
   return d.toLocaleString("cs-CZ", { weekday: "short", day: "numeric", month: "numeric", ...(y && { year: "numeric" }), hour: "2-digit", minute: "2-digit" }); };
+// 047 (Petr 2026-10-30, BCT "od 17:00 - 19:00"): the start, and the end when the event has one
+const fmtSpan = ev => fmtWhen(ev.starts_at) + (ev.ends_at ? "–" + new Date(ev.ends_at).toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" }) : "");
 let chan = null;
 
 let loadSeq = 0;
@@ -109,7 +111,7 @@ async function loadEvent() {
     // are a list of their own and never state.event
     const [op, tr] = await Promise.all([
       sb.from("events").select("id, strategy_id, doctrine, variant, squad_swarm, squad_support, roster, starts_at, open_to_hosts, leader:members!events_created_by_fkey(name)").eq("status", "open").eq("kind", "operace").order("starts_at"),
-      sb.from("events").select("id, kind, topic, title, description, capacity, invited, starts_at, created_by, leader:members!events_created_by_fkey(name), rsvps(user_id, status, members(name, avatar_url, discord_id))")
+      sb.from("events").select("id, kind, topic, title, description, capacity, invited, starts_at, ends_at, created_by, leader:members!events_created_by_fkey(name), rsvps(user_id, status, members(name, avatar_url, discord_id))")
         .eq("status", "open").neq("kind", "operace").order("starts_at"),
     ]);
     if (op.error) throw op.error;
@@ -1052,7 +1054,8 @@ async function cancelEvent(btn) {
 
 // ---------- tréninky a kurzy (specs/typy-akci): officers found them beside the operation, members answer in one click ----------
 const KINDS = { trenink: "Trénink", kurz: "Kurz" };
-const TOPICS = { bct: "Basic Combat Training", stavba: "Stavba", pechota: "Boj pěchoty", technika: "Technika a vozidla", vrtulniky: "Vrtulníky", jine: "Jiné" };  // bct: 045
+// bct (045) last: the form's first topic is the default, and a training of topic bct gives its people BCT
+const TOPICS = { stavba: "Stavba", pechota: "Boj pěchoty", technika: "Technika a vozidla", vrtulniky: "Vrtulníky", jine: "Jiné", bct: "Basic Combat Training" };
 const label = (o, k) => Object.hasOwn(o, k) ? o[k] : k;  // a stored value we do not know is shown as stored
 const WHO = [["yes", "Přijdou"], ["maybe", "Možná"], ["no", "Nemůžou"]];  // names of others, so not "Prijdu" as on the buttons
 const goers = tr => tr.rsvps.filter(r => r.status === "yes").length;
@@ -1077,7 +1080,7 @@ function trainingRow(tr) {
       <button type="button" class="act" data-tclose="${id}:closed">Proběhl, uzavřít</button> <button type="button" class="act" data-tclose="${id}:cancelled">Zrušit</button></details>` : "";
   return `<li class="tr"><p class="tr-k"><span class="ref">${esc(label(KINDS, tr.kind))}</span>${esc(label(TOPICS, tr.topic))}${tr.invited ? "<span>· Jen pro pozvané</span>" : ""}</p>
     <h3>${esc(tr.title)}</h3>
-    <p class="tr-m"><time datetime="${esc(tr.starts_at)}">${esc(fmtWhen(tr.starts_at))}</time> · Vede <b>${esc(tr.leader ? tr.leader.name : "?")}</b> · Přijde <b>${trCount(tr)}</b></p>
+    <p class="tr-m"><time datetime="${esc(tr.starts_at)}">${esc(fmtSpan(tr))}</time> · Vede <b>${esc(tr.leader ? tr.leader.name : "?")}</b> · Přijde <b>${trCount(tr)}</b></p>
     ${tr.description ? `<p class="tr-d">${esc(tr.description)}</p>` : ""}
     <div class="rsvp" role="group" aria-label="${esc(tr.title)}: přijdeš?">${RSVP.map(([k, l]) => `<button type="button" class="act" data-trsvp="${id}:${k}" aria-pressed="${mine === k}"${k === "yes" && full ? ` disabled aria-describedby="full-${id}"` : ""}>${l}</button>`).join("")}</div>
     ${full ? `<p class="tr-full" id="full-${id}">Kurz je plný.</p>` : ""}
@@ -1090,6 +1093,7 @@ function newTrainingForm(kind) {
     <label>Téma <select name="topic">${Object.entries(TOPICS).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></label>
     <label class="wide">Název <input name="title" required maxlength="80"></label>
     <label>Začátek <input type="datetime-local" name="starts" required min="${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}T00:00"></label>
+    <label>Délka <select name="hours">${[["", "neuvedeno"], ["1", "1 h"], ["1.5", "1,5 h"], ["2", "2 h"], ["3", "3 h"]].map(([v, l]) => `<option value="${v}"${v === "2" ? " selected" : ""}>${l}</option>`).join("")}</select></label>
     <label class="cap"${kind === "kurz" ? "" : " hidden"}>Počet míst <input type="number" name="capacity" min="2" max="12" value="8" required${kind === "kurz" ? "" : " disabled"}></label>
     <label class="wide">Krátký popis <textarea name="description" maxlength="500" rows="2"></textarea></label>
     <label class="att wide"><input type="checkbox" name="private"> Jen pro pozvané (ostatní ho neuvidí)</label>
@@ -1115,8 +1119,9 @@ async function createTraining(f) {
   const v = Object.fromEntries(new FormData(f)), kind = v.kind === "kurz" ? "kurz" : "trenink";
   const invited = f.elements.private.checked ? [...f.querySelectorAll('input[name^="inv_"]:checked')].map(x => x.name.slice(4)) : null;
   if (invited && !invited.length) { state.novaFlash = "Vyber, koho zveš."; return; }
-  const { error } = await sb.from("events").insert({ kind, topic: v.topic, title: v.title.trim(), starts_at: new Date(v.starts).toISOString(),
-    description: v.description.trim() || null, capacity: kind === "kurz" ? Number(v.capacity) : null, invited });
+  const start = new Date(v.starts);
+  const { error } = await sb.from("events").insert({ kind, topic: v.topic, title: v.title.trim(), starts_at: start.toISOString(),
+    ends_at: v.hours ? new Date(+start + Number(v.hours) * 3600e3).toISOString() : null, description: v.description.trim() || null, capacity: kind === "kurz" ? Number(v.capacity) : null, invited });
   state.novaFlash = !error ? null : error.code === "42501" ? "Trénink nebo kurz vypíše člen od hodnosti Operátor." : saveErr(error);
   if (!error) { f.reset(); capToggle(f); }  // the next one starts from an empty form
 }
@@ -1497,7 +1502,7 @@ function homeEvent() {
   if (!sb || !state.me) return "";
   const ev = state.event, tr = state.trainings[0];
   // specs/typy-akci T6: the nearest training or course as a second line, under the operation or without one
-  const next = tr ? `<a class="trnext" href="#/akce"><span class="ref">${esc(label(KINDS, tr.kind))}</span><span>${esc(tr.title)} · ${esc(fmtWhen(tr.starts_at))} · přijde ${trCount(tr)}</span></a>` : "";
+  const next = tr ? `<a class="trnext" href="#/akce"><span class="ref">${esc(label(KINDS, tr.kind))}</span><span>${esc(tr.title)} · ${esc(fmtSpan(tr))} · přijde ${trCount(tr)}</span></a>` : "";
   if (!ev) return (state.evErr ? `<p class="err home-ev">${LOAD_ERR}</p>` : '<p class="note home-ev">Teď není otevřená žádná akce.</p>') + next;
   const more = state.ops.filter(x => x.id !== ev.id).map(x => `<a class="trnext" href="#/akce/${x.id}"><span class="ref">Operace</span><span>${esc(docName(x.doctrine))} · ${esc(fmtWhen(x.starts_at))}</span></a>`).join("");
   const mine = myPlace(state.claims);
@@ -1516,6 +1521,10 @@ const mapHref = (m, o = {}) => { const q = new URLSearchParams(Object.entries(o)
 const planHref = x => mapHref(x.map, { t: teamKey(x), v: curVariant });
 const mapsList = () => `<ul class="cls maps">${MAPS().map(m => { const xs = D.strategies.filter(x => x.map === m);
   return `<li><a href="${mapHref(m)}"><b>${esc(m)}</b><span>${xs.length} týmy · ${xs[0].variants.length} zóny</span></a></li>`; }).join("")}</ul>`;
+// Petr 2026-10-30: the map plans are not thought through with the doctrine and the kit yet, so they mislead: the maps and
+// their filters stay, the plan and "Role v planech" say "v priprave"; true = back as before
+const PLANS_READY = false;
+const WIP = '<p class="note wip" id="wip">Obsah je v přípravě: plány map teprve propojujeme s doktrínou a výbavou.</p>';
 function viewMapDetail(m, qs) {
   const q = new URLSearchParams(qs), xs = D.strategies.filter(x => x.map === m), x = xs.find(y => teamKey(y) === q.get("t")) || null;
   const v = x && x.variants.find(y => y.id === q.get("v")) || null, w = v && D.bitvy.pocasi.some(y => y.id === q.get("w")) ? q.get("w") : "";
@@ -1525,8 +1534,8 @@ function viewMapDetail(m, qs) {
     + (x ? step("Zóna", v && v.id, x.variants.map(y => [y.id, y.name, y.xy ? `${y.towers.length} věže` : "střed doplníme", mapHref(m, { t: teamKey(x), v: y.id, w })])) : "")
     + (v ? step("Počasí", w, [["", "Každé počasí", ""], ...D.bitvy.pocasi.map(y => [y.id, y.label, y.id])].map(([val, n, sub]) => [val, n, sub, mapHref(m, { t: teamKey(x), v: v.id, w: val })])) : "");
   const head = `<p class="crumb"><a href="#/mapy">Mapy</a> / ${esc(m)}</p>
-    <header class="unit-head"><div><h1>${esc(m)}</h1><p>Vyber tým a zónu. Plán je pro Clan War, Public Ops z něj vychází.</p></div></header>${steps}`;
-  return head + (v ? viewBattle(x, v, w) : `<p class="note mapnext">Dál vyber ${x ? "zónu" : "tým"}.</p>`);
+    <header class="unit-head"><div><h1>${esc(m)}</h1><p>${PLANS_READY ? "Vyber tým a zónu. Plán je pro Clan War, Public Ops z něj vychází." : "Vyber tým a zónu."}</p></div></header>${steps}`;
+  return head + (!PLANS_READY ? WIP : v ? viewBattle(x, v, w) : `<p class="note mapnext">Dál vyber ${x ? "zónu" : "tým"}.</p>`);
 }
 
 // the battle plan of one map x team x zone (hub/specs/mapy-v3 M3-M5): content/bitvy.toml; the zone's plan, its weather
@@ -1554,7 +1563,7 @@ function viewBattle(x, v, w) {
 }
 
 function viewMapy() {
-  return `<header class="unit-head"><div><h1>Mapy</h1><p>Battle plan každé mapy podle týmu a zóny, pro Clan War. Jen ke čtení, na akci se zapisuješ v <a href="#/akce">Akci</a>.</p></div></header>
+  return `<header class="unit-head"><div><h1>Mapy</h1><p>${PLANS_READY ? "Battle plan každé mapy podle týmu a zóny, pro Clan War. Jen ke čtení" : "Plány map podle týmu a zóny jsou v přípravě"}, na akci se zapisuješ v <a href="#/akce">Akci</a>.</p></div></header>
     <section class="block">${mapsList()}</section>`;
 }
 
@@ -1563,7 +1572,7 @@ function viewMapy() {
 const HUD = `<svg class="hud" viewBox="0 0 200 200" aria-hidden="true"><circle class="h1" cx="100" cy="100" r="94"/><circle class="h2" cx="100" cy="100" r="84"/>
   <path class="h3" d="M100 6 A94 94 0 0 1 194 100"/><path class="h3 b" d="M100 194 A94 94 0 0 1 6 100"/>
   <g class="ticks">${Array.from({ length: 36 }, (_, i) => `<line x1="100" y1="${i % 3 ? 9 : 4}" x2="100" y2="14" transform="rotate(${i * 10} 100 100)"/>`).join("")}</g></svg>`;
-const NAV_TILES = [["akce", "Akce", "Operace, tréninky, zápis a lobby"], ["mapy", "Mapy", "Battle plan podle týmu a zóny"],
+const NAV_TILES = [["akce", "Akce", "Operace, tréninky, zápis a lobby"], ["mapy", "Mapy", "Plány map, v přípravě"],
   ["vybava", "Výbava", "Tvůj loadout a co odemknout"], ["doktrina", "Doktrína", "Jak klan hraje"], ["vycvik", "Výcvik", "Basic a Advanced Combat Training"], ["pokryti", "Pokrytí", "Kdo co má odemčené"]];
 function homeMe() {
   if (!state.me) return "";
@@ -1586,7 +1595,7 @@ function viewHome() {
         `<li><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.name)}${out()}</a>${x.note ? `<small>${esc(x.note)}</small>` : ""}</li>`).join("")}</ul>`).join("")}</section>` : ""}
       <details class="hp-mod howto"${matchMedia("(max-width: 720px)").matches ? "" : " open"}><summary><h2 id="h-start">Jak to tu funguje${arrow()}</h2></summary><ol class="proc">
       <li><span><a href="#/akce">Akce</a>: otevři operaci, dej <b>Přijdu</b> a zaber si místo v sestavě. Pod ní je tvůj nákup, odehrané akce jsou v přehledu.</span></li>
-      <li><span><a href="#/mapy">Mapy</a>: battle plan každé mapy podle týmu a zóny (cíl, místa k držení, úkoly squadů), pro Clan War.</span></li>
+      <li><span><a href="#/mapy">Mapy</a>: plány map podle týmu a zóny, zatím v přípravě.</span></li>
       <li><span><a href="#/vybava">Výbava</a>: tvůj loadout pro každou sub-classu: co koupit a kolik kusů, podle toho, co máš odemčené (WARDOGS Tracker).${seesCoverage() ? ' Kolik nás co umí, je v <a href="#/pokryti">Pokrytí</a>.' : ""}</span></li>
       <li><span><a href="#/doktrina">Doktrína</a>: jak klan hraje (${esc(docName("defence"))}, ${esc(docName("swarm"))}) a Výcvik.</span></li>
     </ol></details>
@@ -1864,19 +1873,6 @@ function viewSquad(s, g) {
 const bullets = xs => `<ul class="bullets">${xs.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`;
 const procList = xs => `<ol class="proc">${xs.map(x => `<li><span>${esc(x)}</span></li>`).join("")}</ol>`;
 const docRx = xs => xs.map(x => `<div class="rx"><div class="when">${esc(x.when)}</div><div class="arrow">${arrow()}</div><div class="then">${esc(x.then)}</div><div class="who"><span class="ref">${esc(x.who)}</span></div></div>`).join("");
-const sqDoc = q => `<div class="sq"><h3>${sym(q.symbol, "sm")}${esc(q.name)}</h3><p>${esc(q.goal)}</p>${bullets(q.points)}</div>`;
-
-function viewDefence(k) {
-  return `
-    <section class="block"><h2>Jádro</h2><p>${esc(k.defence.tagline)}</p></section>
-    <section class="block"><h2>Principy</h2>${procList(k.principles)}</section>
-    <section class="block"><h2>Velení a komunikace</h2>${bullets(k.commander)}<table class="data"><thead><tr><th>Kanál</th><th>Kdo</th><th>K čemu</th></tr></thead><tbody>
-      ${k.comms.map(c => `<tr><td><b>${esc(c.channel)}</b></td><td>${esc(c.who)}</td><td>${esc(c.purpose)}</td></tr>`).join("")}</tbody></table></section>
-    <section class="block"><h2>Squady a role</h2>${D.squads.map(q => `<div class="sq"><h3>${sym(q.symbol, "sm")}<a href="#/squad/${q.id}">${esc(q.name)}</a></h3><p>${esc(q.goal)}</p></div>`).join("")}${k.squads.map(sqDoc).join("")}</section>
-    <section class="block"><h2>Postupy: palba mortarů na vyžádání</h2>${procList(k.mortar_procedure)}<p class="note">${esc(k.mortar_note)}</p></section>
-    <section class="block"><h2>Protokoly: když se stane, reaguj</h2>${docRx(k.protocols)}</section>
-    <section class="block"><h2>Výbava</h2><p>${esc(k.defence.kit)}</p></section>`;
-}
 
 // SWARM kits: the base once, each role only what it buys on top (Viktor #002); in Doktrina all, in Akce mine
 const kitBase = (s, skip) => `<div class="sq" id="kit-base"><h3>Základ SWARM pro všechny</h3><p>Kupuje každý, ať hraje cokoliv. U role je jen to, co se kupuje navíc. Zbraň, brnění, munici a léčení bereš z loadoutu sub-classy své role (ve <a href="#/vybava">Výbavě</a>)${skip ? "; co už v loadoutu máš, tu znovu není" : ""}.</p>${shopList(null, { gear: s.base.gear, sum: "Základ za život" }, skip)}</div>`;
@@ -2055,7 +2051,7 @@ function viewClass(q, c) {
   const uses = D.strategies.map(s => [s, s.roles.filter(r => r.class === c.id)]).filter(([, rs]) => rs.length);
   return `<p class="crumb"><a href="#/vybava">Výbava</a> / <a href="#/squad/${q.id}">${esc(q.name)}</a> / ${esc(c.name)}</p>
     ${loadoutCard(q, c, "h1")}${ladderSection(c)}
-    ${uses.length ? `<section class="block"><h2>Role v plánech</h2><ul class="uses">${uses.map(([s, rs]) => `<li>${esc(sideLabel(s))}: ${rs.map(r => roleLink(s, r)).join(" ")}</li>`).join("")}</ul></section>` : ""}`;
+    ${PLANS_READY && uses.length ? `<section class="block"><h2>Role v plánech</h2><ul class="uses">${uses.map(([s, rs]) => `<li>${esc(sideLabel(s))}: ${rs.map(r => roleLink(s, r)).join(" ")}</li>`).join("")}</ul></section>` : ""}`;
 }
 
 // ---------- canvas trace ----------
@@ -2488,10 +2484,11 @@ function render() {
     const q = SQ(p[1]), c = classOf(q, Object.hasOwn(OLD_ROLE, p[2]) ? OLD_ROLE[p[2]] : p[2]); active = "vybava";
     const hrac = c && sb && state.me && new URLSearchParams(qs).get("hrac");
     if (hrac && hrac !== state.me.discord_id) {  // another player's page (Petr 2026-10-30: lobby chip, Pokryti)
-      const pl = state.viewAs && state.viewAs.discord_id === hrac ? state.viewAs : null;
+      // the answer belongs to the asked id: matching the loaded row's own id fetched forever when it differed (UAT 2026-10-30)
+      const pl = state.viewAs && state.viewAs.asked === hrac ? state.viewAs : null;
       if (!pl && state.viewAsLoading !== hrac) {
         state.viewAsLoading = hrac;
-        fetchPlayer(hrac).catch(e => (console.error(e), null)).then(x => { state.viewAs = x || { discord_id: hrac, missing: true }; state.viewAsLoading = null; render(); });
+        fetchPlayer(hrac).catch(e => (console.error(e), null)).then(x => { state.viewAs = { ...(x || { missing: true }), asked: hrac }; state.viewAsLoading = null; render(); });
       }
       html = !pl ? '<p class="note">Načítám výbavu hráče…</p>' : pl.missing ? '<p class="note">Hráče se nepodařilo načíst.</p>'
         : `<p class="viewas">Výbava hráče <b>${esc(pl.name)}</b> · <a href="${classHref(q, c)}">moje</a></p>${asPlayer(pl, () => viewClass(q, c))}`;
