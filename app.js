@@ -1027,12 +1027,14 @@ function mapTeamForm(ev) {
     <button type="submit" class="act">${esc(saveLabel(s))}</button></form></details>`;
 }
 
+// attendance: one box per person, since 042 the Commander holds a Velení and a vehicle seat (two rows for one person
+// failed the whole upsert, Petr 2026-10-30 "nejde mi ulozit dnesni akce")
 function closeEventForm(s) {
   return `<details class="evclose"><summary>Uzavřít akci a uložit do historie</summary><form class="evf" data-form="close">
     <label>Umístění <select name="placement" required><option value="">vyber</option><option value="1">1.</option><option value="2">2.</option><option value="3">3.</option></select></label>
     <label>Počasí <select name="weather"><option value="">neuvedeno</option>${D.bitvy.pocasi.map(w => `<option value="${esc(w.id)}">${esc(w.label)}</option>`).join("")}</select></label>
     ${s.variants.length ? `<label>Kontaktní zóna <select name="variant" required>${s.variants.map(v => `<option value="${esc(v.id)}"${v.id === curVariant ? " selected" : ""}>${esc(v.name)}</option>`).join("")}</select></label>` : ""}
-    ${state.claims.length ? `<fieldset class="atts"><legend>Kdo opravdu hrál (odškrtni, kdo nepřišel)</legend>${state.claims.map(c =>
+    ${state.claims.length ? `<fieldset class="atts"><legend>Kdo opravdu hrál (odškrtni, kdo nepřišel)</legend>${[...new Map(state.claims.map(c => [c.user_id, c])).values()].map(c =>
       `<label class="att"><input type="checkbox" name="att_${esc(c.user_id)}" checked>${esc(c.members.name)}</label>`).join("")}</fieldset>` : ""}
     <p class="note wide">Debrief uvidí všichni členové v historii, docházku jen ty a dotyčný.</p>
     <label class="wide">Co fungovalo <textarea name="went_well" maxlength="2000" rows="2"></textarea></label>
