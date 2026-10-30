@@ -114,7 +114,7 @@ async function loadEvent() {
     // are a list of their own and never state.event
     const [op, tr] = await Promise.all([
       sb.from("events").select("id, strategy_id, doctrine, variant, squad_swarm, squad_support, roster, starts_at, open_to_hosts, leader:members!events_created_by_fkey(name)").eq("status", "open").eq("kind", "operace").order("starts_at"),
-      sb.from("events").select("id, kind, topic, title, description, capacity, invited, starts_at, ends_at, created_by, leader:members!events_created_by_fkey(name), rsvps(user_id, status, members(name, avatar_url, discord_id))")
+      sb.from("events").select("id, kind, topic, title, description, capacity, invited, starts_at, ends_at, created_by, leader:members!events_created_by_fkey(name), rsvps(user_id, status, members(name, avatar_url, discord_id, guest))")
         .eq("status", "open").neq("kind", "operace").order("starts_at"),
     ]);
     if (op.error) throw op.error;
@@ -1078,10 +1078,10 @@ function trainingRow(tr) {
   // T4: no "Prijdu" on a full course unless I already have a place; the capacity trigger refuses it anyway
   const full = tr.capacity && goers(tr) >= tr.capacity && mine !== "yes";
   const ctl = leadsOps() || tr.created_by === state.me.user_id ? `<details class="t${id}"><summary>Uzavřít nebo zrušit</summary>
-      ${by.yes.length ? `<fieldset class="atts"><legend>Kdo byl</legend>${tr.rsvps.filter(r => r.status === "yes").map(r =>
-        `<label class="att"><input type="checkbox" name="tatt_${esc(r.user_id)}" checked>${esc(r.members.name)}</label>`).join("")}</fieldset>` : ""}
+      ${by.yes.length ? `<fieldset class="atts"><legend>${tr.topic === "bct" ? "Kdo byl celou dobu (hosté se stanou Rekruty)" : "Kdo byl"}</legend>${tr.rsvps.filter(r => r.status === "yes" && r.members).map(r =>
+        `<label class="att"><input type="checkbox" name="tatt_${esc(r.user_id)}" checked>${esc(r.members.name)}${r.members.guest ? " (host)" : ""}</label>`).join("")}</fieldset>` : ""}
       <button type="button" class="act" data-tclose="${id}:closed">Proběhl, uzavřít</button> <button type="button" class="act" data-tclose="${id}:cancelled">Zrušit</button></details>` : "";
-  return `<li class="tr"><p class="tr-k"><span class="ref">${esc(label(KINDS, tr.kind))}</span>${esc(label(TOPICS, tr.topic))}${tr.invited ? "<span>· Jen pro pozvané</span>" : ""}</p>
+  return `<li class="tr"><p class="tr-k"><span class="ref">${esc(label(KINDS, tr.kind))}</span>${esc(label(TOPICS, tr.topic))}${tr.invited && !isGuest() ? "<span>· Jen pro pozvané</span>" : ""}</p>
     <h3>${esc(tr.title)}</h3>
     <p class="tr-m"><time datetime="${esc(tr.starts_at)}">${esc(fmtSpan(tr))}</time> · Vede <b>${esc(tr.leader ? tr.leader.name : "?")}</b> · Přijde <b>${trCount(tr)}</b></p>
     ${tr.description ? `<p class="tr-d">${esc(tr.description)}</p>` : ""}
@@ -1755,6 +1755,11 @@ const fold = t => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "
 // a weapon without one (SV98 10) takes the biggest I have
 const ordinaryMag = mags => { const own = mags.filter(m => !m.unlock || owned(m.item)), ok = own.filter(m => m.capacity >= 30);
   return ok.length ? ok.reduce((a, b) => b.capacity < a.capacity ? b : a) : own.at(-1); };
+// a weapon's attachments (vybava-doplnky): per slot the first I can buy, else the main one, locked; what I can buy counts
+// in the weapon's price and the cost per life (Betrak 2026-10-30 "pridat attachmenty do ceny zbrane", Petr "zarid to")
+const attOf = st => !st ? [] : (D.doplnky || []).filter(b => b.weapons.includes(st.item)).flatMap(b => b.slots).map(s => {
+  const i = s.items.findIndex(x => !x.unlock || !!(haveSet && haveSet.has(x.item))); return { s, x: s.items[Math.max(i, 0)], have: i >= 0 }; });
+const attCost = st => attOf(st).reduce((n, a) => n + (a.have && a.x.price || 0), 0);
 function myKit(c) {
   const lads = c.ladders || [], entry = lad => { const i = mineIdx(lad); return { lad, st: lad.steps[i] || null, i, g: grade(lad, i), top: lad.steps.at(-1) }; };
   const slots = Object.fromEntries(Object.keys(SLOT_LABEL).map(k => [k, (l => l && entry(l))(lads.find(l => l.slot === k))]));
@@ -1786,7 +1791,7 @@ function myKit(c) {
   // a verdict only on real data: without the Tracker every slot would look red for nothing
   const judged = !!(trk && trk.status === "ok");
   return { slots, slingOk, store: store.filter(e => e.st), judged, graded: judged ? all.filter(e => e.g) : [],
-    names: new Set(have.map(e => e.st.item)), cost: have.reduce((a, e) => a + (e.st.cost || 0), 0) };
+    names: new Set(have.map(e => e.st.item)), cost: have.reduce((a, e) => a + (e.st.cost || 0), 0) + attCost(gun) + attCost(gun2) };
 }
 const loadoutCost = c => myKit(c).cost;
 function readiness(k) {
@@ -1802,17 +1807,17 @@ function readiness(k) {
 function loadoutCard(q, c, h = "h2") {
   const k = myKit(c), judged = k.judged;
   const cell = key => { const e = k.slots[key], st = e && e.st, g = judged && e && e.g;
+    const pc = st && (st.cost || 0) + (key === "slot1" || key === "sling" ? attCost(st) : 0);  // a weapon with its attachments
     if (key === "sling" && !k.slingOk) { const b = k.slots.backpack && k.slots.backpack.lad.steps.find(x => x.slings);  // D38: no sling yet
       return `<div class="slot empty"><span class="sl">${SLOT_LABEL.sling}</span><span class="sn miss">Až s batohem se slingem${b ? `<span class="goal"><b>${esc(b.item)}</b> · ${unlockText(b.unlock)}</span>` : ""}</span></div>`; }
     if (e && e.lad.free) return `<div class="slot free"><span class="sl">${SLOT_LABEL[key]}</span><span class="sn">Libovolná zbraň</span><span class="fr-n">Klan ji nepředepisuje: vezmi, co ti sedí.</span></div>`;
     return `<div class="slot${st ? "" : " empty"}${g ? " g-" + g : ""}"${g ? ` title="${GRADE[g]}"` : ""}><span class="sl">${SLOT_LABEL[key]}</span>${st
-      ? `${itemIcon(st.icon)}<span class="sn">${esc(st.item)}${g && g !== "ok" ? `<span class="goal">Cíl: <b>${esc(e.top.item)}</b> · ${unlockText(e.top.unlock)}</span>` : ""}</span>${st.cost ? `<span class="pr">${usd(st.cost)}</span>` : ""}`
+      ? `${itemIcon(st.icon)}<span class="sn">${esc(st.item)}${g && g !== "ok" ? `<span class="goal">Cíl: <b>${esc(e.top.item)}</b> · ${unlockText(e.top.unlock)}</span>` : ""}</span>${pc ? `<span class="pr"${pc !== st.cost ? ' title="Včetně doplňků"' : ""}>${usd(pc)}</span>` : ""}`
       : g ? `<span class="sn miss">Chybí<span class="goal">Cíl: <b>${esc(e.top.item)}</b> · ${unlockText(e.top.unlock)}</span></span>` : key === "slot2" ? '<span class="ph">Sidearm</span>' : ""}</div>`; };
   const quick = c.quick.filter(n => k.names.has(n));
-  const att = key => { const st = k.slots[key] && k.slots[key].st, bs = st ? (D.doplnky || []).filter(b => b.weapons.includes(st.item)) : [];
-    return !bs.length ? "" : `<ul class="lo-att" aria-label="Doplňky ${esc(st.item)}">${bs.flatMap(b => b.slots).map(s => {
-      const i = s.items.findIndex(x => !x.unlock || !!(haveSet && haveSet.has(x.item))), x = s.items[Math.max(i, 0)];
-      return `<li${i < 0 ? ' class="locked"' : ""}>${itemIcon(x.icon, "sm")}<span class="as">${esc(s.slot)}</span><span class="an">${esc(x.item)}</span>${i < 0 && x.unlock ? `<span class="au">${unlockText(x.unlock)}</span>` : ""}</li>`; }).join("")}</ul>`; };
+  const att = key => { const st = k.slots[key] && k.slots[key].st, as = attOf(st);
+    return !as.length ? "" : `<ul class="lo-att" aria-label="Doplňky ${esc(st.item)}">${as.map(({ s, x, have }) =>
+      `<li${have ? "" : ' class="locked"'}>${itemIcon(x.icon, "sm")}<span class="as">${esc(s.slot)}</span><span class="an">${esc(x.item)}</span>${have && x.price ? `<span class="ap">${usd(x.price)}</span>` : ""}${!have && x.unlock ? `<span class="au">${unlockText(x.unlock)}</span>` : ""}</li>`).join("")}</ul>`; };
   return `<article class="loadout" id="${esc(c.id)}">
     <header class="lo-head"><div><${h} class="lo-name"><a href="${classHref(q, c)}">${esc(c.name)}</a></${h}><p>${esc(c.job)}</p>
       <p class="src">${judged ? `Co koupit: nejlepší z toho, co ${asWho ? "má" : "máš"} odemčené a klan doporučuje.` : asWho ? "Nemá propojený WARDOGS Tracker: startovní loadout." : "Startovní loadout. Propoj WARDOGS Tracker ve <a href=\"#/vybava\">Výbavě</a> a uvidíš svůj."}</p></div></header>
@@ -2298,7 +2303,7 @@ function viewPlayer(m, rows, season, have, prog, merits = [], done = new Set(), 
   const sorted = [...rows].sort((a, b) => b.events.starts_at.localeCompare(a.events.starts_at));
   return `<p class="crumb"><a href="#/akce">${m.guest ? "BCT" : "Akce"}</a> / ${esc(m.name)}</p>
     <header class="unit-head"><img class="pavatar" src="${esc(m.avatar_url)}" alt=""><div><h1>${esc(m.name)}</h1><p>${m.guest ? "Navržený host" : "Člen KIN"}</p></div></header>
-    ${m.active ? (m.guest ? `<section class="block rank"><h2>Cesta na Rekruta</h2><p class="lede">Navržený host: projdi <a href="#/akce">BCT</a>, instruktor ti potvrdí účast a velení tě povýší na Rekruta.</p></section>`
+    ${m.active ? (m.guest ? `<section class="block rank"><h2>Cesta na Rekruta</h2><p class="lede">Navržený host: projdi celé <a href="#/akce">BCT</a>, instruktor ti potvrdí účast a War Room tě hned povýší na Rekruta.</p></section>`
       : rankCard(m, prog, merits)) + tasksCard(m, done, trackerOk, prog, counted) : ""}
     ${m.guest ? "" : `<section class="block"><h2>Celkem</h2>${stats(rows)}</section>`}
     ${m.guest ? "" : unlockSection(m, season, have)}
@@ -2319,7 +2324,7 @@ function renderNav(active) {
 }
 
 function viewAkce() {
-  if (isGuest()) return `<header class="unit-head"><div><h1>Basic Combat Training</h1><p>Navrhli tě na Rekruta. Zapiš se na BCT, přijď a instruktor ti na konci potvrdí účast. Pak tě velení povýší a uvidíš celou aplikaci.</p></div></header>
+  if (isGuest()) return `<header class="unit-head"><div><h1>Basic Combat Training</h1><p>Navrhli tě na Rekruta. Zapiš se na BCT a vydrž celé. Instruktor ti na konci potvrdí účast a War Room tě hned povýší na Rekruta: pak uvidíš celou aplikaci.</p></div></header>
     <section class="sestava" id="sestava">${trainingsSection()}</section>`;
   if (state.focusId) return `<p class="crumb"><a href="#/akce">Akce</a> / Operace</p><section class="sestava" id="sestava">${akceBody()}</section>`;
   return `<header class="unit-head"><div><h1>Akce</h1></div></header>

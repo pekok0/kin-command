@@ -1202,7 +1202,8 @@ body.carrying, body.carrying * { cursor: grabbing !important; user-select: none;
 .dw .loadout { padding-left: 14px; padding-right: 14px; }
 /* the weapon's attachments under it in the loadout card */
 .lo-att { list-style: none; margin: -2px 0 8px; padding: 6px 8px; border: 1px solid var(--rule-soft); border-top: 0; background: oklch(0.13 0.03 254 / 0.5); display: grid; gap: 4px; }
-.lo-att li { display: grid; grid-template-columns: auto 5.5em minmax(0, 1fr); align-items: center; gap: 2px 8px; font-size: 14px; }
+.lo-att li { display: grid; grid-template-columns: auto 5.5em minmax(0, 1fr) auto; align-items: center; gap: 2px 8px; font-size: 14px; }
+.lo-att .ap { color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .lo-att .au { grid-column: 3; }
 .lo-att .as { font: 600 12px/1 var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
 .lo-att .an { color: var(--ink); overflow-wrap: anywhere; }
