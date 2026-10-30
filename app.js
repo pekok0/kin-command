@@ -1693,8 +1693,10 @@ function municeFor(lad, gun) {
     return a ? [{ ...st, ...a, qty: st.qty, cost: pieceCost(a, st.qty) }] : []; }) };
 }
 // how far my step is from the clan's goal (Petr 2026-10-22: the page must frown when I lack the role's best gear):
-// ok = the goal, mid = better than the start, low = the start or nothing; optional and free slots are not judged
-const grade = (lad, i) => lad.free || lad.optional || !lad.steps.length ? null : i === lad.steps.length - 1 ? "ok" : i > 0 ? "mid" : "low";
+// ok = the goal, mid = better than the start or a start that is enough (Petr 2026-10-30: white smoke, FMJ), low = the
+// start or nothing; optional and free slots are not judged
+const grade = (lad, i) => lad.free || lad.optional || !lad.steps.length ? null : i === lad.steps.length - 1 ? "ok"
+  : i > 0 || (i === 0 && lad.steps[0].enough) ? "mid" : "low";
 const GRADE = { ok: "Cíl klanu", mid: "Lze lépe", low: "Slabé" };
 // what fits in my backpack (hub/specs/vybava-batoh, Petr 2026-10-25 D35): mandatory things always go in (over = they do
 // not fit); then the optional ones, those dropped last going in first (respirator 3, rounds 2, magazines 1), one stack at
