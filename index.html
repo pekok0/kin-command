@@ -490,6 +490,22 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .cls a:hover { border-color: var(--fr); }
 .cls b { font: 700 20px/1.1 var(--cond); }
 .cls span { font-size: 15px; color: var(--ink-2); }
+/* Petr 2026-10-30: a player's kit readiness for a role (lobby, his role list), the strip of another player's page, the members' grid */
+.rdy { display: inline-grid; place-items: center; min-width: 40px; height: 24px; padding: 0 6px; font: 700 13px/1 var(--cond); letter-spacing: .04em; text-decoration: none; border: 1px solid var(--rule-soft); color: var(--ink-3); align-self: center; flex: none; }
+.rdy.g-ok { color: var(--gr); border-color: oklch(0.82 0.16 150 / 0.55); }
+.rdy.g-mid { color: var(--un); border-color: oklch(0.91 0.15 100 / 0.5); }
+.rdy.g-low { color: var(--ho); border-color: oklch(0.72 0.19 25 / 0.6); }
+.cls a .rdy { justify-self: start; }
+.ros li > .rdy { margin-left: 6px; }
+.viewas { margin: 0 0 12px; padding: 10px 14px; border: 1px solid var(--gold-thread); background: oklch(0.8 0.12 85 / 0.08); color: var(--ink-2); }
+.viewas b { color: var(--gold); }
+.msearch { width: 100%; max-width: 360px; margin: 6px 0 12px; padding: 10px 12px; font: inherit; color: var(--ink); background: var(--acetate); border: 1px solid var(--rule-soft); }
+.mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr)); gap: 8px; list-style: none; padding: 0; margin: 0; }
+.mgrid li[hidden] { display: none; }
+.mgrid a { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 10px; border: 1px solid var(--rule-soft); background: var(--acetate); text-decoration: none; }
+.mgrid a:hover { border-color: var(--fr); }
+.mgrid img { width: 28px; height: 28px; border-radius: 50%; flex: none; }
+.mgrid span { font: 600 16px/1.2 var(--cond); overflow-wrap: anywhere; }
 @media (max-width: 720px) { .lo-grid { grid-template-columns: 1fr; } .lo-gear { grid-template-columns: repeat(2, minmax(0, 1fr)); } .slot .item { width: 88px; height: 56px; } }
 
 /* ---- sestava ---- */

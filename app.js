@@ -125,10 +125,10 @@ async function loadEvent() {
       return { ...ev, claims: cl.data, rsvps: rs.data };
     }));
     // the shopping list's unlocks fail on their own: the roster stays usable (null = the block says it did not load)
-    const have = await loadLobbyHave(ops).catch(e => (console.error(e), null));
+    const [have, trks] = await Promise.all([loadLobbyHave(ops).catch(e => (console.error(e), null)), loadLobbyTrk(ops).catch(e => (console.error(e), null))]);
     // swap the whole state at once, and only for the newest load (a slower old response must not win)
     if (seq !== loadSeq) return;
-    state.ops = ops; state.opsLoaded = true; state.trainings = tr.data; state.evErr = false; state.lobbyHave = have;
+    state.ops = ops; state.opsLoaded = true; state.trainings = tr.data; state.evErr = false; state.lobbyHave = have; state.lobbyTrk = trks;
     focusEvent();
     if (state.flash === LOAD_ERR) state.flash = null;  // connection is back: drop only our own outage message
   } catch (e) {
@@ -149,6 +149,14 @@ async function loadLobbyHave(ops) {
   const { data, error } = await sb.from("members").select("user_id, unlocks!inner(item)").in("user_id", ids).eq("unlocks.season", s.id);
   if (error) throw error;
   return new Map(data.map(m => [m.user_id, new Set(m.unlocks.map(u => u.item))]));
+}
+// their Tracker rows for the readiness chip in the lobby (Petr 2026-10-30)
+async function loadLobbyTrk(ops) {
+  const ids = [...new Set(ops.flatMap(ev => ev.claims.map(c => c.user_id)))];
+  if (!ids.length) return new Map();
+  const { data, error } = await sb.from("tracker").select("user_id, status, levels").in("user_id", ids);
+  if (error) throw error;
+  return new Map(data.map(t => [t.user_id, t]));
 }
 // the operation in focus: the one the address names (#/akce/<id>), else the nearest; the roster code works on it
 function focusEvent() {
@@ -304,9 +312,15 @@ function slotRow(x, c, sq) {
   const kick = c && (mine && !shut || leadsOps())
     ? `<button type="button" class="kick" data-unclaim="${esc(x.key)}" aria-label="${mine ? "Odhlásit se z místa" : `Odhlásit ${esc(c.members.name)}`}" title="${mine ? "Odhlásit se z místa" : ""}">${cross()}</button>` : "";
   const drag = lift ? ` data-drag="${esc(c.user_id)}"` : sqd && !c && !locked && (cmd || !need) ? " data-free" : "";
-  return `<li data-key="${esc(x.key)}"${drag}${mine ? ' class="is-me"' : ""}><button type="button" class="rslot" ${act}><span class="lbl">${x.role ? `<span class="rid">${esc(x.role)}</span>` : ""}${esc(x.label)}</span>${who}</button>${moveto}${kick}</li>`;
+  // Petr 2026-10-30: how the player's kit stands for the role of his place, a click opens it with his data
+  const rc = c && state.lobbyHave && isSq(state.event) && slotClass(x);
+  const chip = rc ? readyChip({ name: c.members.name, have: state.lobbyHave.get(c.user_id) || new Set(), trk: (state.lobbyTrk && state.lobbyTrk.get(c.user_id)) || null },
+    rc[1], `${classHref(...rc)}?hrac=${encodeURIComponent(c.members.discord_id)}`) : "";
+  return `<li data-key="${esc(x.key)}"${drag}${mine ? ' class="is-me"' : ""}><button type="button" class="rslot" ${act}><span class="lbl">${x.role ? `<span class="rid">${esc(x.role)}</span>` : ""}${esc(x.label)}</span>${who}</button>${chip}${moveto}${kick}</li>`;
 }
 
+// the Vybava role of a lobby place: Public Ops squads carry it, SWARM roles and crews take it from their Doktrina slot
+const slotClass = x => { const cls = x.cls || (D.doktrina.swarm.slots.find(r => r.id === x.kit) || {}).class; return cls && classById(cls).length ? classById(cls) : null; };
 function rosterGroup(g, by) {
   const n = g.slots.filter(x => by[x.key]).length;
   return `<div class="rg"><div class="pg-head">${sym(g.symbol, "sm")}<div><b>${esc(g.name)}</b><small>${esc(g.squad)}</small></div><span class="num">${n}/${g.max}</span></div>
@@ -1710,6 +1724,34 @@ function packBag(bag, list) {
   return out.map(e => ({ ...e, qty: e.fill ? Math.max(e.units, e.min || 0) * per(e) : e.drop ? Math.min(e.want, e.units * per(e)) : e.want,
     cut: !!e.drop && e.units * per(e) < e.want }));
 }
+// another member's Vybava (Petr 2026-10-30): the same pages and counts with his unlocks and Tracker; asWho = his name
+// while a page or a chip is drawn for him (the texts say "Má" instead of "Tvůj")
+let asWho = null;
+function asPlayer(pl, fn) {
+  const h = haveSet, t = trk, o = asWho;
+  haveSet = pl.have; trk = pl.trk; asWho = pl.name || "hráč";
+  try { return fn(); } finally { haveSet = h; trk = t; asWho = o; }
+}
+const readyOf = (pl, c) => asPlayer(pl, () => { const g = myKit(c).graded; return g.length ? { ok: g.filter(e => e.g === "ok").length, n: g.length } : null; });
+// a link where it stands alone (lobby), a span inside a role's link (a player's role list)
+function readyChip(pl, c, href) {
+  const r = readyOf(pl, c), g = !r ? "g-none" : r.ok === r.n ? "g-ok" : r.ok * 2 >= r.n ? "g-mid" : "g-low";
+  const title = r ? `${esc(c.name)}: ${r.ok} z ${r.n} slotů výbavy na cíli klanu` : "Bez dat z WARDOGS Trackeru";
+  return href ? `<a class="rdy ${g}" href="${href}" title="${title}">${r ? `${r.ok}/${r.n}` : "?"}</a>` : `<span class="rdy ${g}" title="${title}">${r ? `${r.ok}/${r.n}` : "?"}</span>`;
+}
+// his unlocks of this season and his Tracker; members read both (RLS unlocks_read, tracker_read)
+async function fetchPlayer(d) {
+  const s = currentSeason();
+  const { data: m, error } = await sb.from("members").select("user_id, discord_id, name, avatar_url").eq("discord_id", d).maybeSingle();
+  if (error) throw error;
+  if (!m) return null;
+  const [un, tr] = await Promise.all([s ? sb.from("unlocks").select("item").eq("user_id", m.user_id).eq("season", s.id) : { data: [] },
+    sb.from("tracker").select("status, levels").eq("user_id", m.user_id).maybeSingle()]);
+  if (un.error) throw un.error;
+  if (tr.error) throw tr.error;
+  return { ...m, have: new Set(un.data.map(u => u.item)), trk: tr.data };
+}
+const fold = t => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 // Petr 2026-10-29 (vybava-role-v3 R2): the ordinary magazine I have (30-35 rounds), not the heavy 50/60 that slows ADS;
 // a weapon without one (SV98 10) takes the biggest I have
 const ordinaryMag = mags => { const own = mags.filter(m => !m.unlock || owned(m.item)), ok = own.filter(m => m.capacity >= 30);
@@ -1756,7 +1798,7 @@ function readiness(k) {
   const all = ok === g.length;
   return `<div class="ready ${all ? "g-ok" : ok * 2 >= g.length ? "g-mid" : "g-low"}"><div class="rd-top"><span class="rd-l">Připravenost role</span><b>${ok} / ${g.length}</b><span class="rd-s">slotů na cíli klanu</span></div>
     <span class="rd-bar" aria-hidden="true">${g.map(e => `<i class="g-${e.g}"></i>`).join("")}</span>
-    <p>${all ? "Máš všechno, co klan pro tuhle roli chce." : `Pod cílem klanu: <b>${g.length - ok}</b>. Odemkni: ${next.map(st => `<b>${esc(st.item)}</b> (${unlockText(st.unlock)})`).join(", ")}`}</p></div>`;
+    <p>${all ? `${asWho ? "Má" : "Máš"} všechno, co klan pro tuhle roli chce.` : `Pod cílem klanu: <b>${g.length - ok}</b>. Odemkni: ${next.map(st => `<b>${esc(st.item)}</b> (${unlockText(st.unlock)})`).join(", ")}`}</p></div>`;
 }
 function loadoutCard(q, c, h = "h2") {
   const k = myKit(c), judged = k.judged;
@@ -1774,7 +1816,7 @@ function loadoutCard(q, c, h = "h2") {
       return `<li${i < 0 ? ' class="locked"' : ""}>${itemIcon(x.icon, "sm")}<span class="as">${esc(s.slot)}</span><span class="an">${esc(x.item)}</span>${i < 0 && x.unlock ? `<span class="au">${unlockText(x.unlock)}</span>` : ""}</li>`; }).join("")}</ul>`; };
   return `<article class="loadout" id="${esc(c.id)}">
     <header class="lo-head"><div><${h} class="lo-name"><a href="${classHref(q, c)}">${esc(c.name)}</a></${h}><p>${esc(c.job)}</p>
-      <p class="src">${judged ? "Co koupit: nejlepší z toho, co máš odemčené a klan doporučuje." : "Startovní loadout. Propoj WARDOGS Tracker ve <a href=\"#/vybava\">Výbavě</a> a uvidíš svůj."}</p></div></header>
+      <p class="src">${judged ? `Co koupit: nejlepší z toho, co ${asWho ? "má" : "máš"} odemčené a klan doporučuje.` : asWho ? "Nemá propojený WARDOGS Tracker: startovní loadout." : "Startovní loadout. Propoj WARDOGS Tracker ve <a href=\"#/vybava\">Výbavě</a> a uvidíš svůj."}</p></div></header>
     ${readiness(k)}
     <div class="lo-grid">
       <div><h3>Equipment</h3>${["slot1", "slot2", "slot3", ...(k.slots.sling ? ["sling"] : [])].map(key => cell(key) + (key === "slot1" || key === "sling" ? att(key) : "")).join("")}
@@ -1999,13 +2041,13 @@ function ladderBlock(lad, lv) {
     <ol class="lad-steps">${lad.steps.map((st, i) => { const can = i > mine && reach[i] && !have[i];
       return `<li class="st${i === mine ? " mine" : ""}${can ? " can" : ""}${i === next ? " next" : ""}${i > mine && !reach[i] ? " locked" : ""}">
       ${itemIcon(st.icon)}<span class="st-n">${esc(st.item)}</span><span class="st-u">${st.unlock ? `${esc(st.unlock.track)} ${st.unlock.level} · ${usd(st.unlock.cash)}` : "hned"}</span>
-      <span class="st-src" title="Síla zdroje · počet zdrojů">${SRC[st.source]} · ${st.n}</span>${i === mine ? '<span class="st-tag">Tvůj</span>' : can ? `<span class="st-tag can" title="Máš level, chybí odemknout za ${usd(st.unlock.cash)}">Odemkni</span>` : ""}</li>`; }).join("")}</ol></div>`;  // no "Proc" (Petr 2026-10-30)
+      <span class="st-src" title="Síla zdroje · počet zdrojů">${SRC[st.source]} · ${st.n}</span>${i === mine ? `<span class="st-tag">${asWho ? "Má" : "Tvůj"}</span>` : can ? `<span class="st-tag can" title="Máš level, chybí odemknout za ${usd(st.unlock.cash)}">Odemkni</span>` : ""}</li>`; }).join("")}</ol></div>`;  // no "Proc" (Petr 2026-10-30)
 }
 function ladderSection(c) {
   if (!c.ladders || !c.ladders.length) return "";
   const lv = trk && trk.levels || null;
   return `<section class="block lads-sec"><h2>Co máš a co máš mít</h2>
-    <p class="note">Co klan doporučuje, od startu po cíl (meta Season 2, rešerše 22. 10.). <b>Tvůj</b> = nejlepší, co máš odemčené. <b>Odemkni</b> = level máš, chybí koupit. <b>Další</b> = kam míříš.${lv ? "" : ` Propoj WARDOGS Tracker ve <a href="#/vybava">Výbavě</a> a uvidíš, co máš.`} Zdroj: A data nebo oficiální, B víc hráčů, C jeden zdroj; číslo = kolik zdrojů.</p>
+    <p class="note">Co klan doporučuje, od startu po cíl (meta Season 2, rešerše 22. 10.). ${asWho ? "<b>Má</b> = nejlepší, co má odemčené. <b>Odemkni</b> = level má, chybí koupit. <b>Další</b> = kam míří." : "<b>Tvůj</b> = nejlepší, co máš odemčené. <b>Odemkni</b> = level máš, chybí koupit. <b>Další</b> = kam míříš."}${lv || asWho ? "" : ` Propoj WARDOGS Tracker ve <a href="#/vybava">Výbavě</a> a uvidíš, co máš.`} Zdroj: A data nebo oficiální, B víc hráčů, C jeden zdroj; číslo = kolik zdrojů.</p>
     <div class="lads">${c.ladders.map(lad => ladderBlock(lad.group === "Munice" ? municeFor(lad, (myKit(c).slots.slot1 || {}).st) : lad, lv) + (lad.slot === "slot1" ? doplnkyBlocks(lad) : "")).join("")}</div></section>`;
 }
 // hub/specs/vybava-doplnky (Petr 2026-10-27): attachments of the weapons in the role's weapon ladder, main first, then
@@ -2018,7 +2060,7 @@ function doplnkyBlocks(lad) {
     const mine = (x, i) => s.podle_mapy ? own(x) : i === first;
     return `<div class="lad dop"><div class="lad-h"><span class="sl">${esc(s.slot)} · ${esc(b.weapons.join(", "))}</span></div>
       <ol class="lad-steps">${s.items.map((x, i) => `<li class="st${mine(x, i) ? " mine" : ""}">${itemIcon(x.icon)}<span class="st-n">${esc(x.item)}</span><span class="st-u">${x.unlock ? `${esc(x.unlock.track)} ${x.unlock.level} · ${usd(x.unlock.cash)}` : "hned"}</span>
-        <span class="st-src">${s.podle_mapy ? "Podle mapy" : i ? `Náhrada ${i}` : "Hlavní"}</span>${mine(x, i) ? '<span class="st-tag">Tvůj</span>' : ""}</li>`).join("")}</ol>
+        <span class="st-src">${s.podle_mapy ? "Podle mapy" : i ? `Náhrada ${i}` : "Hlavní"}</span>${mine(x, i) ? `<span class="st-tag">${asWho ? "Má" : "Tvůj"}</span>` : ""}</li>`).join("")}</ol>
       ${s.note ? `<p class="note">${esc(s.note)}</p>` : ""}${k ? "" : `<p class="note">${b.note ? esc(b.note) + " " : ""}Zdroj: ${esc(b.source)}.</p>`}
 </div>`;
   }).join("")).join("");
@@ -2102,14 +2144,18 @@ async function loadHist(p) {
   const want = location.hash, el = () => location.hash === want && document.getElementById("hist");
   try {
     let html;
-    if (p[0] === "pokryti") {
+    if (p[0] === "pokryti" && p[1]) {  // a member's roles (Petr 2026-10-30)
+      const pl = await fetchPlayer(p[1]);
+      html = pl ? viewPlayerRoles(pl) : '<p class="note">Hráč neexistuje.</p>';
+    } else if (p[0] === "pokryti") {
       const s = currentSeason();
       // one row per active member with their items nested: removed members drop out and the
       // 1000-row response cap applies to members, not to the ~50 x members unlock rows
-      const { data, error } = s ? await sb.from("members").select("user_id, name, avatar_url, discord_id, unlocks!inner(item)")
-        .eq("active", true).eq("unlocks.season", s.id) : { data: [] };
-      if (error) throw error;
-      html = viewCoverage(s, data);
+      const [cov, all] = await Promise.all([s ? sb.from("members").select("user_id, name, avatar_url, discord_id, unlocks!inner(item)")
+        .eq("active", true).eq("unlocks.season", s.id) : { data: [] }, sb.from("members").select("user_id, name, avatar_url, discord_id").eq("active", true)]);
+      if (cov.error) throw cov.error;
+      if (all.error) throw all.error;
+      html = viewCoverage(s, cov.data, all.data);
     } else if (p[0] === "ukoly") {
       const [ms, td, tr] = await Promise.all([sb.from("members").select("user_id, discord_id, name, avatar_url").eq("active", true),
         sb.from("tasks_done").select("user_id, task"), sb.from("tracker").select("user_id, status, owned")]);
@@ -2170,32 +2216,28 @@ async function loadHist(p) {
 // coverage: who has which unlock this season, and how many of us reached each sub-class's goal
 // the ladder that tells a sub-class apart: its weapon, or slot [3] when the weapon ladder is just the start rifle
 const keyLadder = c => { const w = c.ladders.find(l => l.slot === "slot1"); return w && w.steps.length > 1 ? w : c.ladders.find(l => l.slot === "slot3") || c.ladders.find(l => l.steps.length > 1) || c.ladders.find(l => l.steps.length); };
-function viewCoverage(season, members) {
+// Petr 2026-10-30: the roles by name and how many have the role's goal ("z N" in the head); instead of the table per
+// item a searchable grid of members, a member opens his roles with his readiness
+function viewCoverage(season, members, all) {
   const head = `<p class="crumb"><a href="#/vybava">Výbava</a> / Pokrytí</p>
     <header class="unit-head"><div><h1>Pokrytí rolí</h1><p>${esc(season ? season.name : "Žádná sezóna")} · podle WARDOGS Trackeru</p></div></header>`;
-  // item names come from members' rows: a null-prototype map, so "constructor" or "__proto__" cannot break it
-  const byItem = Object.create(null), users = [];
-  for (const m of members) {
-    const have = new Set(m.unlocks.map(u => u.item));
-    users.push(have);
-    for (const n of have) (byItem[n] = byItem[n] || []).push(m);
-  }
-  const items = [];
-  for (const q of D.squads) for (const c of q.classes) for (const lad of c.ladders) for (const st of lad.steps) if (st.unlock && !items.includes(st.item)) items.push(st.item);
-  // vehicles and other extras the plans add to roles (MH-6, Lakota, Ural, Verba) need unlocks too
-  for (const s of D.strategies) for (const r of s.roles) for (const g of r.gear) {
-    if (g.item && g.unlock && !items.includes(g.item)) items.push(g.item);
-    if (g.ideal && g.ideal_unlock && !items.includes(g.ideal)) items.push(g.ideal);
-  }
+  const users = members.map(m => new Set(m.unlocks.map(u => u.item)));
   return `${head}
     <p class="note">Členů s daty: <b>${users.length}</b>. Kdo nemá propojený ${TRK_LINK}, v počtech chybí (propojení je ve <a href="#/vybava">Výbavě</a>).</p>
-    <section class="block"><h2>Sub-classy</h2><table class="data cov"><thead><tr><th>Sub-class</th><th>Cíl</th><th class="num">Mají</th></tr></thead><tbody>
+    <section class="block"><h2>Role</h2><table class="data cov"><thead><tr><th>Role</th><th class="num">Mají <small>z ${users.length}</small></th></tr></thead><tbody>
     ${D.squads.map(q => roles(q).map(c => { const top = keyLadder(c).steps.at(-1);
-      return `<tr><td><a href="${classHref(q, c)}">${esc(q.name)} · ${esc(c.name)}</a></td><td>${esc(top.item)}</td><td class="num"><b>${top.unlock ? users.filter(h => h.has(top.item)).length : users.length}</b></td></tr>`; }).join("")).join("")}
+      return `<tr><td><a href="${classHref(q, c)}">${esc(c.name)}</a></td><td class="num"><b>${top.unlock ? users.filter(h => h.has(top.item)).length : users.length}</b></td></tr>`; }).join("")).join("")}
     </tbody></table></section>
-    <section class="block"><h2>Kdo má odemčeno</h2><table class="data cov"><thead><tr><th>Předmět</th><th class="num">Mají</th><th>Kdo</th></tr></thead><tbody>
-    ${items.map(n => { const ms = byItem[n] || []; return `<tr><td>${esc(n)}</td><td class="num"><b>${ms.length}</b></td><td>${ms.map(memberLink).join(" ")}</td></tr>`; }).join("")}
-    </tbody></table></section>`;
+    <section class="block"><h2>Členové</h2><input type="search" class="msearch" placeholder="Hledat člena" aria-label="Hledat člena">
+      <ul class="mgrid">${all.slice().sort((x, y) => x.name.localeCompare(y.name, "cs")).map(m => `<li data-n="${esc(fold(m.name))}"><a href="#/pokryti/${encodeURIComponent(m.discord_id)}"><img src="${esc(m.avatar_url)}" alt="" loading="lazy"><span>${esc(m.name)}</span></a></li>`).join("")}</ul></section>`;
+}
+function viewPlayerRoles(pl) {
+  const ok = pl.trk && pl.trk.status === "ok";
+  return `<p class="crumb"><a href="#/vybava">Výbava</a> / <a href="#/pokryti">Pokrytí</a> / ${esc(pl.name)}</p>
+    <header class="unit-head"><div><h1>${esc(pl.name)}</h1><p>${ok ? "Výbava podle WARDOGS Trackeru: vyber roli" : "Nemá propojený WARDOGS Tracker: role ukážou startovní loadout"}</p></div></header>
+    <section class="block"><h2>Role</h2><ul class="cls">${D.squads.flatMap(q => roles(q).map(c => {
+      const href = `${classHref(q, c)}?hrac=${encodeURIComponent(pl.discord_id)}`;
+      return `<li><a href="${href}"><b>${esc(c.name)}</b>${readyChip(pl, c)}</a></li>`; })).join("")}</ul></section>`;
 }
 
 function viewHistory(evs) {
@@ -2443,7 +2485,17 @@ function render() {
     const [q, c] = classById(Object.hasOwn(OLD_ROLE, p[2]) ? OLD_ROLE[p[2]] : p[2]); html = viewClass(q, c); title = `${c.name} · KIN`; active = "vybava";
   } else if (p[0] === "squad" && SQ(p[1])) {
     const q = SQ(p[1]), c = classOf(q, Object.hasOwn(OLD_ROLE, p[2]) ? OLD_ROLE[p[2]] : p[2]); active = "vybava";
-    if (c) { html = viewClass(q, c); title = `${c.name} · KIN`; } else { html = viewSquadPage(q); title = `${q.name} · KIN`; }
+    const hrac = c && sb && state.me && new URLSearchParams(qs).get("hrac");
+    if (hrac && hrac !== state.me.discord_id) {  // another player's page (Petr 2026-10-30: lobby chip, Pokryti)
+      const pl = state.viewAs && state.viewAs.discord_id === hrac ? state.viewAs : null;
+      if (!pl && state.viewAsLoading !== hrac) {
+        state.viewAsLoading = hrac;
+        fetchPlayer(hrac).catch(e => (console.error(e), null)).then(x => { state.viewAs = x || { discord_id: hrac, missing: true }; state.viewAsLoading = null; render(); });
+      }
+      html = !pl ? '<p class="note">Načítám výbavu hráče…</p>' : pl.missing ? '<p class="note">Hráče se nepodařilo načíst.</p>'
+        : `<p class="viewas">Výbava hráče <b>${esc(pl.name)}</b> · <a href="${classHref(q, c)}">moje</a></p>${asPlayer(pl, () => viewClass(q, c))}`;
+      title = `${c.name} · ${pl && pl.name ? pl.name + " · " : ""}KIN`;
+    } else if (c) { html = viewClass(q, c); title = `${c.name} · KIN`; } else { html = viewSquadPage(q); title = `${q.name} · KIN`; }
   } else if (p[0] === "doktrina" || p[0] === "vycvik") {
     const tab = p[0] === "vycvik" ? "vycvik" : p[1], sub = p[0] === "vycvik" ? p[1] : p[2];
     html = viewDoktrina(tab, sub); active = "doktrina"; title = (tab === "cw" ? "Public Ops" : tab === "vycvik" ? (sub === "act" ? "Advanced Combat Training" : "Basic Combat Training") : "SWARM") + " · KIN";
@@ -2534,3 +2586,10 @@ addEventListener("hashchange", () => {
   if (y) window.scrollTo(0, y);
 });
 render();
+
+// Pokryti: the members' grid filters as you type, without diacritics (Petr 2026-10-30)
+document.addEventListener("input", e => {
+  if (!e.target.matches(".msearch")) return;
+  const v = fold(e.target.value.trim());
+  document.querySelectorAll(".mgrid li").forEach(li => { li.hidden = !!v && !li.dataset.n.includes(v); });
+});
