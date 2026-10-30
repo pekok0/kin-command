@@ -848,6 +848,56 @@ async function claim(key) {
   if (state.flash) document.querySelector(".ros-msg")?.scrollIntoView({ block: "nearest" });
 }
 
+// Petr 2026-10-30: "pres prave tlacitko mysi, kdyz kliknu na prazdny slot, tak mi vyjede seznam hracu, kteri v dane akci
+// dali prijdu, a z nej je budu moct sam jako velitel umistit": the command (051 claims_create) places one who said yes;
+// one who already has a place of the same kind (042) moves, the others get a new place. Without a place first.
+function openPick(key, x, y) {
+  closePick();
+  const g = plan.roster.find(g => g.slots.some(s => s.key === key)), slot = g && g.slots.find(s => s.key === key);
+  if (!slot) return;
+  const placeOf = uid => state.claims.find(c => c.user_id === uid && isCmd(c.slot_key) === isCmd(key));
+  const yes = state.rsvps.filter(r => r.status === "yes" && r.members).map(r => ({ r, at: placeOf(r.user_id) }))
+    .sort((a, b) => !!a.at - !!b.at || a.r.members.name.localeCompare(b.r.members.name, "cs"));
+  const el = document.createElement("div");
+  el.className = "pick"; el.setAttribute("role", "menu"); el.setAttribute("aria-label", `Dosadit na ${g.name} · ${slot.label}`);
+  el.innerHTML = `<p class="pick-h">Dosadit na <b>${esc(g.name)} · ${esc(slot.label)}</b></p>${yes.length ? yes.map(({ r, at }) =>
+    `<button type="button" role="menuitem" data-pick="${esc(r.user_id)}" data-key="${esc(key)}"><img src="${esc(r.members.avatar_url)}" alt="">${esc(r.members.name)}${at ? `<small>má ${esc(at.slot_label)}</small>` : ""}</button>`).join("")
+    : '<p class="note">Nikdo další nedal Přijdu.</p>'}`;
+  document.body.append(el);
+  const w = el.offsetWidth, h = el.offsetHeight;
+  el.style.left = `${Math.max(8, Math.min(x, innerWidth - w - 8))}px`; el.style.top = `${Math.max(8, Math.min(y, innerHeight - h - 8))}px`;
+  el.querySelector("button")?.focus({ preventScroll: true });
+  pickY = scrollY;
+}
+let pickY = 0;
+function closePick() { document.querySelector(".pick")?.remove(); }
+async function pickPlace(uid, key) {
+  closePick();
+  const at = state.claims.find(c => c.user_id === uid && isCmd(c.slot_key) === isCmd(key));
+  if (at) return moveTo(uid, key, at.slot_key);
+  const s = plan, g = s.roster.find(g => g.slots.some(x => x.key === key)), slot = g.slots.find(x => x.key === key);
+  const { error } = await sb.from("claims").insert({ event_id: state.event.id, user_id: uid, slot_key: key, slot_label: s.swarm ? slot.stat : `${g.name} · ${slot.label}`, lead: false });
+  state.flash = !error ? null : error.code === "23505" ? "Místo už někdo obsadil." : /bct_required/.test(error.message || "") ? "Hráč ještě nemá Basic Combat Training."
+    : error.code === "42501" ? "Dosadit jde jen toho, kdo dal Přijdu, a jen do otevřené akce." : saveErr(error);
+  await loadEvent();
+  renderRoster();
+}
+document.addEventListener("contextmenu", e => {
+  const li = e.target.closest?.("#sestava li[data-key]");
+  if (!li || !leadsOps() || !state.event || state.claims.some(c => c.slot_key === li.dataset.key)) return;
+  e.preventDefault();
+  const r = li.getBoundingClientRect();
+  openPick(li.dataset.key, e.clientX || r.left, e.clientY || r.bottom);
+});
+document.addEventListener("click", e => {
+  const b = e.target.closest?.("[data-pick]");
+  if (b) { pickPlace(b.dataset.pick, b.dataset.key); return; }
+  if (!e.target.closest?.(".pick")) closePick();
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape") closePick(); });
+// a real scroll closes it; a smooth scroll still settling (wheel, scroll-behavior) does not
+addEventListener("scroll", () => { if (Math.abs(scrollY - pickY) > 40) closePick(); }, { passive: true });
+
 async function unclaim(key) {  // one place (042: the command one and the ordinary one leave apart)
   const c = state.claims.find(c => c.slot_key === key);
   if (!c) return loadEvent();
