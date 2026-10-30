@@ -36,6 +36,8 @@ async function errText(e) {
 }
 // a failed write shows one plain sentence; the raw database error goes to the console only
 const saveErr = e => { console.error(e); return "Nepodařilo se uložit, zkus to znovu."; };
+// 049 (Petr 2026-10-30, hub/specs/hoste-bct): a guest proposed for promotion sees only BCT and his own profile
+const isGuest = () => !!(state.me && state.me.guest);
 
 async function onAuth(session) {
   // a queued event can carry a session that an earlier onAuth already signed out (Host refused): treat it as
@@ -61,13 +63,13 @@ async function onAuth(session) {
     try { back = sessionStorage.getItem(BACK); sessionStorage.removeItem(BACK); } catch { /* storage blocked */ }
     if (back && back !== location.hash) location.hash = back;
   }
-  const { data, error } = await sb.from("members").select("user_id, discord_id, name, avatar_url, is_commander, is_officer, is_sl, rank")
+  const { data, error } = await sb.from("members").select("user_id, discord_id, name, avatar_url, is_commander, is_officer, is_sl, rank, guest")
     .eq("user_id", session.user.id).maybeSingle();
   if (error) throw error;
   if (!data) { state.error = "Nejsi ověřený člen KIN. Přihlas se znovu."; await sb.auth.signOut(); return; }
   state.me = data; state.error = null;
   // unlocks need the seasons from the content, so they load after it (both at once = haveSet never set, Viktor UAT)
-  if (!was) loadContent()
+  if (!was) loadContent(data.guest ? "host" : "hub")
     .then(() => Promise.all([loadUnlocks().catch(e => { console.error(e); haveSet = null; }), loadTracker().catch(e => console.error(e))]))
     // history pages and loadout cards wait for the login to know what to load / which boxes to tick
     .then(() => { if (onHistRoute() || onCardRoute()) { const y = scrollY; render(); scrollTo(0, y); } autoSyncTracker(); },
@@ -84,9 +86,10 @@ function renderWho() {
   navToCurrent();
 }
 
-// specs/zamek: the hub content lives in public.content, readable only by verified members
-async function loadContent() {
-  const { data, error } = await sb.from("content").select("data").eq("id", "hub").single();
+// specs/zamek: the hub content lives in public.content, readable only by verified members; a guest proposed for
+// promotion (049, hub/specs/hoste-bct) reads the row 'host': the tasks and seasons of his profile, no plans
+async function loadContent(id) {
+  const { data, error } = await sb.from("content").select("data").eq("id", id).single();
   if (error) throw error;
   Object.assign(D, data.data);
   state.checking = false;
@@ -253,7 +256,7 @@ function tasksCard(m, done, trackerOk, prog, counted) {
   return `<section class="block ukoly" id="ukoly"><h2>Úkoly <small>${ok.filter(Boolean).length} z ${ok.length}</small></h2><ul class="tasks">
     ${D.ukoly.map((x, i) => `<li data-task="${esc(x.id)}"${ok[i] ? ' class="ok"' : ""}><span class="tk-mark" aria-hidden="true"></span>
       <a href="${esc(x.url || x.href)}"${x.url ? ' target="_blank" rel="noopener"' : ""}>${esc(x.name)}</a></li>`).join("")}</ul>
-    <p class="note">${note} <a href="#/ukoly">Kdo co má hotové</a></p></section>`;
+    <p class="note">${note}${isGuest() ? "" : ' <a href="#/ukoly">Kdo co má hotové</a>'}</p></section>`;
 }
 // everyone's tasks, the most missing first (specs/ukoly-clenu U5)
 // U9: a task the source shows only through a profile that counts (046) is "?" without one, never "–" (denbler 2026-10-22)
@@ -1070,10 +1073,10 @@ function trainingsSection() {
 
 function trainingRow(tr) {
   const by = { yes: [], maybe: [], no: [] }, id = esc(tr.id);
-  for (const r of tr.rsvps) (by[r.status] || []).push(r.members);
+  for (const r of tr.rsvps) if (r.members) (by[r.status] || []).push(r.members);  // a guest reads no names but his own (049)
   const mine = (tr.rsvps.find(r => r.user_id === state.me.user_id) || {}).status;
   // T4: no "Prijdu" on a full course unless I already have a place; the capacity trigger refuses it anyway
-  const full = tr.capacity && by.yes.length >= tr.capacity && mine !== "yes";
+  const full = tr.capacity && goers(tr) >= tr.capacity && mine !== "yes";
   const ctl = leadsOps() || tr.created_by === state.me.user_id ? `<details class="t${id}"><summary>Uzavřít nebo zrušit</summary>
       ${by.yes.length ? `<fieldset class="atts"><legend>Kdo byl</legend>${tr.rsvps.filter(r => r.status === "yes").map(r =>
         `<label class="att"><input type="checkbox" name="tatt_${esc(r.user_id)}" checked>${esc(r.members.name)}</label>`).join("")}</fieldset>` : ""}
@@ -2166,7 +2169,7 @@ async function loadHist(p) {
       if (at.error) throw at.error;
       html = ev ? viewEvent(ev, cl.data, new Set(at.data.filter(a => !a.attended).map(a => a.user_id))) : '<p class="note">Akce neexistuje.</p>';
     } else {
-      const { data: m, error } = await sb.from("members").select("user_id, discord_id, name, avatar_url, active, rank").eq("discord_id", p[1]).maybeSingle();
+      const { data: m, error } = await sb.from("members").select("user_id, discord_id, name, avatar_url, active, rank, guest").eq("discord_id", p[1]).maybeSingle();
       if (error) throw error;
       const season = currentSeason();
       const [cl, at, un, pr, me, td, tr] = m ? await Promise.all([
@@ -2293,12 +2296,13 @@ function viewPlayer(m, rows, season, have, prog, merits = [], done = new Set(), 
       ${top.length ? `<ul class="bullets">${top.map(([role, n]) => `<li>${esc(role)} <span class="ref">${n}×</span></li>`).join("")}</ul>` : ""}`;
   };
   const sorted = [...rows].sort((a, b) => b.events.starts_at.localeCompare(a.events.starts_at));
-  return `<p class="crumb"><a href="#/akce">Akce</a> / ${esc(m.name)}</p>
-    <header class="unit-head"><img class="pavatar" src="${esc(m.avatar_url)}" alt=""><div><h1>${esc(m.name)}</h1><p>Člen KIN</p></div></header>
-    ${m.active ? rankCard(m, prog, merits) + tasksCard(m, done, trackerOk, prog, counted) : ""}
-    <section class="block"><h2>Celkem</h2>${stats(rows)}</section>
-    ${unlockSection(m, season, have)}
-    ${bySeason(sorted, r => r.events.starts_at).map(({ s, rows: xs }) => `<section class="block"><h2>${esc(seasonName(s))}</h2>${stats(xs)}
+  return `<p class="crumb"><a href="#/akce">${m.guest ? "BCT" : "Akce"}</a> / ${esc(m.name)}</p>
+    <header class="unit-head"><img class="pavatar" src="${esc(m.avatar_url)}" alt=""><div><h1>${esc(m.name)}</h1><p>${m.guest ? "Navržený host" : "Člen KIN"}</p></div></header>
+    ${m.active ? (m.guest ? `<section class="block rank"><h2>Cesta na Rekruta</h2><p class="lede">Navržený host: projdi <a href="#/akce">BCT</a>, instruktor ti potvrdí účast a velení tě povýší na Rekruta.</p></section>`
+      : rankCard(m, prog, merits)) + tasksCard(m, done, trackerOk, prog, counted) : ""}
+    ${m.guest ? "" : `<section class="block"><h2>Celkem</h2>${stats(rows)}</section>`}
+    ${m.guest ? "" : unlockSection(m, season, have)}
+    ${m.guest ? "" : bySeason(sorted, r => r.events.starts_at).map(({ s, rows: xs }) => `<section class="block"><h2>${esc(seasonName(s))}</h2>${stats(xs)}
       <p class="note">${xs.map(r => `<a href="#/akce/${r.events.id}">${esc(fmtWhen(r.events.starts_at))}</a>`).join(" · ")}</p></section>`).join("")}`;
 }
 
@@ -2310,11 +2314,13 @@ const navCmd = () => !state.me || !state.me.is_commander ? [] : [["moje-ukoly", 
 function renderNav(active) {
   navActive = active;
   document.getElementById("nav").innerHTML =
-    [...NAV, ...navCmd()].map(([k, l, n]) => `<a href="#/${k}"${active === k ? ' aria-current="page"' : ""}>${l}${n ? `<b class="nav-n">${n}</b>` : ""}</a>`).join("");
+    (isGuest() ? [["akce", "BCT"]] : [...NAV, ...navCmd()]).map(([k, l, n]) => `<a href="#/${k}"${active === k ? ' aria-current="page"' : ""}>${l}${n ? `<b class="nav-n">${n}</b>` : ""}</a>`).join("");
   navToCurrent();
 }
 
 function viewAkce() {
+  if (isGuest()) return `<header class="unit-head"><div><h1>Basic Combat Training</h1><p>Navrhli tě na Rekruta. Zapiš se na BCT, přijď a instruktor ti na konci potvrdí účast. Pak tě velení povýší a uvidíš celou aplikaci.</p></div></header>
+    <section class="sestava" id="sestava">${trainingsSection()}</section>`;
   if (state.focusId) return `<p class="crumb"><a href="#/akce">Akce</a> / Operace</p><section class="sestava" id="sestava">${akceBody()}</section>`;
   return `<header class="unit-head"><div><h1>Akce</h1></div></header>
     <section class="sestava" id="sestava">${akceBody()}</section>
@@ -2480,6 +2486,7 @@ function render() {
   const [h, qs = ""] = location.hash.replace(/^#/, "").split("?");
   const p = h.split("/").filter(Boolean);
   if (p[0] === "historie") { location.replace("#/akce"); return; }  // links in Discord debrief threads
+  if (isGuest() && !(p[0] === "akce" && !p[1] || p[0] === "hrac" && p[1] === state.me.discord_id)) { location.replace("#/akce"); return; }
   let html, active = null, title = "KIN War Room";
   cur = null; trace = null; plan = null;
   if (p[0] !== "akce") { state.focusId = null; focusEvent(); }
@@ -2519,8 +2526,8 @@ function render() {
     state.focusId = p[1] ? +p[1] : null; focusEvent();
     plan = planOf(state.event); if (plan && !plan.swarm) curVariant = state.event.variant || pickVariant(plan, qs);
     cur = plan && !plan.swarm && !plan.nomap ? plan : null;  // the build order's role chips trace on this plan
-    html = viewAkce(); active = "akce"; title = "Akce · KIN";
-    if (sb && state.me && !p[1]) setTimeout(() => loadHist(["historie"]));
+    html = viewAkce(); active = "akce"; title = isGuest() ? "BCT · KIN" : "Akce · KIN";
+    if (sb && state.me && !p[1] && !isGuest()) setTimeout(() => loadHist(["historie"]));
   } else if (p[0] === "moje-ukoly") {
     html = viewCmdTasks(); active = "moje-ukoly"; title = "Úkoly · KIN";
   } else if (p[0] === "briefing") {
