@@ -1730,12 +1730,12 @@ function asPlayer(pl, fn) {
   haveSet = pl.have; trk = pl.trk; asWho = pl.name || "hráč";
   try { return fn(); } finally { haveSet = h; trk = t; asWho = o; }
 }
-const readyOf = (pl, c) => asPlayer(pl, () => { const g = myKit(c).graded; return g.length ? { ok: g.filter(e => e.g === "ok").length, n: g.length } : null; });
+const readyOf = (pl, c) => asPlayer(pl, () => { const g = myKit(c).graded; return g.length ? score(g) : null; });
 // a link where it stands alone (lobby), a span inside a role's link (a player's role list)
 function readyChip(pl, c, href) {
-  const r = readyOf(pl, c), g = !r ? "g-none" : r.ok === r.n ? "g-ok" : r.ok * 2 >= r.n ? "g-mid" : "g-low";
-  const title = r ? `${esc(c.name)}: ${r.ok} z ${r.n} slotů výbavy na cíli klanu` : "Bez dat z WARDOGS Trackeru";
-  return href ? `<a class="rdy ${g}" href="${href}" title="${title}">${r ? `${r.ok}/${r.n}` : "?"}</a>` : `<span class="rdy ${g}" title="${title}">${r ? `${r.ok}/${r.n}` : "?"}</span>`;
+  const r = readyOf(pl, c), g = r ? r.cls : "g-none", t = r ? `${r.pct}\u00a0%` : "?";
+  const title = !r ? "Bez dat z WARDOGS Trackeru" : `${esc(c.name)}: výbava ${r.pct} %${r.miss.length ? `, roli hrát nemůže: chybí ${esc(r.miss.join(", "))}` : ""}`;
+  return href ? `<a class="rdy ${g}" href="${href}" title="${title}">${t}</a>` : `<span class="rdy ${g}" title="${title}">${t}</span>`;
 }
 // his unlocks of this season and his Tracker; members read both (RLS unlocks_read, tracker_read)
 async function fetchPlayer(d) {
@@ -1796,15 +1796,26 @@ function myKit(c) {
     names: new Set(have.map(e => e.st.item)), cost: have.reduce((a, e) => a + (e.st.cost || 0), 0) + attCost(gun) + attCost(gun2) };
 }
 const loadoutCost = c => myKit(c).cost;
+// readiness (Petr 2026-10-30: "vyhodnocovat tu pripravenost vybavy jako procenta"): each graded slot weighs by what it is
+// (build.py vaha: primary weapon and armor 8, secondary 4, tactical and other gear 2, medic 1) times how far it is (goal 1,
+// better or enough .75, the start .5, nothing 0); red under 50 % or without the primary weapon or armor ("cerveny ma
+// znamenat, ze ten clovek tu roli hrat nemuze"; a Rifleman with the full start kit is 62 %, yellow), green from 90 %
+const CREDIT = { ok: 1, mid: .75, low: .5 };
+function score(g) {
+  const w = g.reduce((n, e) => n + e.lad.vaha, 0), got = g.reduce((n, e) => n + e.lad.vaha * (e.st ? CREDIT[e.g] : 0), 0);
+  const pct = w ? Math.round(100 * got / w) : 0, miss = g.filter(e => e.lad.klic && !e.st).map(e => e.lad.steps[0].item);
+  return { pct, miss, cls: miss.length || pct < 50 ? "g-low" : pct >= 90 ? "g-ok" : "g-mid" };
+}
 function readiness(k) {
   const g = k.graded, ok = g.filter(e => e.g === "ok").length;
   if (!g.length) return "";
-  // the nearest unlocks first: the next step of every slot below the goal, cheapest level first
-  const next = g.filter(e => e.g !== "ok").map(e => e.lad.steps[e.i + 1]).filter(Boolean).sort((x, y) => x.unlock.level - y.unlock.level).slice(0, 3);
-  const all = ok === g.length;
-  return `<div class="ready ${all ? "g-ok" : ok * 2 >= g.length ? "g-mid" : "g-low"}"><div class="rd-top"><span class="rd-l">Připravenost role</span><b>${ok} / ${g.length}</b><span class="rd-s">slotů na cíli klanu</span></div>
+  const r = score(g), all = ok === g.length;
+  // what to unlock first: the heaviest slots below the goal, then the cheapest level
+  const next = g.filter(e => e.g !== "ok" && e.lad.steps[e.i + 1]).sort((a, b) => b.lad.vaha - a.lad.vaha
+    || a.lad.steps[a.i + 1].unlock.level - b.lad.steps[b.i + 1].unlock.level).slice(0, 3).map(e => e.lad.steps[e.i + 1]);
+  return `<div class="ready ${r.cls}"><div class="rd-top"><span class="rd-l">Připravenost role</span><b>${r.pct}\u00a0%</b><span class="rd-s">${ok} z ${g.length} slotů na cíli klanu</span></div>
     <span class="rd-bar" aria-hidden="true">${g.map(e => `<i class="g-${e.g}"></i>`).join("")}</span>
-    <p>${all ? `${asWho ? "Má" : "Máš"} všechno, co klan pro tuhle roli chce.` : `Pod cílem klanu: <b>${g.length - ok}</b>. Odemkni: ${next.map(st => `<b>${esc(st.item)}</b> (${unlockText(st.unlock)})`).join(", ")}`}</p></div>`;
+    <p>${r.miss.length ? `Tuhle roli zatím ${asWho ? "hrát nemůže" : "hrát nemůžeš"}: chybí <b>${esc(r.miss.join(", "))}</b>. ` : ""}${all ? `${asWho ? "Má" : "Máš"} všechno, co klan pro tuhle roli chce.` : `Pod cílem klanu: <b>${g.length - ok}</b>. Odemkni: ${next.map(st => `<b>${esc(st.item)}</b> (${unlockText(st.unlock)})`).join(", ")}`}</p></div>`;
 }
 function loadoutCard(q, c, h = "h2") {
   const k = myKit(c), judged = k.judged;
@@ -2087,7 +2098,7 @@ function viewVycvik(sub) {
   const v = D.vycvik, act = sub === "act";
   const cards = v.lessons.map(l => `<ol class="drill">${l.cards.map(c => `<li><a class="pic" href="${esc(c.file)}" target="_blank" rel="noopener"><img src="${esc(wv(c.file, 1600))}" srcset="${esc(wv(c.file, 800))} 800w, ${esc(wv(c.file, 1600))} 1600w, ${esc(wv(c.file, 2400))} 2400w" sizes="(min-width: 1360px) 1280px, 100vw" width="2400" height="1500" loading="lazy" alt="${esc(c.title)}: ${esc(c.sub)}"></a>
         <div class="cap"><b>${esc(c.title)}</b><span>${esc(c.sub)}</span><a class="dl" href="${esc(c.file)}" download>PNG pro Discord</a></div></li>`).join("")}</ol>`).join("");
-  return `<nav class="tabs vy-tabs" aria-label="Výcvik"><a href="#/vycvik"${act ? "" : ' aria-current="page"'}>Basic Combat Training</a><a href="#/vycvik/act"${act ? ' aria-current="page"' : ""}>Advanced Combat Training</a></nav>
+  return `${isGuest() ? "" : `<nav class="tabs vy-tabs" aria-label="Výcvik"><a href="#/vycvik"${act ? "" : ' aria-current="page"'}>Basic Combat Training</a><a href="#/vycvik/act"${act ? ' aria-current="page"' : ""}>Advanced Combat Training</a></nav>`}
     ${act ? `<p><span class="draft">DRAFT</span> Rozpracované, finalizuje se po BCT.</p><article class="proto">${v.act}</article>`
       : `<article class="proto">${v.bct.replace("<p>[[formace]]</p>", cards)}</article>`}`;
 }
@@ -2321,12 +2332,12 @@ const navCmd = () => !state.me || !state.me.is_commander ? [] : [["moje-ukoly", 
 function renderNav(active) {
   navActive = active;
   document.getElementById("nav").innerHTML =
-    (isGuest() ? [["akce", "BCT"]] : [...NAV, ...navCmd()]).map(([k, l, n]) => `<a href="#/${k}"${active === k ? ' aria-current="page"' : ""}>${l}${n ? `<b class="nav-n">${n}</b>` : ""}</a>`).join("");
+    (isGuest() ? [["akce", "BCT"], ["vycvik", "Výcvik"]] : [...NAV, ...navCmd()]).map(([k, l, n]) => `<a href="#/${k}"${active === k ? ' aria-current="page"' : ""}>${l}${n ? `<b class="nav-n">${n}</b>` : ""}</a>`).join("");
   navToCurrent();
 }
 
 function viewAkce() {
-  if (isGuest()) return `<header class="unit-head"><div><h1>Basic Combat Training</h1><p>Navrhli tě na Rekruta. Zapiš se na BCT a vydrž celé. Instruktor ti na konci potvrdí účast a War Room tě hned povýší na Rekruta: pak uvidíš celou aplikaci.</p></div></header>
+  if (isGuest()) return `<header class="unit-head"><div><h1>Basic Combat Training</h1><p>Navrhli tě na Rekruta. Zapiš se na BCT a vydrž celé. Instruktor ti na konci potvrdí účast a War Room tě hned povýší na Rekruta: pak uvidíš celou aplikaci. Co se na BCT naučíš, je ve <a href="#/vycvik">Výcviku</a>.</p></div></header>
     <section class="sestava" id="sestava">${trainingsSection()}</section>`;
   if (state.focusId) return `<p class="crumb"><a href="#/akce">Akce</a> / Operace</p><section class="sestava" id="sestava">${akceBody()}</section>`;
   return `<header class="unit-head"><div><h1>Akce</h1></div></header>
@@ -2493,7 +2504,7 @@ function render() {
   const [h, qs = ""] = location.hash.replace(/^#/, "").split("?");
   const p = h.split("/").filter(Boolean);
   if (p[0] === "historie") { location.replace("#/akce"); return; }  // links in Discord debrief threads
-  if (isGuest() && !(p[0] === "akce" && !p[1] || p[0] === "hrac" && p[1] === state.me.discord_id)) { location.replace("#/akce"); return; }
+  if (isGuest() && !(["akce", "vycvik"].includes(p[0]) && !p[1] || p[0] === "hrac" && p[1] === state.me.discord_id)) { location.replace("#/akce"); return; }
   let html, active = null, title = "KIN War Room";
   cur = null; trace = null; plan = null;
   if (p[0] !== "akce") { state.focusId = null; focusEvent(); }
@@ -2526,6 +2537,9 @@ function render() {
         : `<p class="viewas">Výbava hráče <b>${esc(pl.name)}</b> · <a href="${classHref(q, c)}">moje</a></p>${asPlayer(pl, () => viewClass(q, c))}`;
       title = `${c.name} · ${pl && pl.name ? pl.name + " · " : ""}KIN`;
     } else if (c) { html = viewClass(q, c); title = `${c.name} · KIN`; } else { html = viewSquadPage(q); title = `${q.name} · KIN`; }
+  } else if (p[0] === "vycvik" && isGuest()) {  // Petr 2026-10-30: the BCT page for proposed guests too, without the doctrine
+    html = `<div class="narrow"><header class="unit-head"><div><h1>Basic Combat Training</h1><p>Co se na BCT naučíš.</p></div></header>${viewVycvik()}</div>`;
+    active = "vycvik"; title = "Basic Combat Training · KIN";
   } else if (p[0] === "doktrina" || p[0] === "vycvik") {
     const tab = p[0] === "vycvik" ? "vycvik" : p[1], sub = p[0] === "vycvik" ? p[1] : p[2];
     html = viewDoktrina(tab, sub); active = "doktrina"; title = (tab === "cw" ? "Public Ops" : tab === "vycvik" ? (sub === "act" ? "Advanced Combat Training" : "Basic Combat Training") : "SWARM") + " · KIN";
