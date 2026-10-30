@@ -1289,12 +1289,17 @@ body.carrying, body.carrying * { cursor: grabbing !important; user-select: none;
 .tk-meta { display: grid; gap: 6px; justify-items: start; font: 600 13px/1.2 var(--cond); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
 .tk-kind { padding: 3px 5px 2px; border: 1px solid var(--rule); color: var(--ink-2); }
 .tk-st { color: var(--fr); }
-.tk-text { margin: 0; max-width: 78ch; overflow-wrap: anywhere; }
+.tk-text { margin: 0; max-width: 78ch; overflow-wrap: anywhere; white-space: pre-line; }  /* poll results are lines */
 .tk-note { margin: 6px 0 0; max-width: 78ch; font-size: 15px; color: var(--ink-2); }
 .tk-note b { color: var(--fr); font-weight: 600; }
 .tk-act { display: flex; gap: 6px; }
 .tk-act .act { min-height: 40px; white-space: nowrap; }
 .tk-act .tk-cl { color: var(--fr); border-color: var(--fr); }
+/* 048: a decision's options, then an own answer on its own row */
+.tk-dec .tk-act { flex-wrap: wrap; max-width: 22em; justify-content: flex-end; }
+.tk-own { display: flex; gap: 6px; flex: 1 1 100%; }
+.tk-own input { flex: 1; min-width: 0; min-height: 40px; padding: 0 10px; font: inherit; color: var(--ink); background: var(--slot-bg); border: 1px solid var(--rule); }
+.tk-own input:focus-visible { outline: 2px solid var(--fr); outline-offset: 1px; }
 .tks-done > summary { list-style: none; cursor: pointer; }
 .tks-done > summary h2 { display: inline-flex; align-items: center; gap: 8px; }
 .tks-done[open] > summary .ico { transform: rotate(180deg); }
@@ -1302,6 +1307,8 @@ body.carrying, body.carrying * { cursor: grabbing !important; user-select: none;
   .tk { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .tk-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
   .tk-act .act { flex: 1; min-height: 44px; justify-content: center; }
+  .tk-dec .tk-act { max-width: none; }
+  .tk-own input { min-height: 44px; }
 }
 </style>
 </head>

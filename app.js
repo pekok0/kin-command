@@ -2035,14 +2035,14 @@ function ladderSection(c) {
 // substitutes; mine = the first of that order I have unlocked
 function doplnkyBlocks(lad) {
   const guns = lad.steps.map(st => st.item);
-  return (D.doplnky || []).filter(b => b.weapons.some(w => guns.includes(w))).map(b => b.slots.map((s, k) => {
+  return (D.doplnky || []).filter(b => b.weapons.some(w => guns.includes(w))).map(b => b.slots.map(s => {
     // podle_mapy (Petr 2026-10-29: optics 1.5x or 2.5x by the map): equal choices, each one I have is mine
     const own = x => !x.unlock || !!(haveSet && haveSet.has(x.item)), first = s.items.findIndex(own);
     const mine = (x, i) => s.podle_mapy ? own(x) : i === first;
     return `<div class="lad dop"><div class="lad-h"><span class="sl">${esc(s.slot)} · ${esc(b.weapons.join(", "))}</span></div>
       <ol class="lad-steps">${s.items.map((x, i) => `<li class="st${mine(x, i) ? " mine" : ""}">${itemIcon(x.icon)}<span class="st-n">${esc(x.item)}</span><span class="st-u">${x.unlock ? `${esc(x.unlock.track)} ${x.unlock.level} · ${usd(x.unlock.cash)}` : "hned"}</span>
         <span class="st-src">${s.podle_mapy ? "Podle mapy" : i ? `Náhrada ${i}` : "Hlavní"}</span>${mine(x, i) ? `<span class="st-tag">${asWho ? "Má" : "Tvůj"}</span>` : ""}</li>`).join("")}</ol>
-      ${s.note ? `<p class="note">${esc(s.note)}</p>` : ""}${k ? "" : `<p class="note">${b.note ? esc(b.note) + " " : ""}Zdroj: ${esc(b.source)}.</p>`}
+      ${s.note ? `<p class="note">${esc(s.note)}</p>` : ""}
 </div>`;
   }).join("")).join("");
 }
@@ -2304,7 +2304,7 @@ function viewPlayer(m, rows, season, have, prog, merits = [], done = new Set(), 
 // one item per question a member asks (Petr 2026-10-19, specs/akce-flow rozhodnuti 8)
 const NAV = [["akce", "Akce"], ["mapy", "Mapy"], ["vybava", "Výbava"], ["doktrina", "Doktrína"]];
 // the Commander's own item after Doktrina (specs/ukoly-velitele U1), with the count of what waits for him
-const navCmd = () => !state.me || !state.me.is_commander ? [] : [["moje-ukoly", "Úkoly", state.cmdTasks ? state.cmdTasks.filter(x => x.state === "open").length : 0]];
+const navCmd = () => !state.me || !state.me.is_commander ? [] : [["moje-ukoly", "Úkoly", state.cmdTasks ? state.cmdTasks.filter(waitsForMe).length : 0]];
 function renderNav(active) {
   navActive = active;
   document.getElementById("nav").innerHTML =
@@ -2391,37 +2391,53 @@ document.addEventListener("keydown", () => { if (unlocking) unlocking(200); });
 // login, then on every change in the database (the session closing a task shows here at once)
 const TASK_KIND = { plan: "Plán", llm: "Běh", bot: "Bot", strop: "Útrata", uvod: "Kernel" };
 const taskKind = x => x.kind === "nalez" ? "Nález" : TASK_KIND[x.typ] || "Úkol";
+// 048 (Petr 2026-10-30 "tlacitka odbav ty a hotovo nestaci"): a decision, a manual step, or info that does not wait for him
+const waitsForMe = x => x.state === "open" && x.druh !== "info";
 async function loadCmdTasks(first) {
-  const { data, error } = await sb.from("cmd_tasks").select("id, kind, typ, text, state, note, created_at, updated_at").order("created_at", { ascending: false });
+  const { data, error } = await sb.from("cmd_tasks").select("id, kind, typ, text, state, note, druh, moznosti, odpoved, plati_do, created_at, updated_at").order("created_at", { ascending: false });
   if (error) console.error(error);
   state.cmdTasks = error ? false : data.slice().sort((a, b) => b.created_at.localeCompare(a.created_at));
   if (first) sb.channel("ukoly").on("postgres_changes", { event: "*", schema: "public", table: "cmd_tasks" }, () => loadCmdTasks()).subscribe();
   renderNav(navActive);
   if (location.hash === "#/moje-ukoly") $app.innerHTML = viewCmdTasks();  // in place: a click does not jump to the top
 }
-async function setTask(id, st) {
-  const x = state.cmdTasks.find(y => y.id === id), was = x.state;
+async function setTask(id, st, odpoved) {
+  const x = state.cmdTasks.find(y => y.id === id), was = [x.state, x.odpoved];
   x.state = st; x.updated_at = new Date().toISOString(); state.taskErr = null;
+  if (odpoved) x.odpoved = odpoved;  // the kernel takes it as his instruction (ceo/ukoly.py --sync)
   $app.innerHTML = viewCmdTasks(); renderNav(navActive);
-  const { data, error } = await sb.from("cmd_tasks").update({ state: st, updated_at: x.updated_at }).eq("id", id).select("id");
-  if (error || !data.length) { x.state = was; state.taskErr = "Úkol se nepodařilo uložit, zkus to znovu."; $app.innerHTML = viewCmdTasks(); renderNav(navActive); }
+  const { data, error } = await sb.from("cmd_tasks").update({ state: st, updated_at: x.updated_at, ...(odpoved && { odpoved }) }).eq("id", id).select("id");
+  if (error || !data.length) { [x.state, x.odpoved] = was; state.taskErr = "Úkol se nepodařilo uložit, zkus to znovu."; $app.innerHTML = viewCmdTasks(); renderNav(navActive); }
 }
+document.addEventListener("submit", e => {
+  const f = e.target.closest("form[data-cown]");
+  if (!f) return;
+  e.preventDefault();
+  const v = f.elements.o.value.trim();
+  if (v) setTask(f.dataset.cown, "odpoved", v);
+});
 function viewCmdTasks() {
   if (!state.me || !state.me.is_commander) return '<p class="note">Úkoly z kernelu jsou jen pro Commandera.</p>';
-  const xs = state.cmdTasks, head = `<header class="unit-head"><div><h1>Úkoly</h1><p class="lede">Co ti posílá KIN kernel. Tlačítko „Odbav ty“ předá úkol Claudovi: vezme si ho session, která právě běží ve wardogs.</p></div></header>`;
+  const xs = state.cmdTasks, head = `<header class="unit-head"><div><h1>Úkoly</h1><p class="lede">Co ti posílá KIN kernel. Na otázku odpověz tlačítkem nebo vlastními slovy, odpověď provede kernel. Tlačítko „Odbav ty“ předá úkol Claudovi: vezme si ho session, která právě běží ve wardogs.</p></div></header>`;
   if (xs === undefined) return head + '<p class="note">Načítám…</p>';
   if (xs === false) return head + '<p class="err">Úkoly se nenačetly, obnov stránku (F5).</p>';
   const btn = (x, st, l, cls = "") => `<button type="button" class="act${cls}" data-ctask="${esc(x.id)}:${st}">${l}</button>`;
-  const row = x => `<li class="tk" data-task-id="${esc(x.id)}"><div class="tk-meta"><span class="tk-kind">${esc(taskKind(x))}</span><time datetime="${esc(x.created_at)}">${esc(ago(x.created_at))}</time>
-      ${x.state === "prace" ? '<span class="tk-st">Rozpracováno</span>' : x.state === "claude" ? '<span class="tk-st">Čeká na session</span>' : ""}</div>
-    <div class="tk-body"><p class="tk-text">${esc(x.text)}</p>${x.note ? `<p class="tk-note"><b>Claude:</b> ${esc(x.note)}</p>` : ""}</div>
-    <div class="tk-act">${x.state === "open" ? btn(x, "claude", "Odbav ty", " tk-cl") + btn(x, "done", "Hotovo")
+  // a decision: its options, or an own answer (Enter sends it); no "Odbav ty", Claude does not decide for him
+  const decide = x => (x.moznosti || []).map(o => `<button type="button" class="act tk-cl" data-cans="${esc(x.id)}" data-val="${esc(o)}">${esc(o)}</button>`).join("")
+    + `<form class="tk-own" data-cown="${esc(x.id)}"><input name="o" maxlength="500" placeholder="Jiná odpověď" aria-label="Jiná odpověď"><button type="submit" class="act">Odeslat</button></form>`;
+  const open = x => x.druh === "rozhodni" ? decide(x) : x.druh === "rucne" ? btn(x, "done", "Udělal jsem")
+    : x.druh === "info" ? btn(x, "done", "Beru na vědomí") : btn(x, "claude", "Odbav ty", " tk-cl") + btn(x, "done", "Hotovo");
+  const row = x => `<li class="tk${x.druh === "rozhodni" && x.state === "open" ? " tk-dec" : ""}" data-task-id="${esc(x.id)}"><div class="tk-meta"><span class="tk-kind">${esc(taskKind(x))}</span><time datetime="${esc(x.created_at)}">${esc(ago(x.created_at))}</time>
+      ${x.state === "prace" ? '<span class="tk-st">Rozpracováno</span>' : x.state === "claude" ? '<span class="tk-st">Čeká na session</span>' : x.state === "odpoved" ? '<span class="tk-st">Vyřizuje kernel</span>' : ""}</div>
+    <div class="tk-body"><p class="tk-text">${esc(x.text)}</p>${x.odpoved ? `<p class="tk-note"><b>Odpověď:</b> ${esc(x.odpoved)}</p>` : ""}${x.note ? `<p class="tk-note"><b>Claude:</b> ${esc(x.note)}</p>` : ""}</div>
+    <div class="tk-act">${x.state === "open" ? open(x)
       : x.state === "claude" ? btn(x, "open", "Vrátit") + btn(x, "done", "Hotovo") : x.state === "done" ? btn(x, "open", "Otevřít") : ""}</div></li>`;
   const sec = (k, h, list, empty) => `<section class="block tks-sec" data-tsec="${k}"><h2>${h} <span class="num">${list.length}</span></h2>${list.length ? `<ul class="tks">${list.map(row).join("")}</ul>` : `<p class="note">${empty}</p>`}</section>`;
-  const done = xs.filter(x => x.state === "done");
+  const done = xs.filter(x => x.state === "done"), info = xs.filter(x => x.state === "open" && x.druh === "info");
   return head + (state.taskErr ? `<p class="err" role="alert">${esc(state.taskErr)}</p>` : "")
-    + sec("open", "Čeká na tebe", xs.filter(x => x.state === "open"), "Nic nečeká.")
-    + sec("claude", "U Clauda", xs.filter(x => x.state === "claude" || x.state === "prace"), "Claude teď nic nedělá.")
+    + sec("open", "Čeká na tebe", xs.filter(waitsForMe), "Nic nečeká.")
+    + (info.length ? `<details class="block tks-sec tks-done" data-tsec="info"><summary><h2>Pro info <span class="num">${info.length}</span>${arrow()}</h2></summary><ul class="tks">${info.map(row).join("")}</ul></details>` : "")
+    + sec("claude", "U Clauda", xs.filter(x => ["claude", "prace", "odpoved"].includes(x.state)), "Claude teď nic nedělá.")
     + `<details class="block tks-sec tks-done" data-tsec="done"><summary><h2>Hotovo <span class="num">${done.length}</span>${arrow()}</h2></summary>${done.length ? `<ul class="tks">${done.map(row).join("")}</ul>` : ""}</details>`;
 }
 // the Commander's briefing protocol (Petr 2026-10-21 "uvidim to jenom ja"): the row 'velitel' is readable by the
@@ -2527,10 +2543,11 @@ function render() {
 }
 
 $app.addEventListener("click", e => {
-  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-drawer],[data-role],[data-squad],[data-lock],[data-briefwin],[data-sqdrop],[data-cmd],[data-seat],[data-fx],[data-leadfor],[data-nocash],[data-merit-del],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker],[data-nova],[data-ctask]");
+  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-drawer],[data-role],[data-squad],[data-lock],[data-briefwin],[data-sqdrop],[data-cmd],[data-seat],[data-fx],[data-leadfor],[data-nocash],[data-merit-del],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker],[data-nova],[data-ctask],[data-cans]");
   if (state.sqArm != null && !(t && t.dataset.sqdrop)) { state.sqArm = null; renderRoster(); }  // a click elsewhere: no drop
   if (!t) return;
   if (t.dataset.ctask) { const [id, st] = t.dataset.ctask.split(":"); setTask(id, st); return; }
+  if (t.dataset.cans) { setTask(t.dataset.cans, "odpoved", t.dataset.val); return; }
   if (t.dataset.trsvp) { const [id, st] = t.dataset.trsvp.split(":"); rsvpTraining(Number(id), st); return; }
   if (t.dataset.tclose) { t.disabled = true; const [id, st] = t.dataset.tclose.split(":"); closeTraining(Number(id), st); return; }
   if (t.dataset.role) { const [i, kit, d] = t.dataset.role.split(":"); setRole(Number(i), kit, Number(d)); return; }
