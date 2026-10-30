@@ -240,31 +240,32 @@ function rankCard(m, prog, merits) {
 // bct: a closed BCT training the trainer confirmed (045, progress().bct)
 const taskDone = (x, done, trackerOk, prog) => x.check === "tracker" ? trackerOk : x.check === "ops" ? !!prog && prog.ops >= 1
   : x.check === "bct" ? !!prog && prog.bct >= 1 : done.has(x.id);
-function tasksCard(m, done, trackerOk, prog, owned) {
+function tasksCard(m, done, trackerOk, prog, counted) {
   // nobody ticks by hand: the database's verifier writes what the sources say (Petr 2026-10-22, specs/ukoly-clenu U8)
   const ok = D.ukoly.map(x => taskDone(x, done, trackerOk, prog));
-  // panprstenu2 2026-10-22: clan and Steam group were right, but the Tracker did not tie the profile to his Discord (023)
-  const note = owned ? "Odškrtne se samo, jakmile to uvidíme u zdroje."
-    : trackerOk ? "Klan na Trackeru a Steam skupinu zatím nepočítáme: Tracker k tomuto profilu nemá propojený Discord. Na wardogstracker.gg: vpravo nahoře tvé jméno → Profile → Settings → Linked accounts → Discord → Link. Do hodiny to tu uvidíš u zdroje."
-    : "Odškrtne se samo, jakmile to uvidíme u zdroje. Steam skupinu a klan na Trackeru poznáme, jen když máš na Trackeru propojený i Discord.";
+  // 046 (Petr 2026-10-30): a pasted profile counts, unless another member has the same one and the Tracker ties it to
+  // neither's Discord (tracker.counted, set by the hourly verifier)
+  const note = counted ? "Odškrtne se samo, jakmile to uvidíme u zdroje."
+    : trackerOk ? "Klan na Trackeru a Steam skupinu zatím nepočítáme: stejný profil Trackeru má ve War Roomu i jiný člen, nebo ho ještě ověřujeme (do hodiny). Že je profil tvůj, potvrdíš na wardogstracker.gg: vpravo nahoře tvé jméno → Profile → Settings → Linked accounts → Discord → Link."
+    : "Odškrtne se samo, jakmile to uvidíme u zdroje. Klan na Trackeru a Steam skupinu poznáme z tvého profilu na Trackeru.";
   return `<section class="block ukoly" id="ukoly"><h2>Úkoly <small>${ok.filter(Boolean).length} z ${ok.length}</small></h2><ul class="tasks">
     ${D.ukoly.map((x, i) => `<li data-task="${esc(x.id)}"${ok[i] ? ' class="ok"' : ""}><span class="tk-mark" aria-hidden="true"></span>
       <a href="${esc(x.url || x.href)}"${x.url ? ' target="_blank" rel="noopener"' : ""}>${esc(x.name)}</a></li>`).join("")}</ul>
     <p class="note">${note} <a href="#/ukoly">Kdo co má hotové</a></p></section>`;
 }
 // everyone's tasks, the most missing first (specs/ukoly-clenu U5)
-// U9: a task the source shows only through a Tracker tied to Discord is "?" without one, never "–" (denbler 2026-10-22)
-const UNKNOWN = "Nevíme: bez Trackeru s propojeným Discordem to u zdroje neověříme.";
-const taskCell = (x, ok, owned) => ok ? ["ok", "✓", ""] : x.needs === "owned" && !owned ? ["unk", "?", UNKNOWN] : ["", "–", ""];
+// U9: a task the source shows only through a profile that counts (046) is "?" without one, never "–" (denbler 2026-10-22)
+const UNKNOWN = "Nevíme: bez vlastního profilu Trackeru to u zdroje neověříme.";
+const taskCell = (x, ok, counted) => ok ? ["ok", "✓", ""] : x.needs === "owned" && !counted ? ["unk", "?", UNKNOWN] : ["", "–", ""];
 function viewTasks(ms, done, trk, prog) {
   const rows = ms.map(m => { const d = new Set(done.filter(r => r.user_id === m.user_id).map(r => r.task)), t = trk.some(r => r.user_id === m.user_id && r.status === "ok");
-    const owned = trk.some(r => r.user_id === m.user_id && r.status === "ok" && r.owned);
-    return { m, ok: D.ukoly.map(x => taskDone(x, d, t, prog[m.user_id])), owned }; })
+    const counted = trk.some(r => r.user_id === m.user_id && r.status === "ok" && r.counted);
+    return { m, ok: D.ukoly.map(x => taskDone(x, d, t, prog[m.user_id])), counted }; })
     .sort((a, b) => a.ok.filter(Boolean).length - b.ok.filter(Boolean).length || a.m.name.localeCompare(b.m.name));
   return `<p class="crumb"><a href="#/hrac/${encodeURIComponent(state.me.discord_id)}">Profil</a> / Úkoly</p>
     <header class="unit-head"><div><h1>Úkoly členů</h1></div></header>
     ${!rows.length ? '<p class="note">Zatím tu nikdo není.</p>' : `<div class="matrix-wrap"><table class="data tasks-all" id="ukoly-all"><thead><tr><th>Člen</th>${D.ukoly.map((x, i) => `<th data-task="${esc(x.id)}">${esc(x.name)} <span class="num">${rows.filter(r => r.ok[i]).length}/${rows.length}</span></th>`).join("")}</tr></thead>
-    <tbody>${rows.map(r => `<tr><td>${memberLink(r.m)}</td>${r.ok.map((ok, i) => { const [cls, mark, why] = taskCell(D.ukoly[i], ok, r.owned);
+    <tbody>${rows.map(r => `<tr><td>${memberLink(r.m)}</td>${r.ok.map((ok, i) => { const [cls, mark, why] = taskCell(D.ukoly[i], ok, r.counted);
       return `<td data-task="${esc(D.ukoly[i].id)}"${cls ? ` class="${cls}"` : ""}${why ? ` title="${esc(why)}"` : ""}>${mark}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>
     <p class="note tasks-legend">? = ${UNKNOWN}</p>`}`;
 }
@@ -2142,7 +2143,7 @@ async function loadHist(p) {
       html = viewCoverage(s, cov.data, all.data);
     } else if (p[0] === "ukoly") {
       const [ms, td, tr] = await Promise.all([sb.from("members").select("user_id, discord_id, name, avatar_url").eq("active", true),
-        sb.from("tasks_done").select("user_id, task"), sb.from("tracker").select("user_id, status, owned")]);
+        sb.from("tasks_done").select("user_id, task"), sb.from("tracker").select("user_id, status, counted")]);
       for (const r of [ms, td, tr]) if (r.error) throw r.error;
       // ponytail: one progress call per member (~20); a counts view when the clan outgrows it
       const pr = await Promise.all(ms.data.map(m => sb.rpc("progress", { uid: m.user_id })));
@@ -2177,7 +2178,7 @@ async function loadHist(p) {
         sb.rpc("progress", { uid: m.user_id }),  // counts only (019), others' attendance stays private
         sb.from("merits").select("id, text, created_at").eq("user_id", m.user_id).order("created_at"),
         sb.from("tasks_done").select("task").eq("user_id", m.user_id),
-        sb.from("tracker").select("status, owned").eq("user_id", m.user_id).maybeSingle(),
+        sb.from("tracker").select("status, counted").eq("user_id", m.user_id).maybeSingle(),
       ]) : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: null }];
       if (cl.error) throw cl.error;
       if (at.error) throw at.error;
@@ -2188,7 +2189,7 @@ async function loadHist(p) {
       if (tr.error) throw tr.error;
       // no attendance record = played (older events, or the viewer may not see it)
       const absent = new Set(at.data.filter(a => !a.attended).map(a => a.event_id));
-      html = m ? viewPlayer(m, cl.data.filter(r => !absent.has(r.events.id)), season, new Set(un.data.map(u => u.item)), Array.isArray(pr.data) ? pr.data[0] : null, me.data || [], new Set(td.data.map(r => r.task)), !!tr.data && tr.data.status === "ok", !!tr.data && tr.data.owned) : '<p class="note">Hráč nenalezen.</p>';
+      html = m ? viewPlayer(m, cl.data.filter(r => !absent.has(r.events.id)), season, new Set(un.data.map(u => u.item)), Array.isArray(pr.data) ? pr.data[0] : null, me.data || [], new Set(td.data.map(r => r.task)), !!tr.data && tr.data.status === "ok", !!tr.data && tr.data.counted) : '<p class="note">Hráč nenalezen.</p>';
     }
     const t = el(); if (t) t.innerHTML = html;
   } catch (e) {
@@ -2284,7 +2285,7 @@ function unlockSection(m, season, have) {
     <ul class="cls">${rows.map(x => `<li><a href="${classHref(x.q, x.c)}"><b>${esc(x.c.name)}</b><span>${esc(x.st.item)}${x.top ? " · cíl" : ""}</span></a></li>`).join("")}</ul></section>`;
 }
 
-function viewPlayer(m, rows, season, have, prog, merits = [], done = new Set(), trackerOk = false, owned = false) {
+function viewPlayer(m, rows, season, have, prog, merits = [], done = new Set(), trackerOk = false, counted = false) {
   const stats = list => {
     const roles = {};
     for (const r of list) { const role = r.slot_label; roles[role] = (roles[role] || 0) + 1; }
@@ -2296,7 +2297,7 @@ function viewPlayer(m, rows, season, have, prog, merits = [], done = new Set(), 
   const sorted = [...rows].sort((a, b) => b.events.starts_at.localeCompare(a.events.starts_at));
   return `<p class="crumb"><a href="#/akce">Akce</a> / ${esc(m.name)}</p>
     <header class="unit-head"><img class="pavatar" src="${esc(m.avatar_url)}" alt=""><div><h1>${esc(m.name)}</h1><p>Člen KIN</p></div></header>
-    ${m.active ? rankCard(m, prog, merits) + tasksCard(m, done, trackerOk, prog, owned) : ""}
+    ${m.active ? rankCard(m, prog, merits) + tasksCard(m, done, trackerOk, prog, counted) : ""}
     <section class="block"><h2>Celkem</h2>${stats(rows)}</section>
     ${unlockSection(m, season, have)}
     ${bySeason(sorted, r => r.events.starts_at).map(({ s, rows: xs }) => `<section class="block"><h2>${esc(seasonName(s))}</h2>${stats(xs)}
