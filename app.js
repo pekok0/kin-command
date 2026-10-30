@@ -1599,13 +1599,13 @@ function viewHome() {
     <div class="hp-grid">
       <section class="hp-mod hp-ev"><h2>Další akce</h2><div id="home-ev">${homeEvent()}</div></section>
       ${homeMe()}
-      <section class="hp-mod hp-nav"><h2>Kam dál</h2><ul class="hp-tiles">${NAV_TILES.map(([k, l, sub]) => `<li><a href="#/${k}"><b>${l}</b><span>${sub}</span></a></li>`).join("")}</ul></section>
+      <section class="hp-mod hp-nav"><h2>Kam dál</h2><ul class="hp-tiles">${NAV_TILES.filter(([k]) => k !== "pokryti" || seesCoverage()).map(([k, l, sub]) => `<li><a href="#/${k}"><b>${l}</b><span>${sub}</span></a></li>`).join("")}</ul></section>
       ${groups.length ? `<section class="hp-mod hp-links"><h2>Užitečné odkazy</h2>${groups.map(g => `<h3>${esc(g)}</h3><ul>${D.odkazy.filter(x => x.group === g).map(x =>
         `<li><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.name)}${out()}</a>${x.note ? `<small>${esc(x.note)}</small>` : ""}</li>`).join("")}</ul>`).join("")}</section>` : ""}
       <details class="hp-mod howto"${matchMedia("(max-width: 720px)").matches ? "" : " open"}><summary><h2 id="h-start">Jak to tu funguje${arrow()}</h2></summary><ol class="proc">
       <li><span><a href="#/akce">Akce</a>: otevři operaci, dej <b>Přijdu</b> a zaber si místo v sestavě. Pod ní je tvůj nákup, odehrané akce jsou v přehledu.</span></li>
       <li><span><a href="#/mapy">Mapy</a>: battle plan každé mapy podle týmu a zóny (cíl, místa k držení, úkoly squadů), pro Clan War.</span></li>
-      <li><span><a href="#/vybava">Výbava</a>: tvůj loadout pro každou sub-classu: co koupit a kolik kusů, podle toho, co máš odemčené (WARDOGS Tracker). Kolik nás co umí, je v <a href="#/pokryti">Pokrytí</a>.</span></li>
+      <li><span><a href="#/vybava">Výbava</a>: tvůj loadout pro každou sub-classu: co koupit a kolik kusů, podle toho, co máš odemčené (WARDOGS Tracker).${seesCoverage() ? ' Kolik nás co umí, je v <a href="#/pokryti">Pokrytí</a>.' : ""}</span></li>
       <li><span><a href="#/doktrina">Doktrína</a>: jak klan hraje (${esc(docName("defence"))}, ${esc(docName("swarm"))}) a Výcvik.</span></li>
     </ol></details>
     </div>`;
@@ -1751,6 +1751,9 @@ async function fetchPlayer(d) {
   if (tr.error) throw tr.error;
   return { ...m, have: new Set(un.data.map(u => u.item)), trk: tr.data };
 }
+// Pokryti only for the command (Commander, Velitel) and the role Squad Leader (Petr 2026-10-30); the page hides it, the
+// unlocks themselves stay readable by members (RLS unlocks_read), as on the profiles
+const seesCoverage = () => !!state.me && (leadsOps() || !!state.me.is_sl);
 const fold = t => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 // Petr 2026-10-29 (vybava-role-v3 R2): the ordinary magazine I have (30-35 rounds), not the heavy 50/60 that slows ADS;
 // a weapon without one (SV98 10) takes the biggest I have
@@ -2017,7 +2020,7 @@ document.addEventListener("submit", e => {
 function viewSquads() {
   // Petr 2026-10-25 (D24, hub/specs/vybava-role-v3): roles in one list, no Assault / Builders / Recon groups
   return `<header class="unit-head"><div><h1>Výbava</h1><p>Tvůj loadout pro každou roli, podle toho, co máš odemčené</p></div></header>
-    <p class="note">Kolik nás co má: <a class="act" href="#/pokryti">Pokrytí rolí</a></p>
+    ${seesCoverage() ? '<p class="note">Kolik nás co má: <a class="act" href="#/pokryti">Pokrytí rolí</a></p>' : ""}
     ${trackerBox()}
     <section class="block"><h2>Role</h2><ul class="cls">${D.squads.flatMap(q => roles(q).map(c => `<li><a href="${classHref(q, c)}"><b>${esc(c.name)}</b></a></li>`)).join("")}</ul></section>`;
 }
@@ -2221,7 +2224,20 @@ const keyLadder = c => { const w = c.ladders.find(l => l.slot === "slot1"); retu
 function viewCoverage(season, members, all) {
   const head = `<p class="crumb"><a href="#/vybava">Výbava</a> / Pokrytí</p>
     <header class="unit-head"><div><h1>Pokrytí rolí</h1><p>${esc(season ? season.name : "Žádná sezóna")} · podle WARDOGS Trackeru</p></div></header>`;
-  const users = members.map(m => new Set(m.unlocks.map(u => u.item)));
+  // item names come from members' rows: a null-prototype map, so "constructor" or "__proto__" cannot break it
+  const byItem = Object.create(null), users = [];
+  for (const m of members) {
+    const have = new Set(m.unlocks.map(u => u.item));
+    users.push(have);
+    for (const n of have) (byItem[n] = byItem[n] || []).push(m);
+  }
+  const items = [];
+  for (const q of D.squads) for (const c of q.classes) for (const lad of c.ladders) for (const st of lad.steps) if (st.unlock && !items.includes(st.item)) items.push(st.item);
+  // vehicles and other extras the plans add to roles (MH-6, Lakota, Ural, Verba) need unlocks too
+  for (const s of D.strategies) for (const r of s.roles) for (const g of r.gear) {
+    if (g.item && g.unlock && !items.includes(g.item)) items.push(g.item);
+    if (g.ideal && g.ideal_unlock && !items.includes(g.ideal)) items.push(g.ideal);
+  }
   return `${head}
     <p class="note">Členů s daty: <b>${users.length}</b>. Kdo nemá propojený ${TRK_LINK}, v počtech chybí (propojení je ve <a href="#/vybava">Výbavě</a>).</p>
     <section class="block"><h2>Role</h2><table class="data cov"><thead><tr><th>Role</th><th class="num">Mají <small>z ${users.length}</small></th></tr></thead><tbody>
@@ -2229,7 +2245,10 @@ function viewCoverage(season, members, all) {
       return `<tr><td><a href="${classHref(q, c)}">${esc(c.name)}</a></td><td class="num"><b>${top.unlock ? users.filter(h => h.has(top.item)).length : users.length}</b></td></tr>`; }).join("")).join("")}
     </tbody></table></section>
     <section class="block"><h2>Členové</h2><input type="search" class="msearch" placeholder="Hledat člena" aria-label="Hledat člena">
-      <ul class="mgrid">${all.slice().sort((x, y) => x.name.localeCompare(y.name, "cs")).map(m => `<li data-n="${esc(fold(m.name))}"><a href="#/pokryti/${encodeURIComponent(m.discord_id)}"><img src="${esc(m.avatar_url)}" alt="" loading="lazy"><span>${esc(m.name)}</span></a></li>`).join("")}</ul></section>`;
+      <ul class="mgrid">${all.slice().sort((x, y) => x.name.localeCompare(y.name, "cs")).map(m => `<li data-n="${esc(fold(m.name))}"><a href="#/pokryti/${encodeURIComponent(m.discord_id)}"><img src="${esc(m.avatar_url)}" alt="" loading="lazy"><span>${esc(m.name)}</span></a></li>`).join("")}</ul></section>
+    <section class="block"><h2>Kdo má odemčeno</h2><table class="data cov"><thead><tr><th>Předmět</th><th class="num">Mají</th><th>Kdo</th></tr></thead><tbody>
+    ${items.map(n => { const ms = byItem[n] || []; return `<tr><td>${esc(n)}</td><td class="num"><b>${ms.length}</b></td><td>${ms.map(memberLink).join(" ")}</td></tr>`; }).join("")}
+    </tbody></table></section>`;
 }
 function viewPlayerRoles(pl) {
   const ok = pl.trk && pl.trk.status === "ok";
@@ -2513,8 +2532,9 @@ function render() {
     if (sb && leadsOps()) setTimeout(loadBriefing);
   } else if (HIST.includes(p[0])) {
     active = p[0] === "pokryti" ? "vybava" : p[0] === "ukoly" ? "" : "akce"; title = p[0] === "pokryti" ? "Pokrytí · KIN" : p[0] === "ukoly" ? "Úkoly · KIN" : p[0] === "hrac" ? "Profil · KIN" : "Akce · KIN";
-    html = histShell(sb && state.me ? '<p class="note">Načítám…</p>' : histGate());
-    if (sb && state.me) setTimeout(() => loadHist(p));
+    const shut = p[0] === "pokryti" && state.me && !seesCoverage();  // Petr 2026-10-30: the command and Squad Leaders only
+    html = histShell(shut ? '<p class="note">Pokrytí rolí je jen pro velení a squad leadery.</p>' : sb && state.me ? '<p class="note">Načítám…</p>' : histGate());
+    if (sb && state.me && !shut) setTimeout(() => loadHist(p));
   }
   else html = viewHome();
   if (sb && state.me && state.me.is_commander && !state.cmdAsked) { state.cmdAsked = true; setTimeout(() => loadCmdTasks(true)); }
