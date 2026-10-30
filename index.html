@@ -458,6 +458,17 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .lo-gear { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .lo-gear .slot { flex-direction: column; align-items: flex-start; margin-top: 0; padding-top: 24px; }
 .lo-gear .slot .item { width: 100%; }
+/* the backpack as in the game (Petr 2026-10-30): compartments side by side, square cells, every stack on the cells it
+   takes; the free cells stay visible, a stack lies on top of them */
+.loadout h3 .bag-n { margin-left: 6px; color: var(--ink-2); letter-spacing: .06em; }
+.bag { --cell: 44px; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; margin-bottom: 12px; }
+.bag-c { display: grid; grid-template-columns: repeat(var(--w), var(--cell)); grid-template-rows: repeat(var(--h), var(--cell)); gap: 2px; padding: 3px;
+  border: 1px solid var(--rule); background: oklch(0.12 0.03 254 / 0.75); box-shadow: inset 0 1px 0 oklch(0.86 0.15 205 / 0.12); }
+.bag-e { border: 1px solid var(--rule-soft); background: oklch(0.16 0.035 252 / 0.6); }
+.bag-t { position: relative; overflow: hidden; min-width: 0; min-height: 0; border: 1px solid var(--rule); background: linear-gradient(180deg, oklch(0.27 0.06 248), oklch(0.2 0.045 250)); }
+.bag-t img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; padding: 3px; }
+.bag-t b { position: absolute; right: 3px; bottom: 1px; font: 700 14px/1 var(--cond); color: var(--fr); text-shadow: 0 1px 2px var(--ground); }
+@media (min-width: 721px) { .bag { --cell: 52px; } }
 .lo-store { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: 6px; }
 .lo-store li { display: grid; grid-template-columns: 66px auto; gap: 0 10px; align-items: center; padding: 4px 10px 4px 4px; border: 1px solid var(--rule-soft); }
 .lo-store .item { grid-row: 1 / 3; }

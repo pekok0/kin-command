@@ -1709,11 +1709,11 @@ const GRADE = { ok: "Cíl klanu", mid: "Lze lépe", low: "Slabé" };
 // optimal 2D packing -- a hand-packed bag may take one piece more
 function packBag(bag, list) {
   const grids = bag.map(([w, h]) => Array.from({ length: h }, () => Array(w).fill(false)));
-  const put = ([w, h]) => { for (const g of grids) for (const [a, b] of [[w, h], [h, w]]) for (let y = 0; y + b <= g.length; y++) for (let x = 0; x + a <= g[0].length; x++)
-    if (g.slice(y, y + b).every(r => r.slice(x, x + a).every(v => !v))) { for (let i = y; i < y + b; i++) for (let j = x; j < x + a; j++) g[i][j] = true; return true; }
-    return false; };
-  const out = list.map(e => ({ ...e, want: e.qty, units: 0, over: false })), per = e => e.stack || 1;
-  const add = (e, n) => { let k = 0; while (k < n && put(e.grid || [1, 1])) k++; e.units += k; return k === n; };
+  const put = ([w, h]) => { for (const [c, g] of grids.entries()) for (const [a, b] of [[w, h], [h, w]]) for (let y = 0; y + b <= g.length; y++) for (let x = 0; x + a <= g[0].length; x++)
+    if (g.slice(y, y + b).every(r => r.slice(x, x + a).every(v => !v))) { for (let i = y; i < y + b; i++) for (let j = x; j < x + a; j++) g[i][j] = true; return { c, x, y, w: a, h: b }; }
+    return null; };
+  const out = list.map(e => ({ ...e, want: e.qty, units: 0, over: false, at: [] })), per = e => e.stack || 1;
+  const add = (e, n) => { let k = 0, at; while (k < n && (at = put(e.grid || [1, 1]))) { e.at.push(at); k++; } e.units += k; return k === n; };
   const must = out.filter(e => !e.drop && !e.fill).sort((a, b) => (b.grid || [1, 1]).reduce((x, y) => x * y) - (a.grid || [1, 1]).reduce((x, y) => x * y));
   for (const e of must) e.over = !add(e, Math.ceil(e.want / per(e)));
   for (const e of out.filter(e => e.fill)) e.over = !add(e, e.min || 0);
@@ -1782,17 +1782,22 @@ function myKit(c) {
     if (lad.stacks && e.st && e.st.stack) e.st = { ...e.st, qty: lad.stacks * e.st.stack };
     store.push({ ...e, drop: lad.drop, fill: lad.fill, min: lad.min });
   }
-  // only roles with packing rules are packed (Rifleman, Rocketeer); a card without a bag in the data keeps its counts
-  const bag = slots.backpack && slots.backpack.st && slots.backpack.st.bag;
-  if (bag && bag.length && (c.mags || lads.some(l => l.drop || l.fill))) {
+  // every role with a backpack is packed (Petr 2026-10-30: the grid like in the game for all roles); the counts change
+  // only where the role has packing rules (drop, fill: Rifleman, Rocketeer), a card without a bag keeps its counts
+  const bp = slots.backpack && slots.backpack.st, bag = bp && bp.bag;
+  let grid = null;
+  if (bag && bag.length) {
     const inBag = store.filter(e => e.st), packed = packBag(bag, inBag.map(e => ({ qty: e.st.qty, stack: e.st.stack, grid: e.st.grid, drop: e.drop, fill: e.fill, min: e.min })));
     inBag.forEach((e, i) => { const x = packed[i]; e.st = { ...e.st, qty: x.qty, cost: pieceCost(e.st, x.qty) }; e.cut = x.cut; e.over = x.over; });
+    // a unit holds a full stack, the last one the rest
+    grid = { name: bp.item, comps: bag, tiles: inBag.flatMap((e, i) => packed[i].at.map((at, j) => ({ ...at, item: e.st.item, icon: e.st.icon,
+      n: Math.min(e.st.stack || 1, e.st.qty - j * (e.st.stack || 1)) }))) };
   }
   const all = [...Object.values(slots).filter(Boolean), ...store];
   const have = all.filter(e => e.st);
   // a verdict only on real data: without the Tracker every slot would look red for nothing
   const judged = !!(trk && trk.status === "ok");
-  return { slots, slingOk, store: store.filter(e => e.st), judged, graded: judged ? all.filter(e => e.g) : [],
+  return { slots, slingOk, store: store.filter(e => e.st), grid, judged, graded: judged ? all.filter(e => e.g) : [],
     names: new Set(have.map(e => e.st.item)), cost: have.reduce((a, e) => a + (e.st.cost || 0), 0) + attCost(gun) + attCost(gun2) };
 }
 const loadoutCost = c => myKit(c).cost;
@@ -1817,6 +1822,15 @@ function readiness(k) {
     <span class="rd-bar" aria-hidden="true">${g.map(e => `<i class="g-${e.g}"></i>`).join("")}</span>
     <p>${r.miss.length ? `Tuhle roli zatím ${asWho ? "hrát nemůže" : "hrát nemůžeš"}: chybí <b>${esc(r.miss.join(", "))}</b>. ` : ""}${all ? `${asWho ? "Má" : "Máš"} všechno, co klan pro tuhle roli chce.` : `Pod cílem klanu: <b>${g.length - ok}</b>. Odemkni: ${next.map(st => `<b>${esc(st.item)}</b> (${unlockText(st.unlock)})`).join(", ")}`}</p></div>`;
 }
+// the backpack as in the game (Petr 2026-10-30: "vizualizovat stejne jako ve hre, tedy ve slotech v tom batohu, dle slotu
+// daneho batohu"): its compartments side by side in their real size, every stack on the cells it takes with its count
+// in the corner, the free cells stay visible; where it lies is where packBag put it, the game lets you move things
+function bagGrid(b) {
+  const used = b.tiles.reduce((n, t) => n + t.w * t.h, 0), all = b.comps.reduce((n, [w, h]) => n + w * h, 0);
+  return `<div class="bag" role="img" aria-label="${esc(b.name)}: obsazeno ${used} z ${all} políček">${b.comps.map(([w, h], c) =>
+    `<div class="bag-c" style="--w:${w};--h:${h}">${Array.from({ length: w * h }, (_, i) => `<i class="bag-e" style="grid-area:${Math.floor(i / w) + 1} / ${i % w + 1}"></i>`).join("")}${b.tiles.filter(t => t.c === c).map(t =>
+      `<span class="bag-t" style="grid-area:${t.y + 1} / ${t.x + 1} / span ${t.h} / span ${t.w}" title="${esc(t.item)}${t.n > 1 ? ` \u00d7${t.n}` : ""}">${t.icon ? `<img src="${esc(t.icon)}" alt="" loading="lazy">` : ""}${t.n > 1 ? `<b>${t.n}</b>` : ""}</span>`).join("")}</div>`).join("")}</div>`;
+}
 function loadoutCard(q, c, h = "h2") {
   const k = myKit(c), judged = k.judged;
   const cell = key => { const e = k.slots[key], st = e && e.st, g = judged && e && e.g;
@@ -1839,7 +1853,7 @@ function loadoutCard(q, c, h = "h2") {
       <div><h3>Equipment</h3>${["slot1", "slot2", "slot3", ...(k.slots.sling ? ["sling"] : [])].map(key => cell(key) + (key === "slot1" || key === "sling" ? att(key) : "")).join("")}
         <h3>Gear</h3><div class="lo-gear">${["helmet", "armor", "vest"].map(cell).join("")}</div></div>
       <div><h3>Storage</h3><div class="lo-gear">${["backpack", "traversal"].map(cell).join("")}</div>
-        <h3>V batohu</h3>${k.store.length ? `<ul class="lo-store">${k.store.map(e => `<li${judged && e.g ? ` class="g-${e.g}" title="${GRADE[e.g]}"` : ""}>${itemIcon(e.st.icon, "sm")}<span class="q">${e.st.qty}${e.st.cost ? `<span class="pr">${usd(e.st.cost)}</span>` : ""}</span><span class="n">${esc(e.st.item)}${e.over ? '<span class="cut">Nevejde se: kup větší batoh</span>' : e.cut ? '<span class="cut">Víc se nevejde, větší batoh unese víc</span>' : ""}</span></li>`).join("")}</ul>` : '<p class="note">Nic.</p>'}
+        <h3>V batohu${k.grid ? ` <span class="bag-n">· ${esc(k.grid.name)}</span>` : ""}</h3>${k.grid ? bagGrid(k.grid) : ""}${k.store.length ? `<ul class="lo-store">${k.store.map(e => `<li${judged && e.g ? ` class="g-${e.g}" title="${GRADE[e.g]}"` : ""}>${itemIcon(e.st.icon, "sm")}<span class="q">${e.st.qty}${e.st.cost ? `<span class="pr">${usd(e.st.cost)}</span>` : ""}</span><span class="n">${esc(e.st.item)}${e.over ? '<span class="cut">Nevejde se: kup větší batoh</span>' : e.cut ? '<span class="cut">Víc se nevejde, větší batoh unese víc</span>' : ""}</span></li>`).join("")}</ul>` : '<p class="note">Nic.</p>'}
         ${quick.length ? `<h3>Rychlé sloty</h3><ol class="lo-quick">${quick.map((n, i) => `<li><span class="kb">${(i + 4) % 10}</span>${esc(n)}</li>`).join("")}</ol>` : ""}</div>
     </div>
     <footer class="lo-sum"><span>Za život</span><b>${usd(k.cost)}</b></footer></article>`;
