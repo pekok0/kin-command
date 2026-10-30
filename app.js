@@ -1858,7 +1858,11 @@ const loadoutCost = c => myKit(c).cost;
 const CREDIT = { ok: 1, mid: .75, low: .5 };
 function score(g) {
   const w = g.reduce((n, e) => n + e.lad.vaha, 0), got = g.reduce((n, e) => n + e.lad.vaha * (e.st ? CREDIT[e.g] : 0), 0);
-  const pct = w ? Math.round(100 * got / w) : 0, miss = g.filter(e => e.lad.klic && !e.st).map(e => e.lad.steps[0].item);
+  const miss = g.filter(e => e.lad.klic && !e.st).map(e => e.lad.steps[0].item);
+  // without the main weapon or armor the percentage itself drops into red (Petr 2026-10-31: "to procento splneni vybavy
+  // musi vyrazne klesnout a to az tak, ze bude vysledek cerveny"): halved for each missing one, never above 49 %
+  let pct = w ? Math.round(100 * got / w) : 0;
+  if (miss.length) pct = Math.min(49, Math.round(pct / 2 ** miss.length));
   return { pct, miss, cls: miss.length || pct < 50 ? "g-low" : pct >= 90 ? "g-ok" : "g-mid" };
 }
 function readiness(k) {
