@@ -2579,10 +2579,15 @@ const LOGI_SKIP = /^(slot[123]|sling|backpack|vest)$/;
 function logiRole(op) {
   const mine = op && state.me ? op.claims.filter(c => c.user_id === state.me.user_id) : [];
   const lead = mine.find(c => c.lead && /^SW-Q\d+-/.test(c.slot_key));
-  return { cmd: !!op && leadsOps(), crew: mine.some(c => /^SW-LP\d+$/.test(c.slot_key)), squad: lead ? slotCard(lead.slot_key) : null };
+  // a vehicle crew orders for its vehicle (Petr 2026-10-31 evening: tanks, Humvee and artillery want their shells): any
+  // seat, a vehicle has no badge; the logi heli is the courier, not a customer (058)
+  const car = mine.map(c => slotCard(c.slot_key)).find(logiCar);
+  return { cmd: !!op && leadsOps(), crew: mine.some(c => /^SW-LP\d+$/.test(c.slot_key)), squad: lead ? slotCard(lead.slot_key) : car || null };
 }
+const logiCar = k => !!k && k.startsWith("POD-") && k !== "POD-LP";
 const seesLogi = () => { const op = logiOp(), r = logiRole(op); return !!op && isSq(op) && (r.cmd || r.crew || !!r.squad); };
-const logiSquads = op => [...new Set(op.claims.map(c => slotCard(c.slot_key)).filter(k => /^Q\d+$/.test(k || "")))].sort((a, b) => a.slice(1) - b.slice(1));
+const logiSquads = op => [...new Set(op.claims.map(c => slotCard(c.slot_key)).filter(k => /^Q\d+$/.test(k || "") || logiCar(k)))]
+  .sort((a, b) => (logiCar(a) - logiCar(b)) || a.localeCompare(b, undefined, { numeric: true }));  // squads, then vehicles
 const logiSquad = op => { const r = logiRole(op); return r.squad || (r.cmd ? (logiSquads(op).includes(state.logi.pick) ? state.logi.pick : logiSquads(op)[0]) || null : null); };
 const squadName = (op, card) => { const p = planOf(op), g = p && p.roster.find(g => g.id === card); return g ? g.name : `Squad ${card.slice(1)}`; };
 // every taken place of the squad: its role's kit with the member's unlocks (frozen at the start, else the current ones)
@@ -2600,11 +2605,16 @@ function squadItems(op, card) {
     }
     for (const [key, e] of Object.entries(k.slots)) if (e && e.st && !LOGI_SKIP.test(key)) add(e.st, LOGI_FIRST.length + 1);  // helmet, armor, parachute last
   }
+  if (logiCar(card)) {  // the vehicle's own load first (doktrina.toml [[swarm.slot]] gear: shells, belts, smokes), never the vehicle itself
+    const v = D.doktrina.swarm.slots.find(s => s.id === card.split("-")[1]);
+    for (const g of (v && v.gear) || []) if (g.item && !g.seat && !out.has(g.item)) out.set(g.item, { item: g.item, icon: g.icon, per: g.stack || 1, rank: -1 });
+  }
   return [...out.values()].sort((a, b) => a.rank - b.rank);
 }
 let logiIcons = null;  // item -> icon from the whole Vybava, for the crew's view of any squad
 const logiIcon = n => { if (!logiIcons) { logiIcons = new Map(); for (const q of D.squads || []) for (const c of q.classes) for (const l of c.ladders) for (const st of l.steps)
-  for (const x of [st, ...(st.mags || []), ...(st.ammo || []), ...(st.rockets || [])]) if (x.icon && !logiIcons.has(x.item)) logiIcons.set(x.item, x.icon); } return logiIcons.get(n); };
+  for (const x of [st, ...(st.mags || []), ...(st.ammo || []), ...(st.rockets || [])]) if (x.icon && !logiIcons.has(x.item)) logiIcons.set(x.item, x.icon);
+  for (const s of D.doktrina.swarm.slots || []) for (const g of s.gear || []) if (g.icon && !logiIcons.has(g.item)) logiIcons.set(g.item, g.icon); } return logiIcons.get(n); };
 // the list being clicked: my clicks win until they are saved, else the squad's draft in the database
 function logiDraft(sq) {
   if (state.logi.local && state.logi.local.sq === sq) return state.logi.local.items;

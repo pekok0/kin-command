@@ -479,12 +479,13 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .lg-gh { font: 700 15px/1 var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin: 22px 0 8px; }
 .lg-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 156px), 1fr)); gap: 8px; }
 .lg-t { position: relative; }
-.lg-add { display: grid; grid-template-rows: 70px auto auto; align-content: start; gap: 4px; width: 100%; min-height: 140px; padding: 10px;
+/* every tile the same square (Petr 2026-10-31 evening): the name is clamped, never the tile */
+.lg-add { display: grid; grid-template-rows: 56px auto auto; align-content: start; gap: 4px; width: 100%; aspect-ratio: 1; padding: 10px; overflow: hidden;
   text-align: left; color: var(--ink); background: var(--slot-bg); border: 1px solid var(--rule-soft); cursor: pointer; transition: border-color 160ms var(--ease), background 160ms var(--ease); }
-.lg-add .item { width: 100%; height: 70px; padding: 4px; border: 0; background: none; }
+.lg-add .item { width: 100%; height: 56px; padding: 4px; border: 0; background: none; }
 .lg-add:hover { border-color: oklch(0.86 0.15 205 / 0.6); }
-.lg-n { font: 600 17px/1.2 var(--sans); padding-right: 46px; }
-.lg-s { font: 700 13px/1 var(--cond); letter-spacing: .06em; color: var(--ink-3); text-transform: uppercase; }
+.lg-n { font: 600 15px/1.15 var(--sans); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.lg-s { font: 700 13px/1 var(--cond); letter-spacing: .06em; color: var(--ink-3); text-transform: uppercase; padding-right: 52px; }
 .lg-c { position: absolute; top: 8px; right: 10px; font: 700 38px/1 var(--cond); color: var(--fr); text-shadow: 0 0 16px var(--fr-glow); }
 .lg-t.on .lg-add { border-color: var(--fr); background: linear-gradient(180deg, var(--fr-fill), transparent 75%), var(--slot-bg); }
 .lg-sub { position: absolute; right: 8px; bottom: 8px; width: 48px; height: 48px; font: 700 30px/1 var(--cond); color: var(--ink); background: var(--panel-2); border: 1px solid var(--rule); cursor: pointer; }
