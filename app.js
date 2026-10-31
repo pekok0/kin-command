@@ -2188,7 +2188,7 @@ function viewVycvik(sub) {
   const cards = v.lessons.map(l => `<ol class="drill">${l.cards.map(c => `<li><a class="pic" href="${esc(c.file)}" target="_blank" rel="noopener"><img src="${esc(wv(c.file, 1600))}" srcset="${esc(wv(c.file, 800))} 800w, ${esc(wv(c.file, 1600))} 1600w, ${esc(wv(c.file, 2400))} 2400w" sizes="(min-width: 1360px) 1280px, 100vw" width="2400" height="1500" loading="lazy" alt="${esc(c.title)}: ${esc(c.sub)}"></a>
         <div class="cap"><b>${esc(c.title)}</b><span>${esc(c.sub)}</span><a class="dl" href="${esc(c.file)}" download>PNG pro Discord</a></div></li>`).join("")}</ol>`).join("");
   return `${isGuest() ? "" : `<nav class="tabs vy-tabs" aria-label="Výcvik"><a href="#/vycvik"${act ? "" : ' aria-current="page"'}>Basic Combat Training</a><a href="#/vycvik/act"${act ? ' aria-current="page"' : ""}>Advanced Combat Training</a></nav>`}
-    ${act ? `<p><span class="draft">DRAFT</span> Rozpracované, finalizuje se po BCT.</p><article class="proto">${v.act}</article>`
+    ${act ? `<p><span class="draft">DRAFT</span> Návrh osnovy. Projde ho vedení a squad leadeři, pak se finalizuje.</p><article class="proto">${v.act}</article>`
       : `<article class="proto">${v.bct.replace("<p>[[formace]]</p>", cards)}</article>`}`;
 }
 
