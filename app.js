@@ -64,7 +64,7 @@ async function onAuth(session) {
     try { back = sessionStorage.getItem(BACK); sessionStorage.removeItem(BACK); } catch { /* storage blocked */ }
     if (back && back !== location.hash) location.hash = back;
   }
-  const { data, error } = await sb.from("members").select("user_id, discord_id, name, avatar_url, is_commander, is_officer, is_sl, rank, guest")
+  const { data, error } = await sb.from("members").select("user_id, discord_id, name, avatar_url, is_commander, is_officer, is_sl, is_instructor, rank, guest")
     .eq("user_id", session.user.id).maybeSingle();
   if (error) throw error;
   if (!data) { state.error = "Nejsi ověřený člen KIN. Přihlas se znovu."; await sb.auth.signOut(); return; }
@@ -115,7 +115,7 @@ async function loadEvent() {
     // are a list of their own and never state.event
     const [op, tr] = await Promise.all([
       sb.from("events").select("id, strategy_id, doctrine, variant, squad_swarm, squad_support, roster, starts_at, open_to_hosts, leader:members!events_created_by_fkey(name)").eq("status", "open").eq("kind", "operace").order("starts_at"),
-      sb.from("events").select("id, kind, topic, title, description, capacity, invited, starts_at, ends_at, created_by, leader:members!events_created_by_fkey(name), rsvps(user_id, status, members(name, avatar_url, discord_id, guest))")
+      sb.from("events").select("id, kind, topic, title, description, capacity, invited, starts_at, ends_at, created_by, instructor, leader:members!events_created_by_fkey(name), instr:members!events_instructor_fkey(name), rsvps(user_id, status, members(name, avatar_url, discord_id, guest))")
         .eq("status", "open").neq("kind", "operace").order("starts_at"),
     ]);
     if (op.error) throw op.error;
@@ -1116,7 +1116,11 @@ const TOPICS = { stavba: "Stavba", pechota: "Boj pěchoty", technika: "Technika 
 const label = (o, k) => Object.hasOwn(o, k) ? o[k] : k;  // a stored value we do not know is shown as stored
 const WHO = [["yes", "Přijdou"], ["maybe", "Možná"], ["no", "Nemůžou"]];  // names of others, so not "Prijdu" as on the buttons
 const goers = tr => tr.rsvps.filter(r => r.status === "yes").length;
-const trCount = tr => tr.capacity ? `${goers(tr)} / ${esc(tr.capacity)}` : String(goers(tr));
+// specs/bct-kapacita (053): a BCT has 6 places beside its instructor, a BCT training too (the database counts the same)
+const isBct = tr => tr.topic === "bct";
+const capOf = tr => isBct(tr) ? Math.min(tr.capacity || 6, 6) : tr.capacity;
+const trCount = tr => capOf(tr) ? `${goers(tr)} / ${esc(capOf(tr))}` : String(goers(tr));
+const canInstruct = () => leadsOps() || !!state.me.is_sl || !!state.me.is_instructor;
 
 function trainingsSection() {
   const list = state.trainings.length ? `<ul class="trl">${state.trainings.map(trainingRow).join("")}</ul>`
@@ -1130,17 +1134,25 @@ function trainingRow(tr) {
   for (const r of tr.rsvps) if (r.members) (by[r.status] || []).push(r.members);  // a guest reads no names but his own (049)
   const mine = (tr.rsvps.find(r => r.user_id === state.me.user_id) || {}).status;
   // T4: no "Prijdu" on a full course unless I already have a place; the capacity trigger refuses it anyway
-  const full = tr.capacity && goers(tr) >= tr.capacity && mine !== "yes";
-  const ctl = leadsOps() || tr.created_by === state.me.user_id ? `<details class="t${id}"><summary>Uzavřít nebo zrušit</summary>
+  const full = capOf(tr) && goers(tr) >= capOf(tr) && mine !== "yes";
+  // BCT: only "Prijdu" / "Odhlasit se", the instructor's slot for the command, an SL or the role Instruktor (053)
+  const bct = isBct(tr), lead = bct && tr.instructor === state.me.user_id;
+  const rsvp = lead ? [] : bct ? [mine === "yes" ? ["leave", "Odhlásit se"] : ["yes", "Přijdu"]] : RSVP;
+  const slot = !bct || isGuest() ? "" : !tr.instructor ? (canInstruct() ? `<button type="button" class="act" data-tlead="${id}:take">Povedu jako instruktor</button>` : "")
+    : lead || leadsOps() ? `<button type="button" class="act" data-tlead="${id}:drop">${lead ? "Nepovedu" : "Uvolnit instruktora"}</button>` : "";
+  const leader = bct ? (tr.instructor ? `Instruktor <b>${esc(tr.instr ? tr.instr.name : "?")}</b>` : '<b class="tr-noinstr">Chybí instruktor</b>')
+    : `Vede <b>${esc(tr.leader ? tr.leader.name : "?")}</b>`;
+  const ctl = leadsOps() || tr.created_by === state.me.user_id || lead ? `<details class="t${id}"><summary>Uzavřít nebo zrušit</summary>
       ${by.yes.length ? `<fieldset class="atts"><legend>${tr.topic === "bct" ? "Kdo byl celou dobu (hosté se stanou Rekruty)" : "Kdo byl"}</legend>${tr.rsvps.filter(r => r.status === "yes" && r.members).map(r =>
         `<label class="att"><input type="checkbox" name="tatt_${esc(r.user_id)}" checked>${esc(r.members.name)}${r.members.guest ? " (host)" : ""}</label>`).join("")}</fieldset>` : ""}
       <button type="button" class="act" data-tclose="${id}:closed">Proběhl, uzavřít</button> <button type="button" class="act" data-tclose="${id}:cancelled">Zrušit</button></details>` : "";
   return `<li class="tr"><p class="tr-k"><span class="ref">${esc(label(KINDS, tr.kind))}</span>${esc(label(TOPICS, tr.topic))}${tr.invited && !isGuest() ? "<span>· Jen pro pozvané</span>" : ""}</p>
     <h3>${esc(tr.title)}</h3>
-    <p class="tr-m"><time datetime="${esc(tr.starts_at)}">${esc(fmtSpan(tr))}</time> · Vede <b>${esc(tr.leader ? tr.leader.name : "?")}</b> · Přijde <b>${trCount(tr)}</b></p>
+    <p class="tr-m"><time datetime="${esc(tr.starts_at)}">${esc(fmtSpan(tr))}</time> · ${leader} · Přijde <b>${trCount(tr)}</b></p>
     ${tr.description ? `<p class="tr-d">${esc(tr.description)}</p>` : ""}
-    <div class="rsvp" role="group" aria-label="${esc(tr.title)}: přijdeš?">${RSVP.map(([k, l]) => `<button type="button" class="act" data-trsvp="${id}:${k}" aria-pressed="${mine === k}"${k === "yes" && full ? ` disabled aria-describedby="full-${id}"` : ""}>${l}</button>`).join("")}</div>
+    <div class="rsvp" role="group" aria-label="${esc(tr.title)}: přijdeš?">${rsvp.map(([k, l]) => `<button type="button" class="act" data-trsvp="${id}:${k}" aria-pressed="${mine === k}"${k === "yes" && full ? ` disabled aria-describedby="full-${id}"` : ""}>${l}</button>`).join("")}${slot}</div>
     ${full ? `<p class="tr-full" id="full-${id}">Kurz je plný.</p>` : ""}
+    ${bct && !tr.instructor ? '<p class="tr-full">Bez instruktora se BCT nekoná.</p>' : ""}
     ${WHO.map(([k, l]) => by[k].length ? `<p class="tr-who"><b>${l}:</b> ${by[k].map(memberLink).join(" ")}</p>` : "").join("")}
     ${ctl}</li>`;
 }
@@ -1178,16 +1190,23 @@ async function createTraining(f) {
   if (invited && !invited.length) { state.novaFlash = "Vyber, koho zveš."; return; }
   const start = new Date(v.starts);
   const { error } = await sb.from("events").insert({ kind, topic: v.topic, title: v.title.trim(), starts_at: start.toISOString(),
-    ends_at: v.hours ? new Date(+start + Number(v.hours) * 3600e3).toISOString() : null, description: v.description.trim() || null, capacity: kind === "kurz" ? Number(v.capacity) : null, invited });
+    ends_at: v.hours ? new Date(+start + Number(v.hours) * 3600e3).toISOString() : null, description: v.description.trim() || null, capacity: kind === "kurz" ? (v.topic === "bct" ? 6 : Number(v.capacity)) : null, invited });
   state.novaFlash = !error ? null : error.code === "42501" ? "Trénink nebo kurz vypíše člen od hodnosti Operátor." : saveErr(error);
   if (!error) { f.reset(); capToggle(f); }  // the next one starts from an empty form
 }
 
 async function rsvpTraining(id, status) {
-  const { error } = await sb.from("rsvps").upsert({ event_id: id, user_id: state.me.user_id, status, updated_at: new Date().toISOString() },
+  const { error } = status === "leave" ? await sb.from("rsvps").delete().eq("event_id", id).eq("user_id", state.me.user_id) : await sb.from("rsvps").upsert({ event_id: id, user_id: state.me.user_id, status, updated_at: new Date().toISOString() },
     { onConflict: "event_id,user_id" });
   // 23514 = the capacity trigger (012): someone took the last place a moment earlier
   state.trFlash = !error ? null : error.code === "23514" ? "Kurz je plný." : error.code === "42501" ? "Trénink už je uzavřený." : saveErr(error);
+  await loadEvent();
+}
+
+// 053: take or leave a BCT's instructor slot; 23514 = someone took it a moment earlier
+async function leadTraining(id, take) {
+  const { error } = await sb.rpc("bct_lead", { e: id, take });
+  state.trFlash = !error ? null : error.code === "23514" ? "Instruktora už má někdo jiný." : saveErr(error);
   await loadEvent();
 }
 
@@ -2804,12 +2823,13 @@ function render() {
 }
 
 $app.addEventListener("click", e => {
-  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-drawer],[data-role],[data-squad],[data-lock],[data-briefwin],[data-sqdrop],[data-cmd],[data-seat],[data-fx],[data-leadfor],[data-nocash],[data-merit-del],[data-support],[data-lead],[data-trsvp],[data-tclose],[data-tracker],[data-nova],[data-ctask],[data-cans]");
+  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-drawer],[data-role],[data-squad],[data-lock],[data-briefwin],[data-sqdrop],[data-cmd],[data-seat],[data-fx],[data-leadfor],[data-nocash],[data-merit-del],[data-support],[data-lead],[data-trsvp],[data-tlead],[data-tclose],[data-tracker],[data-nova],[data-ctask],[data-cans]");
   if (state.sqArm != null && !(t && t.dataset.sqdrop)) { state.sqArm = null; renderRoster(); }  // a click elsewhere: no drop
   if (!t) return;
   if (t.dataset.ctask) { const [id, st] = t.dataset.ctask.split(":"); setTask(id, st); return; }
   if (t.dataset.cans) { setTask(t.dataset.cans, "odpoved", t.dataset.val); return; }
   if (t.dataset.trsvp) { const [id, st] = t.dataset.trsvp.split(":"); rsvpTraining(Number(id), st); return; }
+  if (t.dataset.tlead) { t.disabled = true; const [id, k] = t.dataset.tlead.split(":"); leadTraining(Number(id), k === "take"); return; }
   if (t.dataset.tclose) { t.disabled = true; const [id, st] = t.dataset.tclose.split(":"); closeTraining(Number(id), st); return; }
   if (t.dataset.role) { const [i, kit, d] = t.dataset.role.split(":"); setRole(Number(i), kit, Number(d)); return; }
   if (t.dataset.squad) { setSquad(t.dataset.squad); return; }
