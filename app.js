@@ -657,7 +657,7 @@ function nakupBlock(s) {
   return `${head}<p class="note">Co zapsaným z nákupního minima chybí, po squadech. Kupuje se uvnitř squadu, řídí to SL: koupit může jen ten, kdo to má odemčené.</p>
     ${state.buy.size ? [...state.buy.values()].map(x => { const lead = x.g.sq && leadOf(x.g);
       return `<div class="buy-g"><h3>${esc(x.g.name)}${lead ? ` <small>SL ${esc(lead.members.name)}</small>` : ""}</h3>${buyList(x)}</div>`; }).join("")
-      : '<p class="note">Zapsaným nic z minima nechybí.</p>'}
+      : ""}
     ${leadsOps() ? `<p class="note nocash">Bez peněz (označuje jen velení, členům se koupí celé minimum): ${state.claims.map(c =>
       `<button type="button" class="act" data-nocash="${esc(c.user_id)}:${c.no_cash ? 0 : 1}" aria-pressed="${!!c.no_cash}">${esc((c.members && c.members.name) || "?")}</button>`).join(" ")}</p>` : ""}
     <p class="note">Kdo kupuje pro jiné, potřebuje bednu a vozidlo, kterým ji koupí: ${D.nakup.rezie.map(e => `${esc(e.item)} ${e.price == null ? "" : usd(e.price)}`).join(", ")}.</p></section>`;
@@ -1674,7 +1674,7 @@ function viewBattle(x, v, w) {
       <p class="vtw">Věže v zóně: ${v.towers.map(t => `<span class="ref">${esc(t.replace("Tower ", "T"))}</span>`).join(" ")}</p>
       <p class="note">Náčrtek z dat metaforge. Kruhy ostatních zón čárkovaně.</p></div></div>`
     : `<p class="note">Zóna ${esc(v.name)}: střed zóny zatím nemáme, plánek doplníme.</p>`;
-  return `<div id="bplan">${zone}${w && !wp ? '<p class="note">Pro tohle počasí zatím nic zvláštního, platí obecný plán.</p>' : ""}
+  return `<div id="bplan">${zone}
     ${sec("Hlavní cíl", cil && `<p>${esc(cil)}</p>`)}
     ${sec("Místa k držení", drzet && `<ul class="bullets">${drzet.map(d => `<li><b>${esc(d.misto)}</b>${d.squad ? ` · ${esc(d.squad)}` : ""}${d.jak ? `: ${esc(d.jak)}` : ""}</li>`).join("")}</ul>`)}
     ${sec("Squady a úkoly", squady && `<ul class="bullets">${squady.map(d => `<li><b>${esc(d.squad)}</b>: ${esc(d.ukol)}</li>`).join("")}</ul>`)}
@@ -2675,7 +2675,7 @@ function logiInbox(op) {
     <ul class="lg-items">${x.items.map(i => `<li>${itemIcon(logiIcon(i.item), "sm")}<b>${i.stacks}×</b><span>${esc(i.item)}</span><small>${i.stacks * i.per} ks</small></li>`).join("")}</ul>
     <button type="button" class="lg-done" data-logi-done="${x.id}">Doručeno</button></article>`;
   return `<section class="lg-sec" id="lg-inbox"><header class="lg-h"><h2>Pro logi heli <span class="num">${open.length}</span></h2></header>
-    ${open.length ? open.map(card).join("") : '<p class="note">Teď nikdo nic nechce. Nová objednávka tu naskočí sama a pípne.</p>'}
+    ${open.length ? open.map(card).join("") : ""}
     ${done.length ? `<h3 class="lg-gh">Naposledy doručeno</h3><ul class="lg-hist">${done.map(x => `<li class="delivered"><span class="lg-st">${esc(squadName(op, x.squad))} · ${x.courier ? esc(x.courier.name) : ""} · ${ago(x.delivered_at)}</span><span class="lg-sum">${esc(logiSum(x.items))}</span></li>`).join("")}</ul>` : ""}</section>`;
 }
 function viewLogistika() {
@@ -2755,12 +2755,12 @@ function viewCmdTasks() {
     <div class="tk-body"><p class="tk-text">${esc(x.text)}</p>${x.odpoved ? `<p class="tk-note"><b>Odpověď:</b> ${esc(x.odpoved)}</p>` : ""}${x.note ? `<p class="tk-note"><b>Claude:</b> ${esc(x.note)}</p>` : ""}</div>
     <div class="tk-act">${x.state === "open" ? open(x)
       : x.state === "claude" ? btn(x, "open", "Vrátit") + btn(x, "done", "Hotovo") : x.state === "done" ? btn(x, "open", "Otevřít") : ""}</div></li>`;
-  const sec = (k, h, list, empty) => `<section class="block tks-sec" data-tsec="${k}"><h2>${h} <span class="num">${list.length}</span></h2>${list.length ? `<ul class="tks">${list.map(row).join("")}</ul>` : `<p class="note">${empty}</p>`}</section>`;
+  const sec = (k, h, list) => `<section class="block tks-sec" data-tsec="${k}"><h2>${h} <span class="num">${list.length}</span></h2>${list.length ? `<ul class="tks">${list.map(row).join("")}</ul>` : ""}</section>`;  // empty: nothing, no placeholder (Petr 2026-10-31)
   const done = xs.filter(x => x.state === "done"), info = xs.filter(x => x.state === "open" && x.druh === "info");
   return head + (state.taskErr ? `<p class="err" role="alert">${esc(state.taskErr)}</p>` : "")
-    + sec("open", "Čeká na tebe", xs.filter(waitsForMe), "Nic nečeká.")
+    + sec("open", "Čeká na tebe", xs.filter(waitsForMe))
     + (info.length ? `<details class="block tks-sec tks-done" data-tsec="info"><summary><h2>Pro info <span class="num">${info.length}</span>${arrow()}</h2></summary><ul class="tks">${info.map(row).join("")}</ul></details>` : "")
-    + sec("claude", "U Clauda", xs.filter(x => ["claude", "prace", "odpoved"].includes(x.state)), "Claude teď nic nedělá.")
+    + sec("claude", "U Clauda", xs.filter(x => ["claude", "prace", "odpoved"].includes(x.state)))
     + `<details class="block tks-sec tks-done" data-tsec="done"><summary><h2>Hotovo <span class="num">${done.length}</span>${arrow()}</h2></summary>${done.length ? `<ul class="tks">${done.map(row).join("")}</ul>` : ""}</details>`;
 }
 // the Commander's briefing protocol (Petr 2026-10-21 "uvidim to jenom ja"): the row 'velitel' is readable by the
