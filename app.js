@@ -11,7 +11,8 @@ const sb = window.supabase ? supabase.createClient(window.KIN_BACKEND.url, windo
 // a stored Supabase session means the login check is on its way: the gate shows "checking", not the button
 const hadSession = (() => { try { return Object.keys(localStorage).some(k => /^sb-.*-auth-token$/.test(k)); } catch { return false; } })();
 // never echo the provider's error text from the URL (content spoofing); drop it so a reload is clean
-let state = { me: null, error: urlQs.has("error") ? "Přihlášení přes Discord selhalo." : null, event: null, claims: [], rsvps: [], trainings: [], ops: [], focusId: null, opsLoaded: false, flash: null, trFlash: null, novaFlash: null, checking: !!sb && (hadSession || FRESH) };
+let state = { me: null, error: urlQs.has("error") ? "Přihlášení přes Discord selhalo." : null, event: null, claims: [], rsvps: [], trainings: [], ops: [], focusId: null, opsLoaded: false, flash: null, trFlash: null, novaFlash: null, checking: !!sb && (hadSession || FRESH),
+  logi: { orders: [], have: new Map(), local: null, timer: null, pick: null, flash: null, err: false, loaded: null, chan: null } };
 if (urlQs.has("error")) history.replaceState(null, "", location.pathname + location.hash);
 
 const LOGIN_ERR = "Přihlášení se nepovedlo. Zkus to znovu.";
@@ -145,6 +146,7 @@ async function loadEvent() {
   // the lobby I looked at was closed or cancelled meanwhile: its address shows the history (closed) or Akce
   if (state.focusId && !state.ops.some(e => e.id === state.focusId) && (state.opsLoaded || state.evErr)) { state.focusId = null; render(); return; }
   renderRoster();
+  renderLogi();  // the menu item and the Logistika page follow the places (an SL badge, a seat in Logi heli)
 }
 // hub/specs/nakupni-seznam: what the members of the open operations unlocked this season; members nest their items so
 // the row cap counts people, not unlocks (like Pokrytí); a member without rows has no Tracker data
@@ -2395,12 +2397,14 @@ function viewPlayer(m, rows, season, have, prog, merits = [], done = new Set(), 
 // ---------- shell ----------
 // one item per question a member asks (Petr 2026-10-19, specs/akce-flow rozhodnuti 8)
 const NAV = [["akce", "Akce"], ["mapy", "Mapy"], ["vybava", "Výbava"], ["doktrina", "Doktrína"]];
+// Logistika (052) for the command, the squad leaders and the crew of Logi heli in the open operation; the crew's count
+const navLogi = () => !state.me || !seesLogi() ? [] : [["logistika", "Logistika", logiRole(logiOp()).crew || logiRole(logiOp()).cmd ? state.logi.orders.filter(x => x.state === "open").length : 0]];
 // the Commander's own item after Doktrina (specs/ukoly-velitele U1), with the count of what waits for him
 const navCmd = () => !state.me || !state.me.is_commander ? [] : [["moje-ukoly", "Úkoly", state.cmdTasks ? state.cmdTasks.filter(waitsForMe).length : 0]];
 function renderNav(active) {
   navActive = active;
   document.getElementById("nav").innerHTML =
-    (isGuest() ? [["akce", "BCT"], ["vycvik", "Výcvik"]] : [...NAV, ...navCmd()]).map(([k, l, n]) => `<a href="#/${k}"${active === k ? ' aria-current="page"' : ""}>${l}${n ? `<b class="nav-n">${n}</b>` : ""}</a>`).join("");
+    (isGuest() ? [["akce", "BCT"], ["vycvik", "Výcvik"]] : [...NAV, ...navLogi(), ...navCmd()]).map(([k, l, n]) => `<a href="#/${k}"${active === k ? ' aria-current="page"' : ""}>${l}${n ? `<b class="nav-n">${n}</b>` : ""}</a>`).join("");
   navToCurrent();
 }
 
@@ -2479,6 +2483,160 @@ document.addEventListener("click", e => {
   unlockInto(a, e);
 });
 document.addEventListener("keydown", () => { if (unlocking) unlocking(200); });
+
+// ---------- logistika (Petr 2026-10-31, hub/specs/logistika-objednavky, 052) ----------
+// the squad leader clicks what his squad lacks (the kit of every taken place, once, in whole stacks) and calls the
+// logistics helicopter with one big button; its crew sees what to buy, for which squad and from whom, and clicks it
+// delivered. Everything big: it sits on a second monitor or behind an alt-tab during the game. The operation being played
+// = the earliest still open one; the members' unlocks are frozen at its start (logi_have, ceo/logistika_snimek.py)
+const logiOp = () => (state.ops || [])[0] || null;
+const LOGI_GROUPS = ["Munice", "Léčení", "Granáty a kouř", "Výbušniny, rakety a palivo", "Zbraně", "Výbava", "Ostatní"];
+const LOGI_OF = { "Munice": "Munice", "Zásobník pistole": "Munice", "Munice pistole": "Munice", "Obvazy": "Léčení", "Lékárna": "Léčení",
+  "Léčení": "Léčení", "Revive": "Léčení", "Sprint": "Léčení", "Kouř": "Granáty a kouř", "Granáty": "Granáty a kouř", "Výbušniny": "Výbušniny, rakety a palivo",
+  "Rozbuška": "Výbušniny, rakety a palivo", "Rakety": "Výbušniny, rakety a palivo", "Palivo": "Výbušniny, rakety a palivo" };
+function logiRole(op) {
+  const mine = op && state.me ? op.claims.filter(c => c.user_id === state.me.user_id) : [];
+  const lead = mine.find(c => c.lead && /^SW-Q\d+-/.test(c.slot_key));
+  return { cmd: !!op && leadsOps(), crew: mine.some(c => /^SW-LP\d+$/.test(c.slot_key)), squad: lead ? slotCard(lead.slot_key) : null };
+}
+const seesLogi = () => { const op = logiOp(), r = logiRole(op); return !!op && isSq(op) && (r.cmd || r.crew || !!r.squad); };
+const logiSquads = op => [...new Set(op.claims.map(c => slotCard(c.slot_key)).filter(k => /^Q\d+$/.test(k || "")))].sort((a, b) => a.slice(1) - b.slice(1));
+const logiSquad = op => { const r = logiRole(op); return r.squad || (r.cmd ? (logiSquads(op).includes(state.logi.pick) ? state.logi.pick : logiSquads(op)[0]) || null : null); };
+const squadName = (op, card) => { const p = planOf(op), g = p && p.roster.find(g => g.id === card); return g ? g.name : `Squad ${card.slice(1)}`; };
+// every taken place of the squad: its role's kit with the member's unlocks (frozen at the start, else the current ones)
+function squadItems(op, card) {
+  const p = planOf(op), slots = p ? p.roster.flatMap(g => g.slots) : [], out = new Map();
+  for (const c of op.claims.filter(c => slotCard(c.slot_key) === card)) {
+    const x = slots.find(s => s.key === c.slot_key), rc = x && slotClass(x);
+    if (!rc) continue;
+    const have = state.logi.have.get(c.user_id) || (state.lobbyHave && state.lobbyHave.get(c.user_id)) || new Set();
+    const k = asPlayer({ name: c.members.name, have, trk: (state.lobbyTrk && state.lobbyTrk.get(c.user_id)) || null }, () => myKit(rc[1]));
+    const add = (st, group) => { if (st && st.item && !out.has(st.item)) out.set(st.item, { item: st.item, icon: st.icon, per: st.stack || 1, group }); };
+    for (const [key, e] of Object.entries(k.slots)) if (e && e.st) add(e.st, /^(slot[123]|sling)$/.test(key) ? "Zbraně" : "Výbava");
+    for (const e of k.store) add(e.st, e.lad ? LOGI_OF[e.lad.group] || "Ostatní" : "Munice");
+  }
+  return [...out.values()];
+}
+let logiIcons = null;  // item -> icon from the whole Vybava, for the crew's view of any squad
+const logiIcon = n => { if (!logiIcons) { logiIcons = new Map(); for (const q of D.squads || []) for (const c of q.classes) for (const l of c.ladders) for (const st of l.steps)
+  for (const x of [st, ...(st.mags || []), ...(st.ammo || []), ...(st.rockets || [])]) if (x.icon && !logiIcons.has(x.item)) logiIcons.set(x.item, x.icon); } return logiIcons.get(n); };
+// the list being clicked: my clicks win until they are saved, else the squad's draft in the database
+function logiDraft(sq) {
+  if (state.logi.local && state.logi.local.sq === sq) return state.logi.local.items;
+  const row = state.logi.orders.find(x => x.squad === sq && x.state === "draft");
+  return new Map((row ? row.items : []).map(x => [x.item, x.stacks]));
+}
+function logiItems(op, sq, items) {
+  const per = new Map([...state.logi.orders.filter(x => x.squad === sq).flatMap(x => x.items.map(i => [i.item, i.per])), ...squadItems(op, sq).map(x => [x.item, x.per])]);
+  return [...items].filter(([, n]) => n > 0).map(([item, stacks]) => ({ item, stacks, per: per.get(item) || 1 }));
+}
+function logiBump(item, d) {
+  const op = logiOp(), sq = logiSquad(op), items = new Map(logiDraft(sq)), n = Math.max(0, (items.get(item) || 0) + d);
+  if (n) items.set(item, n); else items.delete(item);
+  state.logi.local = { sq, items };
+  sound(d > 0 ? "add" : "remove");
+  renderLogi();
+  clearTimeout(state.logi.timer);
+  state.logi.timer = setTimeout(logiSave, 500);  // saved shortly after the last click: the page stays instant
+}
+async function logiSave() {
+  const L = state.logi.local, op = logiOp();
+  if (!L || !op) return;
+  const row = state.logi.orders.find(x => x.squad === L.sq && x.state === "draft"), items = logiItems(op, L.sq, L.items);
+  const { error } = row ? await sb.from("logi_orders").update({ items }).eq("id", row.id)
+    : await sb.from("logi_orders").insert({ event_id: op.id, squad: L.sq, items });
+  state.logi.flash = error ? (console.error(error), "Seznam se nepodařilo uložit, zkus to znovu.") : null;
+  await loadLogi();
+  if (!error && state.logi.local === L) { state.logi.local = null; renderLogi(); }
+}
+async function logiCall() {
+  clearTimeout(state.logi.timer);
+  const op = logiOp(), sq = logiSquad(op), row = state.logi.orders.find(x => x.squad === sq && x.state === "draft"), items = logiItems(op, sq, logiDraft(sq));
+  if (!items.length) return;
+  const { error } = row ? await sb.from("logi_orders").update({ state: "open", items }).eq("id", row.id)
+    : await sb.from("logi_orders").insert({ event_id: op.id, squad: sq, state: "open", items });
+  state.logi.flash = error ? (console.error(error), "Logistiku se nepodařilo zavolat, zkus to znovu.") : null;
+  if (!error) { state.logi.local = null; sound("unlock"); }
+  await loadLogi();
+}
+async function logiSet(id, st, again) {
+  const op = logiOp(), x = state.logi.orders.find(o => o.id === id);
+  if (!x || !op) return;
+  const { error } = again ? await sb.from("logi_orders").insert({ event_id: op.id, squad: x.squad, state: "open", items: x.items })
+    : await sb.from("logi_orders").update({ state: st }).eq("id", id);
+  state.logi.flash = error ? (console.error(error), "Nepodařilo se uložit, zkus to znovu.") : null;
+  if (!error) sound(again ? "unlock" : st === "delivered" ? "claim" : "remove");
+  await loadLogi();
+}
+async function loadLogi() {
+  const op = logiOp();
+  if (!sb || !state.me || !op) return renderLogi();
+  const [o, h] = await Promise.all([
+    sb.from("logi_orders").select("id, squad, state, items, created_by, sent_at, delivered_at, author:members!logi_orders_created_by_fkey(name), courier:members!logi_orders_delivered_by_fkey(name)").eq("event_id", op.id).order("id"),
+    sb.from("logi_have").select("user_id, items").eq("event_id", op.id)]);
+  if (o.error || h.error) { console.error(o.error || h.error); state.logi.err = true; return renderLogi(); }
+  const was = new Set(state.logi.orders.filter(x => x.state === "open").map(x => x.id)), r = logiRole(op);
+  // a new call rings for the crew and the command, not on the first load
+  if ((r.crew || r.cmd) && state.logi.loaded === op.id && o.data.some(x => x.state === "open" && !was.has(x.id))) sound("lead");
+  Object.assign(state.logi, { orders: o.data, have: new Map(h.data.map(x => [x.user_id, new Set(x.items)])), err: false, loaded: op.id });
+  if (!state.logi.chan) state.logi.chan = sb.channel("logi").on("postgres_changes", { event: "*", schema: "public", table: "logi_orders" }, () => loadLogi()).subscribe();
+  renderLogi();
+}
+const logiSum = items => items.map(i => `${i.item} ${i.stacks}×`).join(", ");
+function logiOrderBlock(op, sq) {
+  const all = squadItems(op, sq), draft = logiDraft(sq), n = [...draft.values()].reduce((a, b) => a + b, 0);
+  const tile = x => { const c = draft.get(x.item) || 0;
+    return `<div class="lg-t${c ? " on" : ""}"><button type="button" class="lg-add" data-logi-add="${esc(x.item)}" aria-label="Přidat ${esc(x.item)}">${itemIcon(x.icon)}<span class="lg-n">${esc(x.item)}</span>
+      <span class="lg-s">${x.per > 1 ? `stack ${x.per} ks` : "1 ks"}</span>${c ? `<b class="lg-c">${c}×</b>` : ""}</button>${c ? `<button type="button" class="lg-sub" data-logi-sub="${esc(x.item)}" aria-label="Ubrat ${esc(x.item)}">−</button>` : ""}</div>`; };
+  const hist = state.logi.orders.filter(x => x.squad === sq && x.state !== "draft").slice().reverse().slice(0, 8);
+  const label = x => x.state === "open" ? `Čeká na logistiku · ${ago(x.sent_at)}` : x.state === "delivered" ? `Doručeno${x.courier ? ` · ${esc(x.courier.name)}` : ""} · ${ago(x.delivered_at)}` : "Zrušeno";
+  const cmd = logiRole(op).cmd && !logiRole(op).squad ? `<div class="lg-sqs vbar seg" role="group" aria-label="Squad">${logiSquads(op).map(k => `<button type="button" data-logi-sq="${esc(k)}" aria-pressed="${k === sq}"><b>${esc(squadName(op, k))}</b></button>`).join("")}</div>` : "";
+  return `<section class="lg-sec" id="lg-order"><header class="lg-h"><h2>Objednávka · ${esc(squadName(op, sq))}</h2>${cmd}</header>
+    ${all.length ? LOGI_GROUPS.map(gr => { const xs = all.filter(x => x.group === gr); return xs.length ? `<h3 class="lg-gh">${gr}</h3><div class="lg-tiles">${xs.map(tile).join("")}</div>` : ""; }).join("")
+      : '<p class="note">Squad zatím nemá nikoho na místech.</p>'}
+    <button type="button" class="lg-call" data-logi-call${n ? "" : " disabled"}>Zavolat logistiku${n ? ` · ${plural(n, "stack", "stacky", "stacků")}` : ""}</button>
+    ${hist.length ? `<h3 class="lg-gh">Objednávky squadu</h3><ul class="lg-hist">${hist.map(x => `<li class="${x.state}"><span class="st">${label(x)}</span><span class="sum">${esc(logiSum(x.items))}</span>
+      <button type="button" class="act" data-logi-again="${x.id}">Objednat znovu</button>${x.state === "open" ? `<button type="button" class="act" data-logi-cancel="${x.id}">Zrušit</button>` : ""}</li>`).join("")}</ul>` : ""}</section>`;
+}
+function logiInbox(op) {
+  const open = state.logi.orders.filter(x => x.state === "open"), done = state.logi.orders.filter(x => x.state === "delivered").slice(-5).reverse();
+  const card = x => `<article class="lg-o"><header><b class="lg-sq">${esc(squadName(op, x.squad))}</b><span>${esc(x.author ? x.author.name : "?")} · ${ago(x.sent_at)}</span></header>
+    <ul class="lg-items">${x.items.map(i => `<li>${itemIcon(logiIcon(i.item), "sm")}<b>${i.stacks}×</b><span>${esc(i.item)}</span><small>${i.stacks * i.per} ks</small></li>`).join("")}</ul>
+    <button type="button" class="lg-done" data-logi-done="${x.id}">Doručeno</button></article>`;
+  return `<section class="lg-sec" id="lg-inbox"><header class="lg-h"><h2>Pro logi heli <span class="num">${open.length}</span></h2></header>
+    ${open.length ? open.map(card).join("") : '<p class="note">Teď nikdo nic nechce. Nová objednávka tu naskočí sama a pípne.</p>'}
+    ${done.length ? `<h3 class="lg-gh">Naposledy doručeno</h3><ul class="lg-hist">${done.map(x => `<li class="delivered"><span class="st">${esc(squadName(op, x.squad))} · ${x.courier ? esc(x.courier.name) : ""} · ${ago(x.delivered_at)}</span><span class="sum">${esc(logiSum(x.items))}</span></li>`).join("")}</ul>` : ""}</section>`;
+}
+function viewLogistika() {
+  const op = logiOp(), head = '<header class="unit-head"><div><h1>Logistika</h1></div></header>';  // a glance page: no lede
+  if (!op) return head + `<p class="note">${state.opsLoaded ? "Teď není otevřená žádná operace." : "Načítám…"}</p>`;
+  const r = logiRole(op), sq = logiSquad(op);
+  if (!(r.cmd || r.crew || r.squad)) return head + '<p class="note">Logistika je pro velení, squad leadery (odznak SL) a posádku logi heli téhle operace.</p>';
+  const msg = state.logi.flash ? `<p class="err" role="alert">${esc(state.logi.flash)}</p>` : state.logi.err ? '<p class="err" role="alert">Objednávky se nenačetly, zkus stránku načíst znovu.</p>' : "";
+  const order = sq ? logiOrderBlock(op, sq) : "", inbox = r.crew || r.cmd ? logiInbox(op) : "";
+  return `${head}${msg}<div class="lg-wrap">${r.crew && !r.squad ? inbox + order : order + inbox}</div>`;
+}
+function renderLogi() {
+  if (!/^#\/logistika/.test(location.hash)) return renderNav(navActive);
+  const y = scrollY;
+  $app.innerHTML = viewLogistika();
+  scrollTo(0, y);
+  const op = logiOp(), r = logiRole(op), n = op ? state.logi.orders.filter(x => x.state === "open").length : 0;
+  document.title = (r.crew || r.cmd) && n ? `(${n}) Logistika · KIN` : "Logistika · KIN";
+  renderNav(navActive);
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest?.("[data-logi-add],[data-logi-sub],[data-logi-call],[data-logi-done],[data-logi-again],[data-logi-cancel],[data-logi-sq]");
+  if (!b || b.disabled) return;
+  const d = b.dataset;
+  if (d.logiAdd !== undefined) logiBump(d.logiAdd, 1);
+  else if (d.logiSub !== undefined) logiBump(d.logiSub, -1);
+  else if (d.logiCall !== undefined) logiCall();
+  else if (d.logiDone) logiSet(+d.logiDone, "delivered");
+  else if (d.logiAgain) logiSet(+d.logiAgain, "open", true);
+  else if (d.logiCancel) logiSet(+d.logiCancel, "cancelled");
+  else if (d.logiSq) { state.logi.pick = d.logiSq; renderLogi(); }
+});
 
 // the Commander's tasks from the KIN kernel (specs/ukoly-velitele, 037): what waits for him first, newest first; "Odbav ty"
 // hands a task to the Claude session running in wardogs (ceo/ukoly.py --vezmi), "Hotovo" closes it. Loaded once after
@@ -2617,6 +2775,9 @@ function render() {
     cur = plan && !plan.swarm && !plan.nomap ? plan : null;  // the build order's role chips trace on this plan
     html = viewAkce(); active = "akce"; title = isGuest() ? "BCT · KIN" : "Akce · KIN";
     if (sb && state.me && !p[1] && !isGuest()) setTimeout(() => loadHist(["historie"]));
+  } else if (p[0] === "logistika") {
+    html = viewLogistika(); active = "logistika"; title = "Logistika · KIN";
+    if (sb && state.me) setTimeout(loadLogi);
   } else if (p[0] === "moje-ukoly") {
     html = viewCmdTasks(); active = "moje-ukoly"; title = "Úkoly · KIN";
   } else if (p[0] === "briefing") {
