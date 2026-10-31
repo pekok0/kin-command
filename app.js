@@ -12,7 +12,7 @@ const sb = window.supabase ? supabase.createClient(window.KIN_BACKEND.url, windo
 const hadSession = (() => { try { return Object.keys(localStorage).some(k => /^sb-.*-auth-token$/.test(k)); } catch { return false; } })();
 // never echo the provider's error text from the URL (content spoofing); drop it so a reload is clean
 let state = { me: null, error: urlQs.has("error") ? "Přihlášení přes Discord selhalo." : null, event: null, claims: [], rsvps: [], trainings: [], ops: [], focusId: null, opsLoaded: false, flash: null, trFlash: null, tadd: {}, novaFlash: null, checking: !!sb && (hadSession || FRESH),
-  logi: { orders: [], have: new Map(), local: null, timer: null, pick: null, flash: null, err: false, loaded: null, chan: null } };
+  logi: { orders: [], have: new Map(), local: null, timer: null, pick: null, flash: null, err: false, loaded: null, chan: null, html: null, node: null } };
 if (urlQs.has("error")) history.replaceState(null, "", location.pathname + location.hash);
 
 const LOGIN_ERR = "Přihlášení se nepovedlo. Zkus to znovu.";
@@ -2714,9 +2714,15 @@ function viewLogistika() {
 }
 function renderLogi() {
   if (!/^#\/logistika/.test(location.hash)) return renderNav(navActive);
-  const y = scrollY;
-  $app.innerHTML = viewLogistika();
-  scrollTo(0, y);
+  const html = viewLogistika();
+  // the same page again (the save after a click, the end of the local draft, the realtime echo of the own write) leaves
+  // the DOM alone: rebuilt from the same HTML, the tiles flashed and their icons loaded twice (Petr 2026-10-31)
+  if (html !== state.logi.html || $app.firstChild !== state.logi.node) {
+    const y = scrollY;
+    $app.innerHTML = html;
+    scrollTo(0, y);
+    Object.assign(state.logi, { html, node: $app.firstChild });
+  }
   const op = logiOp(), r = logiRole(op), n = op ? state.logi.orders.filter(x => x.state === "open").length : 0;
   document.title = (r.crew || r.cmd) && n ? `(${n}) Logistika · KIN` : "Logistika · KIN";
   renderNav(navActive);
