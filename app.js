@@ -1274,7 +1274,7 @@ function addAttendee(id) {
   const m = (state.clan || []).find(x => x.name === name);  // ponytail: the first of that name; two members with one name are one option twice
   state.trFlashId = id;
   state.trFlash = m ? null : "Takové jméno v seznamu není.";
-  if (m) (state.tadd[id] = state.tadd[id] || []).push(m.user_id);
+  if (m && !(state.tadd[id] || []).includes(m.user_id)) (state.tadd[id] = state.tadd[id] || []).push(m.user_id);  // a second Pridat of the same name: once
   renderRoster();
 }
 
