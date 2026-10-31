@@ -11,7 +11,7 @@ const sb = window.supabase ? supabase.createClient(window.KIN_BACKEND.url, windo
 // a stored Supabase session means the login check is on its way: the gate shows "checking", not the button
 const hadSession = (() => { try { return Object.keys(localStorage).some(k => /^sb-.*-auth-token$/.test(k)); } catch { return false; } })();
 // never echo the provider's error text from the URL (content spoofing); drop it so a reload is clean
-let state = { me: null, error: urlQs.has("error") ? "Přihlášení přes Discord selhalo." : null, event: null, claims: [], rsvps: [], trainings: [], ops: [], focusId: null, opsLoaded: false, flash: null, trFlash: null, tadd: {}, novaFlash: null, checking: !!sb && (hadSession || FRESH),
+let state = { me: null, error: urlQs.has("error") ? "Přihlášení přes Discord selhalo." : null, event: null, claims: [], rsvps: [], trainings: [], ops: [], focusId: null, opsLoaded: false, flash: null, trFlash: null, novaFlash: null, checking: !!sb && (hadSession || FRESH),
   logi: { orders: [], have: new Map(), local: null, timer: null, pick: null, flash: null, err: false, loaded: null, chan: null } };
 if (urlQs.has("error")) history.replaceState(null, "", location.pathname + location.hash);
 
@@ -69,10 +69,8 @@ async function onAuth(session) {
   if (error) throw error;
   if (!data) { state.error = "Nejsi ověřený člen KIN. Přihlas se znovu."; await sb.auth.signOut(); return; }
   state.me = data; state.error = null;
-  // 055 (D47): a guest reads no content, unlocks or Tracker (RLS); the page only has to stop "checking" and show the BCT list
-  if (data.guest) { D.strategies = []; state.checking = false; renderWho(); loadEvent(); subscribe(); render(); return; }  // the empty plan list opens render() like the old row 'host' did
   // unlocks need the seasons from the content, so they load after it (both at once = haveSet never set, Viktor UAT)
-  if (!was) loadContent("hub")
+  if (!was) loadContent(data.guest ? "host" : "hub")
     .then(() => Promise.all([loadUnlocks().catch(e => { console.error(e); haveSet = null; }), loadTracker().catch(e => console.error(e))]))
     // history pages and loadout cards wait for the login to know what to load / which boxes to tick
     .then(() => { if (onHistRoute() || onCardRoute()) { const y = scrollY; render(); scrollTo(0, y); } autoSyncTracker(); },
@@ -84,8 +82,7 @@ const onHistRoute = () => HIST.includes(location.hash.replace(/^#\/?/, "").split
 
 function renderWho() {
   document.getElementById("who").innerHTML = !sb ? '<span class="err">Přihlášení se nenačetlo</span>' : state.me
-    ? `${isGuest() ? `<span class="mlink"><img src="${esc(state.me.avatar_url)}" alt=""><span class="nm">${esc(state.me.name)}</span></span>`  // 055: no profile for a guest
-      : `<a class="mlink" href="#/hrac/${encodeURIComponent(state.me.discord_id)}" title="Můj profil"><img src="${esc(state.me.avatar_url)}" alt=""><span class="nm">${esc(state.me.name)}</span></a>`}<button type="button" class="act" data-logout>Odhlásit</button>`
+    ? `<a class="mlink" href="#/hrac/${encodeURIComponent(state.me.discord_id)}" title="Můj profil"><img src="${esc(state.me.avatar_url)}" alt=""><span class="nm">${esc(state.me.name)}</span></a><button type="button" class="act" data-logout>Odhlásit</button>`
     : `${state.error && D.strategies ? `<span class="err">${esc(state.error)}</span>` : ""}<button type="button" class="act" data-login>Přihlásit<span class="long"> přes Discord</span></button>`;
   navToCurrent();
 }
@@ -367,8 +364,8 @@ const leadOf = g => state.claims.find(c => c.lead && squadOf(c.slot_key) === g.i
 // when it is empty, and a new squad at the end
 function squadCard(g, by) {
   const cmd = leadsOps(), n = g.slots.filter(x => by[x.key]).length, lead = leadOf(g), sq = { led: !!lead };
-  const cw = state.event.doctrine === "cw";  // D33: the same editor for SWARM and Public Ops, only the roles on offer differ
-  const roles = squadRoles(cw);
+  const cw = vybDoc(state.event.doctrine);  // D33: the same editor for SWARM, Public Ops and Builder's Dream, only the roles on offer differ
+  const roles = squadRoles(state.event.doctrine);
   const lines = roles.map(ro => {
     const xs = g.slots.filter(x => x.kit === ro.kit), c = xs.length, taken = c && by[xs[c - 1].key];
     if (!c) return "";
@@ -530,6 +527,8 @@ const DOC_ICON = {
   defence: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 41V19L24 7l17 12v22z"/><path d="M7 27h34M17 41V31h14v10M24 7v8"/></svg>',
   swarm: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M5 9l13 13M43 9L30 22M24 44V31M10 22l8 0 0-8M38 22h-8v-8M19 37l5-6 5 6"/><circle cx="24" cy="25" r="4"/></svg>',
   cw: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M8 40L40 8M8 8l32 32"/><path d="M6 14V6h8M42 14V6h-8M6 34v8h8M42 34v8h-8"/></svg>',
+  // Builder's Dream (D54): the hammer
+  builder: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M8 40L23 25"/><path d="M19 13l8-8 12 12-8 8z"/><path d="M27 5l-4 4M35 17l4-4"/></svg>',
 };
 // the doctrine's emblem (Petr 2026-10-28: "v tom logu public ops neni potreba ten text na druhem radku ... radsi hezke a
 // krasne to logo typu akce"): its mark in a hexagonal badge, big in the event's head, small on the operation cards
@@ -575,8 +574,8 @@ function swarmMyKit() {
   const r = slot && k.slots.find(r => r.id === slot.kit), cls = slot && slot.cls;
   // a crew seat (own_kit) shows its Vybava role too: Tank, Artilerie (Petr 2026-10-29), the slot is the vehicle's kit
   const [cq, cc] = cls ? classById(cls) : r && r.class ? classById(r.class) : [], skip = cc ? myKit(cc).names : new Set();
-  // CW buys by the Vybava role, the SWARM base is SWARM's (Petr 2026-10-25: "porad sleduje doktrinu swarm")
-  const cw = state.event.doctrine === "cw";
+  // CW and Builder's Dream buy by the Vybava role, the SWARM base is SWARM's (Petr 2026-10-25: "porad sleduje doktrinu swarm")
+  const cw = vybDoc(state.event.doctrine);
   return `<section class="block" id="swarm-kit"><h2>Tvůj nákup</h2>${cc ? loadoutCard(cq, cc, "h3") : ""}${r && r.own_kit || cw ? "" : kitBase(k, skip)}
     ${r ? kitRole(slot.seat ? { ...r, ...r.seats[slot.seat] } : r, skip) : cls ? "" : `<p class="note">Zapiš se do slotu a ukážu ti nákup tvé role. ${cw ? 'Loadouty všech rolí jsou ve <a href="#/vybava">Výbavě</a>.' : 'Nákup všech rolí je v <a href="#/doktrina/swarm">Doktríně</a>.'}</p>`}</section>`;
 }
@@ -658,7 +657,7 @@ function nakupBlock(s) {
   return `${head}<p class="note">Co zapsaným z nákupního minima chybí, po squadech. Kupuje se uvnitř squadu, řídí to SL: koupit může jen ten, kdo to má odemčené.</p>
     ${state.buy.size ? [...state.buy.values()].map(x => { const lead = x.g.sq && leadOf(x.g);
       return `<div class="buy-g"><h3>${esc(x.g.name)}${lead ? ` <small>SL ${esc(lead.members.name)}</small>` : ""}</h3>${buyList(x)}</div>`; }).join("")
-      : ""}
+      : '<p class="note">Zapsaným nic z minima nechybí.</p>'}
     ${leadsOps() ? `<p class="note nocash">Bez peněz (označuje jen velení, členům se koupí celé minimum): ${state.claims.map(c =>
       `<button type="button" class="act" data-nocash="${esc(c.user_id)}:${c.no_cash ? 0 : 1}" aria-pressed="${!!c.no_cash}">${esc((c.members && c.members.name) || "?")}</button>`).join(" ")}</p>` : ""}
     <p class="note">Kdo kupuje pro jiné, potřebuje bednu a vozidlo, kterým ji koupí: ${D.nakup.rezie.map(e => `${esc(e.item)} ${e.price == null ? "" : usd(e.price)}`).join(", ")}.</p></section>`;
@@ -971,7 +970,7 @@ async function dropFrom(keys) {
   }
   return true;
 }
-const cwEv = () => state.event.doctrine === "cw";
+const cwEv = () => vybDoc(state.event.doctrine);
 const setRole = async (i, kit, d) => {
   const xs = d < 0 ? plan.roster.find(g => g.idx === i).slots.filter(x => x.kit === kit) : [];
   if (xs.length && !await dropFrom([xs[xs.length - 1].key])) return;
@@ -986,7 +985,7 @@ const setSquad = async (op, i) => {
   return writeRoster(r => { const t = D.doktrina.swarm.sestava, cw = cwEv();
     if (op === "add") {
       const gap = r.squads.findIndex(q => !Object.keys(q).length), k = gap < 0 ? r.squads.length : gap;
-      r.squads[k] = cw ? { ...D.doktrina.cw.squad } : Object.fromEntries([...t.core.map(c => [c.kit, 1]), [t.swarm.kit, t.swarm.default]]);
+      r.squads[k] = cw ? { ...docOf(state.event.doctrine).squad } : Object.fromEntries([...t.core.map(c => [c.kit, 1]), [t.swarm.kit, t.swarm.default]]);
       if (r.names) r.names[k] = `Squad ${k + 1}`;
     } else {
       r.squads[i] = {};
@@ -1069,7 +1068,7 @@ function newPanel() {
 function newEventForm() {
   return `<form class="evf" data-form="new">
     <label>Začátek <input type="datetime-local" name="starts" required min="${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}T00:00"></label>
-    <label>Doktrína <select name="doctrine">${[["swarm", "Fun"], ["cw", "PO"]].map(([d, g]) => `<option value="${d}">${g}: ${esc(docOf(d).title)}</option>`).join("")}</select></label>
+    <label>Doktrína <select name="doctrine">${[["swarm", "Fun"], ["builder", "Fun"], ["cw", "PO"]].map(([d, g]) => `<option value="${d}">${g}: ${esc(docOf(d).title)}</option>`).join("")}</select></label>
     ${pickFields(null)}
     <label class="att wide"><input type="checkbox" name="open_to_hosts"> Otevřená hostům (jedna akce týdně podle ankety)</label>
     <button type="submit" class="act">${esc(newLabel("swarm", null))}</button></form>`;
@@ -1159,14 +1158,9 @@ function trainingRow(tr) {
   const take = bct && !isGuest() && !tr.instructor && canInstruct() ? leadForm(tr) : "";  // 054: taking a card sets its time
   const leader = bct ? (tr.instructor ? `Instruktor <b>${esc(tr.instr ? tr.instr.name : "?")}</b>` : '<b class="tr-noinstr">Chybí instruktor</b>')
     : `Vede <b>${esc(tr.leader ? tr.leader.name : "?")}</b>`;
-  // Petr 2026-10-31: the one closing adds anyone from the War Room who was there without signing up (state.tadd, by name
-  // from the list that loads when the form opens); the database treats him like the others (bct_done, a guest's promotion)
-  const yes = tr.rsvps.filter(r => r.status === "yes" && r.members).map(r => ({ user_id: r.user_id, name: r.members.name, guest: r.members.guest }));
-  const was = [...yes, ...(state.tadd[tr.id] || []).map(uid => (state.clan || []).find(m => m.user_id === uid)).filter(m => m && !yes.some(y => y.user_id === m.user_id))];
   const ctl = leadsOps() || tr.created_by === state.me.user_id || lead ? `<details class="t${id}"><summary>Uzavřít nebo zrušit</summary>
-      <fieldset class="atts"><legend>${tr.topic === "bct" ? "Kdo byl celou dobu (hosté se stanou Rekruty)" : "Kdo byl"}</legend>${was.map(m =>
-        `<label class="att"><input type="checkbox" name="tatt_${esc(m.user_id)}" checked>${esc(m.name)}${m.guest ? " (host)" : ""}</label>`).join("")}
-        <span class="att tadd"><input list="clan-${id}" name="tadd_${id}" placeholder="Dopsat dalšího" autocomplete="off" maxlength="80"><button type="button" class="act" data-tadd="${id}">Přidat</button><datalist id="clan-${id}">${(state.clan || []).filter(m => !was.some(w => w.user_id === m.user_id)).map(m => `<option value="${esc(m.name)}">`).join("")}</datalist></span></fieldset>
+      ${by.yes.length ? `<fieldset class="atts"><legend>${tr.topic === "bct" ? "Kdo byl celou dobu (hosté se stanou Rekruty)" : "Kdo byl"}</legend>${tr.rsvps.filter(r => r.status === "yes" && r.members).map(r =>
+        `<label class="att"><input type="checkbox" name="tatt_${esc(r.user_id)}" checked>${esc(r.members.name)}${r.members.guest ? " (host)" : ""}</label>`).join("")}</fieldset>` : ""}
       <button type="button" class="act" data-tclose="${id}:closed">Proběhl, uzavřít</button> <button type="button" class="act" data-tclose="${id}:cancelled">Zrušit</button></details>` : "";
   return `<li class="tr"><p class="tr-k"><span class="ref">${esc(label(KINDS, tr.kind))}</span>${esc(label(TOPICS, tr.topic))}${tr.invited && !isGuest() ? "<span>· Jen pro pozvané</span>" : ""}</p>
     <h3>${esc(tr.title)}</h3>
@@ -1199,7 +1193,7 @@ const capToggle = f => { const off = f.elements.kind.value !== "kurz"; f.querySe
 // a failed load leaves the list empty until a reload (a retry from the next render would loop)
 async function loadClan() {
   state.clan = null;
-  const { data, error } = await sb.from("members").select("user_id, name, guest").eq("active", true).order("name");
+  const { data, error } = await sb.from("members").select("user_id, name").eq("active", true).order("name");
   state.clan = error ? [] : data;
   if (error) state.novaFlash = "Seznam členů se nepodařilo načíst, obnov stránku.";
   renderRoster();
@@ -1266,17 +1260,7 @@ async function closeTraining(id, status) {
   const { data, error } = await sb.from("events").update({ status: status === "closed" ? "closed" : "cancelled" })
     .eq("id", id).neq("kind", "operace").select("id");
   state.trFlash = error ? saveErr(error) : !data.length ? "Nepodařilo se uložit: trénink už není otevřený, nebo ho nevypsal ty." : null;
-  if (!state.trFlash) delete state.tadd[id];
   await loadEvent();
-}
-
-function addAttendee(id) {
-  const f = document.querySelector(`input[name="tadd_${id}"]`), name = f ? f.value.trim() : "";
-  const m = (state.clan || []).find(x => x.name === name);  // ponytail: the first of that name; two members with one name are one option twice
-  state.trFlashId = id;
-  state.trFlash = m ? null : "Takové jméno v seznamu není.";
-  if (m) (state.tadd[id] = state.tadd[id] || []).push(m.user_id);
-  renderRoster();
 }
 
 // Viktor #003: the button says what gets founded or saved; a map without a team is not a plan yet (decision 1)
@@ -1394,7 +1378,7 @@ document.addEventListener("submit", async e => {
     if (e1) { state.flash = e1.code === "42501" ? "Docházku se nepodařilo uložit, zkus to znovu." : saveErr(e1); btn.disabled = false; renderRoster(); return; }
   }
   const { data, error } = f.dataset.form === "new"
-    ? await sb.from("events").insert({ strategy_id: sid, variant: zone, doctrine: ["swarm", "cw"].includes(v.doctrine) ? v.doctrine : "defence", starts_at: new Date(v.starts).toISOString(), open_to_hosts: !!v.open_to_hosts })
+    ? await sb.from("events").insert({ strategy_id: sid, variant: zone, doctrine: SQ_DOCS.includes(v.doctrine) ? v.doctrine : "defence", starts_at: new Date(v.starts).toISOString(), open_to_hosts: !!v.open_to_hosts })
     : f.dataset.form === "mapteam" ? await sb.from("events").update({ strategy_id: sid, variant: zone, open_to_hosts: !!v.open_to_hosts }).eq("id", eventId).select("id")  // count rows like cancelEvent (OWASP L1)
     : await sb.from("events").update({ status: "closed", placement: Number(v.placement), variant: v.variant || null, weather: v.weather || null,
         went_well: v.went_well || null, went_wrong: v.went_wrong || null, next_time: v.next_time || null }).eq("id", eventId);
@@ -1434,11 +1418,13 @@ let plan = null;
 // each vehicle]}}; an event from before 017 keeps its Swarm sizes and vehicle counts with every seat open
 function rosterOf(ev) {
   if (ev.roster) return ev.roster;
-  // the default draft (Petr 2026-10-25 D33, 2026-10-28): Public Ops [cw] squady, SWARM core + Swarm; the Commander reworks it
-  const t = D.doktrina.swarm.sestava;
-  return { squads: ev.doctrine === "cw" ? D.doktrina.cw.squady.map(q => ({ ...q })) : Array.from({ length: t.squads }, (_, i) =>
+  // the default draft (Petr 2026-10-25 D33, 2026-10-28, 2026-10-31 D54): Public Ops [cw] squady, Builder's Dream [builder]
+  // squady with its squad names and Podpora counts, SWARM core + Swarm; the Commander reworks it
+  const t = D.doktrina.swarm.sestava, k = vybDoc(ev.doctrine) ? docOf(ev.doctrine) : null;
+  return { squads: k ? k.squady.map(q => ({ ...q })) : Array.from({ length: t.squads }, (_, i) =>
       ({ [t.core[0].kit]: 1, [t.core[1].kit]: 1, [t.swarm.kit]: (ev.squad_swarm && ev.squad_swarm[i]) || t.swarm.default })),
-    vehicles: Object.fromEntries(t.podpora.map((p, i) => [p.kit, Array(ev.squad_support?.[i] ?? p.default).fill(p.seats.length)])) };
+    ...(k && k.nazvy ? { names: [...k.nazvy] } : {}),
+    vehicles: Object.fromEntries(t.podpora.map((p, i) => [p.kit, Array(ev.squad_support?.[i] ?? (k && k.podpora_default ? k.podpora_default[i] : p.default)).fill(p.seats.length)])) };
 }
 // Velení (Petr 2026-10-28: "misto Commandera v lobby ... bud jeden, nebo druhy, nebo oba, v budoucnu ... i Juro"): the
 // command's places first in the lobby, 2 unless the roster says otherwise (039: 0-4)
@@ -1447,14 +1433,14 @@ const cmdCount = r => r.cmd ?? CMD_DEFAULT;
 // keys stay as before 017, so sign-ups survive the switch: SW-Q<squad>-<KIT><n> (the first without n), and seat i of
 // vehicle v is SW-<KIT><(v-1)*all seats + i> (a closed optional seat is just a key not offered)
 // the roles a squad may hold: SWARM's kits; CW the Vybava roles only (Petr 2026-10-25, migration 028; 2026-10-28 no Swarm
-// "ani teoreticky", the database refuses it: 035)
-const squadRoles = cw => cw ? D.doktrina.cw.roles : D.doktrina.swarm.sestava.roles;
-function swarmRoster(k, r, cw = false) {
+// "ani teoreticky", the database refuses it: 035); Builder's Dream Builder and Logistics (057)
+const squadRoles = d => vybDoc(d) ? docOf(d).roles : D.doktrina.swarm.sestava.roles;
+function swarmRoster(k, r, d = "swarm") {
   const t = k.sestava;
   const cmd = { id: "CMD", name: "Velení", symbol: "hq", cmdg: true, max: cmdCount(r),
     slots: Array.from({ length: cmdCount(r) }, (_, i) => ({ key: `SW-CMD${i + 1}`, label: "Commander", role: null, kit: "CM", stat: "Commander" })) };
   return [cmd, ...r.squads.map((sq, idx) => { const n = idx + 1;
-    const slots = squadRoles(cw).flatMap(ro => Array.from({ length: sq[ro.kit] || 0 }, (_, i) => ({ key: `SW-Q${n}-${ro.kit}${i ? i + 1 : ""}`, label: ro.label, role: null, kit: ro.kit, stat: ro.label,
+    const slots = squadRoles(d).flatMap(ro => Array.from({ length: sq[ro.kit] || 0 }, (_, i) => ({ key: `SW-Q${n}-${ro.kit}${i ? i + 1 : ""}`, label: ro.label, role: null, kit: ro.kit, stat: ro.label,
       cls: ro.class, sqd: ro.squad })));
     const recon = slots.length && slots.every(x => x.kit === "RC" || x.kit === "RS");
     return { id: `Q${n}`, name: (r.names && r.names[idx]) || `Squad ${n}`, symbol: recon ? "recon" : "infantry", max: slots.length, idx, sq, slots };
@@ -1471,7 +1457,7 @@ function podporaGroup(types, vehicles, base = 0) {
   // each vehicle type is its own squad (Petr 2026-10-25 D20: tank, logi heli, combat heli, artillery)
   return { id: `POD-${vs[0].kit}`, name: vs[0].name, symbol: vs[0].symbol, max: slots.length, vehicles: vs, slots };
 }
-const swarmPlan = ev => ({ id: ev.doctrine, swarm: true, cw: ev.doctrine === "cw", roster: swarmRoster(D.doktrina.swarm, rosterOf(ev), ev.doctrine === "cw"), fill_order: [], variants: [] });
+const swarmPlan = ev => ({ id: ev.doctrine, swarm: true, cw: vybDoc(ev.doctrine), roster: swarmRoster(D.doktrina.swarm, rosterOf(ev), ev.doctrine), fill_order: [], variants: [] });
 // FORTRESS before the map (specs/akce-mapa-tym): all plans share the 45 slots (test_build), so sign-ups keep their slot
 // when the map comes; role cards, zones and the map's plan wait for the map and team
 const fortressPlan = () => { const s = D.strategies[0];
@@ -1490,10 +1476,13 @@ function shapedRoster(roster, r) {
 }
 const fortressOf = (s, ev) => s && { ...s, roster: shapedRoster(s.roster, ev.roster), base: s.roster };
 const planOf = ev => !ev ? null : isSq(ev) ? swarmPlan(ev) : fortressOf(!ev.strategy_id ? fortressPlan() : S(ev.strategy_id), ev);
-// doctrine names live in the content (Petr 2026-10-19: FORTRESS, SWARM); events store "defence" / "swarm"
-const docOf = d => d === "swarm" ? D.doktrina.swarm : d === "cw" ? D.doktrina.cw : D.doktrina.defence;
-// squads and vehicles: SWARM (Fun) and CW (Clan War) share the roster shape (Petr 2026-10-25, hub/specs/doktriny-fun-cw)
-const isSq = ev => ev.doctrine === "swarm" || ev.doctrine === "cw";
+// doctrine names live in the content (Petr 2026-10-19: FORTRESS, SWARM); events store "defence" / "swarm" / "cw" / "builder"
+// squads and vehicles: SWARM (Fun), Public Ops and Builder's Dream share the roster shape (hub/specs/doktriny-fun-cw,
+// doktrina-builders-dream); Public Ops and Builder's Dream (VYB_DOCS) offer and buy by the Vybava roles (D24, D54)
+const VYB_DOCS = ["cw", "builder"], SQ_DOCS = ["swarm", ...VYB_DOCS];
+const docOf = d => SQ_DOCS.includes(d) ? D.doktrina[d] : D.doktrina.defence;
+const isSq = ev => SQ_DOCS.includes(ev.doctrine);
+const vybDoc = d => VYB_DOCS.includes(d);
 const docName = d => docOf(d).title;
 
 let planMatrix = "";  // the map's Top defence plan, kept to swap back when the SWARM event ends
@@ -1685,7 +1674,7 @@ function viewBattle(x, v, w) {
       <p class="vtw">Věže v zóně: ${v.towers.map(t => `<span class="ref">${esc(t.replace("Tower ", "T"))}</span>`).join(" ")}</p>
       <p class="note">Náčrtek z dat metaforge. Kruhy ostatních zón čárkovaně.</p></div></div>`
     : `<p class="note">Zóna ${esc(v.name)}: střed zóny zatím nemáme, plánek doplníme.</p>`;
-  return `<div id="bplan">${zone}
+  return `<div id="bplan">${zone}${w && !wp ? '<p class="note">Pro tohle počasí zatím nic zvláštního, platí obecný plán.</p>' : ""}
     ${sec("Hlavní cíl", cil && `<p>${esc(cil)}</p>`)}
     ${sec("Místa k držení", drzet && `<ul class="bullets">${drzet.map(d => `<li><b>${esc(d.misto)}</b>${d.squad ? ` · ${esc(d.squad)}` : ""}${d.jak ? `: ${esc(d.jak)}` : ""}</li>`).join("")}</ul>`)}
     ${sec("Squady a úkoly", squady && `<ul class="bullets">${squady.map(d => `<li><b>${esc(d.squad)}</b>: ${esc(d.ukol)}</li>`).join("")}</ul>`)}
@@ -2061,21 +2050,24 @@ function viewSwarm(k) {
       ${s.sizes.rows.map(r => `<tr>${r.map((c, i) => i ? `<td>${esc(c)}</td>` : `<td><b>${esc(c)}</b></td>`).join("")}</tr>`).join("")}</tbody></table></section>`;
 }
 
-// Petr 2026-10-25 (D17): two doctrines, Fun (SWARM) and CW (Clan War); FORTRESS is gone from the menu
+// Petr 2026-10-25 (D17): two doctrines, Fun (SWARM) and CW (Clan War); FORTRESS is gone from the menu; 2026-10-31 (D54):
+// Fun: Builder's Dream as the third
 function viewDoktrina(tab, sub) {
-  const k = D.doktrina, cur = ["cw", "vycvik"].includes(tab) ? tab : "swarm";
-  const tabs = [["swarm", `Fun: ${k.swarm.title}`], ["cw", `PO: ${k.cw.title}`], ["vycvik", "Výcvik"]];
+  const k = D.doktrina, cur = ["builder", "cw", "vycvik"].includes(tab) ? tab : "swarm";
+  const tabs = [["swarm", `Fun: ${k.swarm.title}`], ["builder", `Fun: ${k.builder.title}`], ["cw", `PO: ${k.cw.title}`], ["vycvik", "Výcvik"]];
   return `
     <div class="narrow">
     <header class="unit-head"><div><h1>Doktrína</h1><p>Platí pro všechny mapy a barvy. Kterou hrajeme, rozhodne Commander před zápasem.</p></div></header>
     <nav class="tabs" aria-label="Doktrína">${tabs.map(([path, label]) => `<a href="#/doktrina${path && "/" + path}"${path === cur ? ' aria-current="page"' : ""}>${esc(label)}</a>`).join("")}</nav>
-    ${cur === "cw" ? viewCw(k.cw) : cur === "vycvik" ? viewVycvik(sub) : viewSwarm(k)}
+    ${vybDoc(cur) ? viewCw(k[cur]) : cur === "vycvik" ? viewVycvik(sub) : viewSwarm(k)}
     </div>`;
 }
 
+// Public Ops and Builder's Dream: the text, and for Builder's Dream the prices of hammers, structures and pallets (kit)
 function viewCw(c) {
   return `<section class="block"><h2>${esc(c.title)}</h2><p class="lede">${esc(c.tagline)}</p>${bullets(c.points)}
-    <p class="note">Nákup bereš z loadoutu své role ve <a href="#/vybava">Výbavě</a>.</p></section>`;
+    <p class="note">Nákup bereš z loadoutu své role ve <a href="#/vybava">Výbavě</a>.</p></section>
+    ${c.kit ? `<section class="block"><h2>Výbava a ceny (Season 2)</h2>${bullets(c.kit)}</section>` : ""}`;
 }
 
 // ---------- squads + loadouts ----------
@@ -2475,17 +2467,16 @@ const NAV = [["akce", "Akce"], ["mapy", "Mapy"], ["vybava", "Výbava"], ["doktri
 // Logistika (052) for the command, the squad leaders and the crew of Logi heli in the open operation; the crew's count
 const navLogi = () => !state.me || !seesLogi() ? [] : [["logistika", "Logistika", logiRole(logiOp()).crew || logiRole(logiOp()).cmd ? state.logi.orders.filter(x => x.state === "open").length : 0]];
 // the Commander's own item after Doktrina (specs/ukoly-velitele U1), with the count of what waits for him
-const navCmd = () => !state.me || !state.me.is_commander ? [] : [["moje-ukoly", "Úkoly", state.cmdTasks ? state.cmdTasks.filter(waitsForMe).length : 0],
-  ["podezreli", "Podezřelí", state.flags ? state.flags.length : 0]];  // 056 (D52)
+const navCmd = () => !state.me || !state.me.is_commander ? [] : [["moje-ukoly", "Úkoly", state.cmdTasks ? state.cmdTasks.filter(waitsForMe).length : 0]];
 function renderNav(active) {
   navActive = active;
   document.getElementById("nav").innerHTML =
-    (isGuest() ? [] : [...NAV, ...navLogi(), ...navCmd()]).map(([k, l, n]) => `<a href="#/${k}"${active === k ? ' aria-current="page"' : ""}>${l}${n ? `<b class="nav-n">${n}</b>` : ""}</a>`).join("");  // 055: a guest has no menu (D47)
+    (isGuest() ? [["akce", "BCT"], ["vycvik", "Výcvik"]] : [...NAV, ...navLogi(), ...navCmd()]).map(([k, l, n]) => `<a href="#/${k}"${active === k ? ' aria-current="page"' : ""}>${l}${n ? `<b class="nav-n">${n}</b>` : ""}</a>`).join("");
   navToCurrent();
 }
 
 function viewAkce() {
-  if (isGuest()) return `<header class="unit-head"><div><h1>Basic Combat Training</h1><p>Navrhli tě na Rekruta. Zapiš se na BCT a vydrž celé. Instruktor ti na konci potvrdí účast a War Room tě hned povýší na Rekruta: pak uvidíš celou aplikaci.</p></div></header>
+  if (isGuest()) return `<header class="unit-head"><div><h1>Basic Combat Training</h1><p>Navrhli tě na Rekruta. Zapiš se na BCT a vydrž celé. Instruktor ti na konci potvrdí účast a War Room tě hned povýší na Rekruta: pak uvidíš celou aplikaci. Co se na BCT naučíš, je ve <a href="#/vycvik">Výcviku</a>.</p></div></header>
     <section class="sestava" id="sestava">${akceBody()}</section>`;
   if (state.focusId) return `<p class="crumb"><a href="#/akce">Akce</a> / Operace</p><section class="sestava" id="sestava">${akceBody()}</section>`;
   return `<header class="unit-head"><div><h1>Akce</h1></div></header>
@@ -2684,7 +2675,7 @@ function logiInbox(op) {
     <ul class="lg-items">${x.items.map(i => `<li>${itemIcon(logiIcon(i.item), "sm")}<b>${i.stacks}×</b><span>${esc(i.item)}</span><small>${i.stacks * i.per} ks</small></li>`).join("")}</ul>
     <button type="button" class="lg-done" data-logi-done="${x.id}">Doručeno</button></article>`;
   return `<section class="lg-sec" id="lg-inbox"><header class="lg-h"><h2>Pro logi heli <span class="num">${open.length}</span></h2></header>
-    ${open.length ? open.map(card).join("") : ""}
+    ${open.length ? open.map(card).join("") : '<p class="note">Teď nikdo nic nechce. Nová objednávka tu naskočí sama a pípne.</p>'}
     ${done.length ? `<h3 class="lg-gh">Naposledy doručeno</h3><ul class="lg-hist">${done.map(x => `<li class="delivered"><span class="lg-st">${esc(squadName(op, x.squad))} · ${x.courier ? esc(x.courier.name) : ""} · ${ago(x.delivered_at)}</span><span class="lg-sum">${esc(logiSum(x.items))}</span></li>`).join("")}</ul>` : ""}</section>`;
 }
 function viewLogistika() {
@@ -2733,20 +2724,6 @@ async function loadCmdTasks(first) {
   renderNav(navActive);
   if (location.hash === "#/moje-ukoly") $app.innerHTML = viewCmdTasks();  // in place: a click does not jump to the top
 }
-async function loadFlags() {  // 056 (D52, specs/neaktivni-rekruti): the Commander's suspects, written by ceo/neaktivni.py --priznaky
-  const { data, error } = await sb.from("flags").select("discord_id, name, rank, reasons, since, updated_at").order("since");
-  if (error) console.error(error);
-  state.flags = error ? false : data;
-  renderNav(navActive);
-  if (location.hash === "#/podezreli") $app.innerHTML = viewPodezreli();
-}
-function viewPodezreli() {
-  const head = `<header class="unit-head"><div><h1>Podezřelí</h1><p class="lede">Kdo má na Trackeru tag jiného klanu (kromě KIN a RAID), je ve War Roomu a nehraje, nebo sdílí Tracker s dalším členem. Plní KIN Command po každé hlídce; nic se neděje samo, rozhoduješ ty.</p></div></header>`;
-  if (state.flags === false) return head + '<p class="note">Seznam se nenačetl.</p>';
-  if (!state.flags) return head + '<p class="note">Načítám…</p>';
-  if (!state.flags.length) return head + '<p class="note">Nikdo.</p>';
-  return head + `<section class="block"><ul class="bullets">${state.flags.map(f => `<li><a href="#/hrac/${encodeURIComponent(f.discord_id)}"><b>${esc(f.name)}</b></a> <span class="ref">${esc(f.rank)}</span>: ${(f.reasons || []).map(r => esc(r.text)).join("; ")} <span class="ref">od ${esc(new Date(f.since).toLocaleDateString("cs-CZ"))}</span></li>`).join("")}</ul></section>`;
-}
 async function setTask(id, st, odpoved) {
   const x = state.cmdTasks.find(y => y.id === id), was = [x.state, x.odpoved];
   x.state = st; x.updated_at = new Date().toISOString(); state.taskErr = null;
@@ -2778,12 +2755,12 @@ function viewCmdTasks() {
     <div class="tk-body"><p class="tk-text">${esc(x.text)}</p>${x.odpoved ? `<p class="tk-note"><b>Odpověď:</b> ${esc(x.odpoved)}</p>` : ""}${x.note ? `<p class="tk-note"><b>Claude:</b> ${esc(x.note)}</p>` : ""}</div>
     <div class="tk-act">${x.state === "open" ? open(x)
       : x.state === "claude" ? btn(x, "open", "Vrátit") + btn(x, "done", "Hotovo") : x.state === "done" ? btn(x, "open", "Otevřít") : ""}</div></li>`;
-  const sec = (k, h, list) => `<section class="block tks-sec" data-tsec="${k}"><h2>${h} <span class="num">${list.length}</span></h2>${list.length ? `<ul class="tks">${list.map(row).join("")}</ul>` : ""}</section>`;  // empty: nothing, no placeholder (Petr 2026-10-31)
+  const sec = (k, h, list, empty) => `<section class="block tks-sec" data-tsec="${k}"><h2>${h} <span class="num">${list.length}</span></h2>${list.length ? `<ul class="tks">${list.map(row).join("")}</ul>` : `<p class="note">${empty}</p>`}</section>`;
   const done = xs.filter(x => x.state === "done"), info = xs.filter(x => x.state === "open" && x.druh === "info");
   return head + (state.taskErr ? `<p class="err" role="alert">${esc(state.taskErr)}</p>` : "")
-    + sec("open", "Čeká na tebe", xs.filter(waitsForMe))
+    + sec("open", "Čeká na tebe", xs.filter(waitsForMe), "Nic nečeká.")
     + (info.length ? `<details class="block tks-sec tks-done" data-tsec="info"><summary><h2>Pro info <span class="num">${info.length}</span>${arrow()}</h2></summary><ul class="tks">${info.map(row).join("")}</ul></details>` : "")
-    + sec("claude", "U Clauda", xs.filter(x => ["claude", "prace", "odpoved"].includes(x.state)))
+    + sec("claude", "U Clauda", xs.filter(x => ["claude", "prace", "odpoved"].includes(x.state)), "Claude teď nic nedělá.")
     + `<details class="block tks-sec tks-done" data-tsec="done"><summary><h2>Hotovo <span class="num">${done.length}</span>${arrow()}</h2></summary>${done.length ? `<ul class="tks">${done.map(row).join("")}</ul>` : ""}</details>`;
 }
 // the Commander's briefing protocol (Petr 2026-10-21 "uvidim to jenom ja"): the row 'velitel' is readable by the
@@ -2824,7 +2801,7 @@ function render() {
   const [h, qs = ""] = location.hash.replace(/^#/, "").split("?");
   const p = h.split("/").filter(Boolean);
   if (p[0] === "historie") { location.replace("#/akce"); return; }  // links in Discord debrief threads
-  if (isGuest() && !(p[0] === "akce" && !p[1])) { location.replace("#/akce"); return; }  // 055 (D47): a guest sees only the BCT list
+  if (isGuest() && !(["akce", "vycvik"].includes(p[0]) && !p[1] || p[0] === "hrac" && p[1] === state.me.discord_id)) { location.replace("#/akce"); return; }
   let html, active = null, title = "KIN War Room";
   cur = null; trace = null; plan = null;
   if (p[0] !== "akce") { state.focusId = null; focusEvent(); }
@@ -2857,9 +2834,12 @@ function render() {
         : `<p class="viewas">Výbava hráče <b>${esc(pl.name)}</b> · <a href="${classHref(q, c)}">moje</a></p>${asPlayer(pl, () => viewClass(q, c))}`;
       title = `${c.name} · ${pl && pl.name ? pl.name + " · " : ""}KIN`;
     } else if (c) { html = viewClass(q, c); title = `${c.name} · KIN`; } else { html = viewSquadPage(q); title = `${q.name} · KIN`; }
+  } else if (p[0] === "vycvik" && isGuest()) {  // Petr 2026-10-30: the BCT page for proposed guests too, without the doctrine
+    html = `<div class="narrow"><header class="unit-head"><div><h1>Basic Combat Training</h1><p>Co se na BCT naučíš.</p></div></header>${viewVycvik()}</div>`;
+    active = "vycvik"; title = "Basic Combat Training · KIN";
   } else if (p[0] === "doktrina" || p[0] === "vycvik") {
     const tab = p[0] === "vycvik" ? "vycvik" : p[1], sub = p[0] === "vycvik" ? p[1] : p[2];
-    html = viewDoktrina(tab, sub); active = "doktrina"; title = (tab === "cw" ? "Public Ops" : tab === "vycvik" ? (sub === "act" ? "Advanced Combat Training" : "Basic Combat Training") : "SWARM") + " · KIN";
+    html = viewDoktrina(tab, sub); active = "doktrina"; title = (vybDoc(tab) ? docOf(tab).title : tab === "vycvik" ? (sub === "act" ? "Advanced Combat Training" : "Basic Combat Training") : "SWARM") + " · KIN";
   } else if (p[0] === "akce" && (!p[1] || /^\d+$/.test(p[1]) && (!state.opsLoaded && !state.evErr || state.ops.some(e => e.id === +p[1])))) {
     state.focusId = p[1] ? +p[1] : null; focusEvent();
     plan = planOf(state.event); if (plan && !plan.swarm) curVariant = state.event.variant || pickVariant(plan, qs);
@@ -2869,9 +2849,6 @@ function render() {
   } else if (p[0] === "logistika") {
     html = viewLogistika(); active = "logistika"; title = "Logistika · KIN";
     if (sb && state.me) setTimeout(loadLogi);
-  } else if (p[0] === "podezreli") {  // 056 (D52): the Commander only; RLS gives everyone else no rows anyway
-    if (state.me && !state.me.is_commander) { location.replace("#/akce"); return; }
-    html = viewPodezreli(); active = "podezreli"; title = "Podezřelí · KIN";
   } else if (p[0] === "moje-ukoly") {
     html = viewCmdTasks(); active = "moje-ukoly"; title = "Úkoly · KIN";
   } else if (p[0] === "briefing") {
@@ -2885,7 +2862,7 @@ function render() {
     if (sb && state.me && !shut) setTimeout(() => loadHist(p));
   }
   else html = viewHome();
-  if (sb && state.me && state.me.is_commander && !state.cmdAsked) { state.cmdAsked = true; setTimeout(() => loadCmdTasks(true)); setTimeout(loadFlags); }
+  if (sb && state.me && state.me.is_commander && !state.cmdAsked) { state.cmdAsked = true; setTimeout(() => loadCmdTasks(true)); }
   $app.innerHTML = html;
   renderDrawers();
   document.title = title;
@@ -2895,17 +2872,14 @@ function render() {
   window.scrollTo(0, 0);
 }
 
-// the list of everyone loads the first time a closing form opens (the list a private training invites from)
-$app.addEventListener("toggle", e => { if (e.target.open && /^t\d+$/.test(e.target.className) && state.clan === undefined) loadClan(); }, true);
 $app.addEventListener("click", e => {
-  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-drawer],[data-role],[data-squad],[data-lock],[data-briefwin],[data-sqdrop],[data-cmd],[data-seat],[data-fx],[data-leadfor],[data-nocash],[data-merit-del],[data-support],[data-lead],[data-trsvp],[data-tlead],[data-tclose],[data-tadd],[data-tracker],[data-nova],[data-ctask],[data-cans]");
+  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-drawer],[data-role],[data-squad],[data-lock],[data-briefwin],[data-sqdrop],[data-cmd],[data-seat],[data-fx],[data-leadfor],[data-nocash],[data-merit-del],[data-support],[data-lead],[data-trsvp],[data-tlead],[data-tclose],[data-tracker],[data-nova],[data-ctask],[data-cans]");
   if (state.sqArm != null && !(t && t.dataset.sqdrop)) { state.sqArm = null; renderRoster(); }  // a click elsewhere: no drop
   if (!t) return;
   if (t.dataset.ctask) { const [id, st] = t.dataset.ctask.split(":"); setTask(id, st); return; }
   if (t.dataset.cans) { setTask(t.dataset.cans, "odpoved", t.dataset.val); return; }
   if (t.dataset.trsvp) { const [id, st] = t.dataset.trsvp.split(":"); rsvpTraining(Number(id), st); return; }
   if (t.dataset.tlead) { t.disabled = true; const [id, k] = t.dataset.tlead.split(":"); leadTraining(Number(id), k === "take"); return; }
-  if (t.dataset.tadd) { addAttendee(Number(t.dataset.tadd)); return; }
   if (t.dataset.tclose) { t.disabled = true; const [id, st] = t.dataset.tclose.split(":"); closeTraining(Number(id), st); return; }
   if (t.dataset.role) { const [i, kit, d] = t.dataset.role.split(":"); setRole(Number(i), kit, Number(d)); return; }
   if (t.dataset.squad) { setSquad(t.dataset.squad); return; }
