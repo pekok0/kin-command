@@ -2509,10 +2509,10 @@ document.addEventListener("keydown", () => { if (unlocking) unlocking(200); });
 // delivered. Everything big: it sits on a second monitor or behind an alt-tab during the game. The operation being played
 // = the earliest still open one; the members' unlocks are frozen at its start (logi_have, ceo/logistika_snimek.py)
 const logiOp = () => (state.ops || [])[0] || null;
-const LOGI_GROUPS = ["Munice", "Léčení", "Granáty a kouř", "Výbušniny, rakety a palivo", "Zbraně", "Výbava", "Ostatní"];
-const LOGI_OF = { "Munice": "Munice", "Zásobník pistole": "Munice", "Munice pistole": "Munice", "Obvazy": "Léčení", "Lékárna": "Léčení",
-  "Léčení": "Léčení", "Revive": "Léčení", "Sprint": "Léčení", "Kouř": "Granáty a kouř", "Granáty": "Granáty a kouř", "Výbušniny": "Výbušniny, rakety a palivo",
-  "Rozbuška": "Výbušniny, rakety a palivo", "Rakety": "Výbušniny, rakety a palivo", "Palivo": "Výbušniny, rakety a palivo" };
+// one flat list, no groups (Petr 2026-10-31 evening: the grouped page was long, "ty predmety jsou velmi zname"); what runs
+// out first comes first: rounds and rockets, then healing, then the rest; weapons, the backpack and the vest are never flown in
+const LOGI_FIRST = ["Munice", "Zásobník pistole", "Munice pistole", "Rakety", "Lékárna", "Léčení", "Obvazy", "Sprint", "Revive"];
+const LOGI_SKIP = /^(slot[123]|sling|backpack|vest)$/;
 function logiRole(op) {
   const mine = op && state.me ? op.claims.filter(c => c.user_id === state.me.user_id) : [];
   const lead = mine.find(c => c.lead && /^SW-Q\d+-/.test(c.slot_key));
@@ -2530,11 +2530,11 @@ function squadItems(op, card) {
     if (!rc) continue;
     const have = state.logi.have.get(c.user_id) || (state.lobbyHave && state.lobbyHave.get(c.user_id)) || new Set();
     const k = asPlayer({ name: c.members.name, have, trk: (state.lobbyTrk && state.lobbyTrk.get(c.user_id)) || null }, () => myKit(rc[1]));
-    const add = (st, group) => { if (st && st.item && !out.has(st.item)) out.set(st.item, { item: st.item, icon: st.icon, per: st.stack || 1, group }); };
-    for (const [key, e] of Object.entries(k.slots)) if (e && e.st) add(e.st, /^(slot[123]|sling)$/.test(key) ? "Zbraně" : "Výbava");
-    for (const e of k.store) add(e.st, e.lad ? LOGI_OF[e.lad.group] || "Ostatní" : "Munice");
+    const add = (st, rank) => { if (st && st.item && !out.has(st.item)) out.set(st.item, { item: st.item, icon: st.icon, per: st.stack || 1, rank }); };
+    for (const e of k.store) { const i = e.lad ? LOGI_FIRST.indexOf(e.lad.group) : 0; add(e.st, i < 0 ? LOGI_FIRST.length : i); }  // magazines have no ladder: rounds
+    for (const [key, e] of Object.entries(k.slots)) if (e && e.st && !LOGI_SKIP.test(key)) add(e.st, LOGI_FIRST.length + 1);  // helmet, armor, parachute last
   }
-  return [...out.values()];
+  return [...out.values()].sort((a, b) => a.rank - b.rank);
 }
 let logiIcons = null;  // item -> icon from the whole Vybava, for the crew's view of any squad
 const logiIcon = n => { if (!logiIcons) { logiIcons = new Map(); for (const q of D.squads || []) for (const c of q.classes) for (const l of c.ladders) for (const st of l.steps)
@@ -2615,8 +2615,7 @@ function logiOrderBlock(op, sq) {
   const histBlock = hist.length ? `<ul class="lg-hist">${hist.slice(0, 2).map(x => `<li class="${x.state}"><span class="lg-st">${label(x)}</span><span class="lg-sum">${esc(logiSum(x.items))}</span>
       <button type="button" class="act" data-logi-again="${x.id}">Objednat znovu</button>${x.state === "open" ? `<button type="button" class="act" data-logi-cancel="${x.id}">Zrušit</button>` : ""}</li>`).join("")}</ul>` : "";
   return `<section class="lg-sec" id="lg-order"><header class="lg-h"><h2>Objednávka · ${esc(squadName(op, sq))}</h2>${cmd}</header>${histBlock}
-    ${all.length ? LOGI_GROUPS.map(gr => { const xs = all.filter(x => x.group === gr); return xs.length ? `<h3 class="lg-gh">${gr}</h3><div class="lg-tiles">${xs.map(tile).join("")}</div>` : ""; }).join("")
-      : '<p class="note">Squad zatím nemá nikoho na místech.</p>'}
+    ${all.length ? `<div class="lg-tiles">${all.map(tile).join("")}</div>` : '<p class="note">Squad zatím nemá nikoho na místech.</p>'}
     <div class="lg-bar">${hist.length ? `<p class="lg-last ${hist[0].state}">Poslední: ${label(hist[0])}</p>` : ""}<button type="button" class="lg-call" data-logi-call${n ? "" : " disabled"}>Zavolat logistiku${n ? ` · ${plural(n, "stack", "stacky", "stacků")}` : ""}</button></div></section>`;
 }
 function logiInbox(op) {
