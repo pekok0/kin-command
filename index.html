@@ -920,9 +920,10 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
   .bar .wrap { gap: 10px; min-height: 52px; }
   .bar nav a { padding: 8px 6px 7px; font-size: 14px; }
   /* five items since 2026-10-19 (specs/akce-flow A8): the nav gets its own full-width row, nothing hidden sideways
-     (with 8 items it scrolled sideways and "Moje role" kept falling out of view, Viktor #005 #024) */
+     (with 8 items it scrolled sideways and "Moje role" kept falling out of view, Viktor #005 #024); the Commander's
+     seventh item (Podezreli, 056) wraps onto a second row instead of overflowing by 16 px (test_commander_task_kinds) */
   .bar .wrap { flex-wrap: wrap; row-gap: 0; }
-  .bar nav { order: 3; flex: 1 1 100%; flex-wrap: nowrap; justify-content: space-between; margin: 0 -6px 4px; }
+  .bar nav { order: 3; flex: 1 1 100%; flex-wrap: wrap; justify-content: space-between; margin: 0 -6px 4px; }
   .bar nav a { white-space: nowrap; }
   .tabs a { padding: 11px 8px 10px; font-size: 14px; letter-spacing: .05em; }  /* Doktrina has 3 tabs since 2026-10-19 */
   #who .long { display: none; }
