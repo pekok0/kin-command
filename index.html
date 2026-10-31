@@ -489,15 +489,18 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .lg-t.on .lg-add { border-color: var(--fr); background: linear-gradient(180deg, var(--fr-fill), transparent 75%), var(--slot-bg); }
 .lg-sub { position: absolute; right: 8px; bottom: 8px; width: 48px; height: 48px; font: 700 30px/1 var(--cond); color: var(--ink); background: var(--panel-2); border: 1px solid var(--rule); cursor: pointer; }
 .lg-sub:hover { border-color: var(--fr); color: var(--fr); }
-.lg-call { position: sticky; bottom: 12px; z-index: 5; width: 100%; min-height: 72px; margin-top: 20px; padding: 10px 16px; font: 700 clamp(22px, 1vw + 16px, 30px)/1.1 var(--cond);
+.lg-bar { position: sticky; bottom: 12px; z-index: 5; margin-top: 20px; }
+.lg-last { margin-bottom: 6px; padding: 8px 12px; font: 700 17px/1.2 var(--cond); letter-spacing: .05em; text-transform: uppercase; color: var(--ink); background: var(--panel-2); border: 1px solid var(--rule); box-shadow: 0 8px 24px -10px oklch(0 0 0 / 0.8); }
+.lg-last.open { color: var(--un); }
+.lg-call { width: 100%; min-height: 72px; padding: 10px 16px; font: 700 clamp(22px, 1vw + 16px, 30px)/1.1 var(--cond);
   letter-spacing: .08em; text-transform: uppercase; color: var(--ground); background: var(--fr); border: 0; cursor: pointer; box-shadow: 0 14px 34px -12px var(--fr-glow), 0 2px 6px oklch(0 0 0 / 0.5); }
 .lg-call:hover { background: oklch(0.86 0.095 215 / 0.9); }
 .lg-call:disabled { color: var(--ink-3); background: var(--panel-2); box-shadow: none; cursor: default; }
 .lg-hist { list-style: none; display: grid; gap: 6px; }
 .lg-hist li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 12px; border: 1px solid var(--rule-soft); background: var(--slot-bg); font-size: 16px; }
-.lg-hist .st { font: 700 16px/1.1 var(--cond); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
-.lg-hist .open .st { color: var(--un); }
-.lg-hist .sum { flex: 1 1 260px; color: var(--ink-2); }
+.lg-st { font: 700 16px/1.2 var(--cond); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
+.lg-hist .open .lg-st { color: var(--un); }
+.lg-sum { flex: 1 1 260px; color: var(--ink-2); }
 .lg-o { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--fr); background: var(--plate-bg); box-shadow: var(--plate-lift); }
 .lg-o + .lg-o { margin-top: 12px; }
 .lg-o header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }

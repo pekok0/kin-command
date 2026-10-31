@@ -2591,12 +2591,14 @@ function logiOrderBlock(op, sq) {
   const hist = state.logi.orders.filter(x => x.squad === sq && x.state !== "draft").slice().reverse().slice(0, 8);
   const label = x => x.state === "open" ? `Čeká na logistiku · ${ago(x.sent_at)}` : x.state === "delivered" ? `Doručeno${x.courier ? ` · ${esc(x.courier.name)}` : ""} · ${ago(x.delivered_at)}` : "Zrušeno";
   const cmd = logiRole(op).cmd && !logiRole(op).squad ? `<div class="lg-sqs vbar seg" role="group" aria-label="Squad">${logiSquads(op).map(k => `<button type="button" data-logi-sq="${esc(k)}" aria-pressed="${k === sq}"><b>${esc(squadName(op, k))}</b></button>`).join("")}</div>` : "";
-  return `<section class="lg-sec" id="lg-order"><header class="lg-h"><h2>Objednávka · ${esc(squadName(op, sq))}</h2>${cmd}</header>
+  // the squad's orders first, right under its name: what is on the way and what came (the vision run 2026-10-31: at the
+  // bottom the SL had to scroll past all tiles to see "Doruceno")
+  const histBlock = hist.length ? `<ul class="lg-hist">${hist.slice(0, 2).map(x => `<li class="${x.state}"><span class="lg-st">${label(x)}</span><span class="lg-sum">${esc(logiSum(x.items))}</span>
+      <button type="button" class="act" data-logi-again="${x.id}">Objednat znovu</button>${x.state === "open" ? `<button type="button" class="act" data-logi-cancel="${x.id}">Zrušit</button>` : ""}</li>`).join("")}</ul>` : "";
+  return `<section class="lg-sec" id="lg-order"><header class="lg-h"><h2>Objednávka · ${esc(squadName(op, sq))}</h2>${cmd}</header>${histBlock}
     ${all.length ? LOGI_GROUPS.map(gr => { const xs = all.filter(x => x.group === gr); return xs.length ? `<h3 class="lg-gh">${gr}</h3><div class="lg-tiles">${xs.map(tile).join("")}</div>` : ""; }).join("")
       : '<p class="note">Squad zatím nemá nikoho na místech.</p>'}
-    <button type="button" class="lg-call" data-logi-call${n ? "" : " disabled"}>Zavolat logistiku${n ? ` · ${plural(n, "stack", "stacky", "stacků")}` : ""}</button>
-    ${hist.length ? `<h3 class="lg-gh">Objednávky squadu</h3><ul class="lg-hist">${hist.map(x => `<li class="${x.state}"><span class="st">${label(x)}</span><span class="sum">${esc(logiSum(x.items))}</span>
-      <button type="button" class="act" data-logi-again="${x.id}">Objednat znovu</button>${x.state === "open" ? `<button type="button" class="act" data-logi-cancel="${x.id}">Zrušit</button>` : ""}</li>`).join("")}</ul>` : ""}</section>`;
+    <div class="lg-bar">${hist.length ? `<p class="lg-last ${hist[0].state}">Poslední: ${label(hist[0])}</p>` : ""}<button type="button" class="lg-call" data-logi-call${n ? "" : " disabled"}>Zavolat logistiku${n ? ` · ${plural(n, "stack", "stacky", "stacků")}` : ""}</button></div></section>`;
 }
 function logiInbox(op) {
   const open = state.logi.orders.filter(x => x.state === "open"), done = state.logi.orders.filter(x => x.state === "delivered").slice(-5).reverse();
@@ -2605,7 +2607,7 @@ function logiInbox(op) {
     <button type="button" class="lg-done" data-logi-done="${x.id}">Doručeno</button></article>`;
   return `<section class="lg-sec" id="lg-inbox"><header class="lg-h"><h2>Pro logi heli <span class="num">${open.length}</span></h2></header>
     ${open.length ? open.map(card).join("") : '<p class="note">Teď nikdo nic nechce. Nová objednávka tu naskočí sama a pípne.</p>'}
-    ${done.length ? `<h3 class="lg-gh">Naposledy doručeno</h3><ul class="lg-hist">${done.map(x => `<li class="delivered"><span class="st">${esc(squadName(op, x.squad))} · ${x.courier ? esc(x.courier.name) : ""} · ${ago(x.delivered_at)}</span><span class="sum">${esc(logiSum(x.items))}</span></li>`).join("")}</ul>` : ""}</section>`;
+    ${done.length ? `<h3 class="lg-gh">Naposledy doručeno</h3><ul class="lg-hist">${done.map(x => `<li class="delivered"><span class="lg-st">${esc(squadName(op, x.squad))} · ${x.courier ? esc(x.courier.name) : ""} · ${ago(x.delivered_at)}</span><span class="lg-sum">${esc(logiSum(x.items))}</span></li>`).join("")}</ul>` : ""}</section>`;
 }
 function viewLogistika() {
   const op = logiOp(), head = '<header class="unit-head"><div><h1>Logistika</h1></div></header>';  // a glance page: no lede
