@@ -478,6 +478,8 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .lg-sqs { margin: 0; }
 .lg-gh { font: 700 15px/1 var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin: 22px 0 8px; }
 .lg-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 156px), 1fr)); gap: 8px; }
+/* the signal smokes and the rare things in rows of their own (Petr 2026-10-31 night) */
+.lg-tiles + .lg-tiles { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--rule-soft); }
 .lg-t { position: relative; }
 /* every tile the same square (Petr 2026-10-31 evening): the name is clamped, never the tile */
 .lg-add { display: grid; grid-template-rows: 56px auto auto; align-content: start; gap: 4px; width: 100%; aspect-ratio: 1; padding: 10px; overflow: hidden;

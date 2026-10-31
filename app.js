@@ -1928,7 +1928,8 @@ function myKit(c) {
   const have = all.filter(e => e.st);
   // a verdict only on real data: without the Tracker every slot would look red for nothing
   const judged = !!(trk && trk.status === "ok");
-  return { slots, slingOk, store: store.filter(e => e.st), grid, judged, graded: judged ? all.filter(e => e.g) : [],
+  // pool = also what I have nothing of yet: the logi heli buys it for me (Logistika)
+  return { slots, slingOk, store: store.filter(e => e.st), pool: store, grid, judged, graded: judged ? all.filter(e => e.g) : [],
     names: new Set(have.map(e => e.st.item)), cost: have.reduce((a, e) => a + (e.st.cost || 0), 0) + attCost(gun) + attCost(gun2) };
 }
 const loadoutCost = c => myKit(c).cost;
@@ -2572,10 +2573,15 @@ document.addEventListener("keydown", () => { if (unlocking) unlocking(200); });
 // delivered. Everything big: it sits on a second monitor or behind an alt-tab during the game. The operation being played
 // = the earliest still open one; the members' unlocks are frozen at its start (logi_have, ceo/logistika_snimek.py)
 const logiOp = () => (state.ops || [])[0] || null;
-// one flat list, no groups (Petr 2026-10-31 evening: the grouped page was long, "ty predmety jsou velmi zname"); what runs
-// out first comes first: rounds and rockets, then healing, then the rest; weapons, the backpack and the vest are never flown in
-const LOGI_FIRST = ["Munice", "Munice pistole", "Rakety", "Lékárna", "Léčení", "Obvazy", "Sprint", "Revive"];
+// no group headings (Petr 2026-10-31 evening: "ty predmety jsou velmi zname"); the order (Petr 2026-10-31 night): rounds and
+// rockets, armor, the tactical rest (""), healing with the Medical Bag first; then rows of their own: every colored signal
+// smoke (D.signaly, always) and the rarest last (monocular, parachute, detonator). Weapons, the backpack and the vest are
+// never flown in. Rounds and armor come as the clan's best step, whatever the member unlocked: the logi heli buys them
+const LOGI_ORDER = ["Munice", "Munice pistole", "Rakety", "armor", "helmet", "", "Medical Bag", "Lékárna", "Léčení", "Obvazy", "Sprint", "Revive",
+  "Spotování", "traversal", "Rozbuška"];
+const LOGI_BEST = /^(Munice|Munice pistole|Rakety|armor|helmet)$/, LOGI_RARE = /^(Spotování|traversal|Rozbuška)$/;
 const LOGI_SKIP = /^(slot[123]|sling|backpack|vest)$/;
+const logiRank = g => LOGI_ORDER.includes(g) ? LOGI_ORDER.indexOf(g) : LOGI_ORDER.indexOf("");
 function logiRole(op) {
   const mine = op && state.me ? op.claims.filter(c => c.user_id === state.me.user_id) : [];
   const lead = mine.find(c => c.lead && /^SW-Q\d+-/.test(c.slot_key));
@@ -2593,28 +2599,31 @@ const squadName = (op, card) => { const p = planOf(op), g = p && p.roster.find(g
 // every taken place of the squad: its role's kit with the member's unlocks (frozen at the start, else the current ones)
 function squadItems(op, card) {
   const p = planOf(op), slots = p ? p.roster.flatMap(g => g.slots) : [], out = new Map();
+  const add = (st, rank, row = 0) => { if (st && st.item && !out.has(st.item)) out.set(st.item, { item: st.item, icon: st.icon, per: st.stack || 1, rank, row }); };
   for (const c of op.claims.filter(c => slotCard(c.slot_key) === card)) {
     const x = slots.find(s => s.key === c.slot_key), rc = x && slotClass(x);
     if (!rc) continue;
     const have = state.logi.have.get(c.user_id) || (state.lobbyHave && state.lobbyHave.get(c.user_id)) || new Set();
     const k = asPlayer({ name: c.members.name, have, trk: (state.lobbyTrk && state.lobbyTrk.get(c.user_id)) || null }, () => myKit(rc[1]));
-    const add = (st, rank) => { if (st && st.item && !out.has(st.item)) out.set(st.item, { item: st.item, icon: st.icon, per: st.stack || 1, rank }); };
-    for (const e of k.store) {
-      if (!e.lad || e.lad.group === "Zásobník pistole") continue;  // magazines (no ladder) and pistol magazines are not flown in (Petr 2026-10-31)
-      const i = LOGI_FIRST.indexOf(e.lad.group); add(e.st, i < 0 ? LOGI_FIRST.length : i);
+    for (const e of [...Object.values(k.slots), ...k.pool]) {
+      // magazines (no ladder) and pistol magazines are not flown in (Petr 2026-10-31)
+      const g = e && e.lad && (e.lad.slot === "storage" ? e.lad.group : e.lad.slot);
+      if (g && g !== "Zásobník pistole" && !LOGI_SKIP.test(g)) add(LOGI_BEST.test(g) ? e.top || e.st : e.st, logiRank(g), LOGI_RARE.test(g) ? 2 : 0);
     }
-    for (const [key, e] of Object.entries(k.slots)) if (e && e.st && !LOGI_SKIP.test(key)) add(e.st, LOGI_FIRST.length + 1);  // helmet, armor, parachute last
+    const bag = k.slots.slot3 && k.slots.slot3.lad.steps.find(st => st.item === "Medical Bag");  // the [3] slot only for it
+    if (bag) add(bag, logiRank("Medical Bag"));
   }
+  for (const st of D.signaly || []) add(st, 0, 1);
   if (logiCar(card)) {  // the vehicle's own load first (doktrina.toml [[swarm.slot]] gear: shells, belts, smokes), never the vehicle itself
     const v = D.doktrina.swarm.slots.find(s => s.id === card.split("-")[1]);
-    for (const g of (v && v.gear) || []) if (g.item && !g.seat && !out.has(g.item)) out.set(g.item, { item: g.item, icon: g.icon, per: g.stack || 1, rank: -1 });
+    for (const g of (v && v.gear) || []) if (g.item && !g.seat && !out.has(g.item)) out.set(g.item, { item: g.item, icon: g.icon, per: g.stack || 1, rank: -1, row: 0 });
   }
-  return [...out.values()].sort((a, b) => a.rank - b.rank);
+  return [...out.values()].sort((a, b) => a.row - b.row || a.rank - b.rank);
 }
 let logiIcons = null;  // item -> icon from the whole Vybava, for the crew's view of any squad
 const logiIcon = n => { if (!logiIcons) { logiIcons = new Map(); for (const q of D.squads || []) for (const c of q.classes) for (const l of c.ladders) for (const st of l.steps)
   for (const x of [st, ...(st.mags || []), ...(st.ammo || []), ...(st.rockets || [])]) if (x.icon && !logiIcons.has(x.item)) logiIcons.set(x.item, x.icon);
-  for (const s of D.doktrina.swarm.slots || []) for (const g of s.gear || []) if (g.icon && !logiIcons.has(g.item)) logiIcons.set(g.item, g.icon); } return logiIcons.get(n); };
+  for (const g of [...(D.doktrina.swarm.slots || []).flatMap(s => s.gear || []), ...(D.signaly || [])]) if (g.icon && !logiIcons.has(g.item)) logiIcons.set(g.item, g.icon); } return logiIcons.get(n); };
 // the list being clicked: my clicks win until they are saved, else the squad's draft in the database
 function logiDraft(sq) {
   if (state.logi.local && state.logi.local.sq === sq) return state.logi.local.items;
@@ -2691,7 +2700,7 @@ function logiOrderBlock(op, sq) {
   const histBlock = hist.length ? `<ul class="lg-hist">${hist.slice(0, 2).map(x => `<li class="${x.state}"><span class="lg-st">${label(x)}</span><span class="lg-sum">${esc(logiSum(x.items))}</span>
       <button type="button" class="act" data-logi-again="${x.id}">Objednat znovu</button>${x.state === "open" ? `<button type="button" class="act" data-logi-cancel="${x.id}">Zrušit</button>` : ""}</li>`).join("")}</ul>` : "";
   return `<section class="lg-sec" id="lg-order"><header class="lg-h"><h2>Objednávka · ${esc(squadName(op, sq))}</h2>${cmd}</header>${histBlock}
-    ${all.length ? `<div class="lg-tiles">${all.map(tile).join("")}</div>` : '<p class="note">Squad zatím nemá nikoho na místech.</p>'}
+    ${[0, 1, 2].map(r => all.filter(x => x.row === r)).filter(r => r.length).map(r => `<div class="lg-tiles">${r.map(tile).join("")}</div>`).join("")}
     <div class="lg-bar">${hist.length ? `<p class="lg-last ${hist[0].state}">Poslední: ${label(hist[0])}</p>` : ""}<button type="button" class="lg-call" data-logi-call${n ? "" : " disabled"}>Zavolat logistiku${n ? ` · ${plural(n, "stack", "stacky", "stacků")}` : ""}</button></div></section>`;
 }
 function logiInbox(op) {
