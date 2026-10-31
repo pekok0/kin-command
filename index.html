@@ -927,7 +927,8 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
   .bar .wrap { flex-wrap: wrap; row-gap: 0; }
   .bar nav { order: 3; flex: 1 1 100%; flex-wrap: nowrap; justify-content: space-between; margin: 0 -6px 4px; }
   .bar nav a { white-space: nowrap; }
-  .tabs a { padding: 11px 8px 10px; font-size: 14px; letter-spacing: .05em; }  /* Doktrina has 3 tabs since 2026-10-19 */
+  .tabs { flex-wrap: wrap; }  /* four Doktrina tabs since 2026-10-31 (D54): all on a phone, two rows, no sideways scroll (Petr 2026-10-25) */
+  .tabs a { padding: 11px 8px 10px; font-size: 14px; letter-spacing: .05em; }
   #who .long { display: none; }
   .intent { grid-template-columns: 1fr; gap: 8px; }
   .steps li { grid-template-columns: 1fr; }
