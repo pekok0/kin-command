@@ -115,7 +115,7 @@ async function loadEvent() {
     // are a list of their own and never state.event
     const [op, tr] = await Promise.all([
       sb.from("events").select("id, strategy_id, doctrine, variant, squad_swarm, squad_support, roster, starts_at, open_to_hosts, leader:members!events_created_by_fkey(name)").eq("status", "open").eq("kind", "operace").order("starts_at"),
-      sb.from("events").select("id, kind, topic, title, description, capacity, invited, starts_at, ends_at, created_by, instructor, leader:members!events_created_by_fkey(name), instr:members!events_instructor_fkey(name), rsvps(user_id, status, members(name, avatar_url, discord_id, guest))")
+      sb.from("events").select("id, kind, topic, title, description, capacity, invited, starts_at, ends_at, time_tbd, created_by, instructor, leader:members!events_created_by_fkey(name), instr:members!events_instructor_fkey(name), rsvps(user_id, status, members(name, avatar_url, discord_id, guest))")
         .eq("status", "open").neq("kind", "operace").order("starts_at"),
     ]);
     if (op.error) throw op.error;
@@ -514,9 +514,10 @@ setInterval(() => document.querySelectorAll(".tminus[data-t0]").forEach(e => { e
 function akceBody() {
   const s = plan, ev = state.me && state.event;
   if (!sb || !state.me) return viewRoster(s);
+  if (isGuest()) return bctSection();  // a proposed guest: the BCT floor and nothing else (hoste-bct, bct-rolling R2)
   const nova = newPanel();
   // the overview: founding on top, every open operation and training, the history under it (viewAkce)
-  if (!state.focusId) return nova + opCards() + trainingsSection();
+  if (!state.focusId) return nova + opCards() + bctSection() + trainingsSection();  // floors 1, 2, 4 (specs/bct-rolling R2)
   if (!ev) return nova + (state.evErr ? `<section class="lobby">${viewRoster(s)}</section>` : "");
   return nova + eventHero(ev, s) + `<section class="lobby" id="lobby">${viewRoster(s)}${!s || s.swarm || s.nomap ? "" : buildOrder(s)}</section>`;
 }
@@ -675,7 +676,7 @@ function renderEvBar() {
     const st = mine ? `Máš místo: ${esc(mine.slot_label)}` : said ? esc((RSVP.find(x => x[0] === said) || [, said])[1]) : "Odpověz, jestli přijdeš";
     return `<a class="evt${i ? "" : " next"}${mine || said ? "" : " need"}" href="${op ? `#/akce/${ev.id}` : "#/akce"}">
       <span class="evt-k">${op ? `Operace · ${esc(docName(ev.doctrine))}${ev.open_to_hosts ? " · otevřená hostům" : ""}` : `${esc(label(KINDS, ev.kind))} · ${esc(ev.title)}`}</span>
-      <span class="evt-w"><b>${esc(fmtWhen(ev.starts_at))}</b><span class="tminus" data-t0="${esc(ev.starts_at)}">${tminus(ev.starts_at)}</span></span>
+      <span class="evt-w">${!op && isTbd(ev) ? "<b>Dnes</b><span>čas určí instruktor</span>" : `<b>${esc(fmtWhen(ev.starts_at))}</b><span class="tminus" data-t0="${esc(ev.starts_at)}">${tminus(ev.starts_at)}</span>`}</span>
       <span class="evt-s">${st}</span></a>`; }).join("")}</nav>`;
 }
 
@@ -1121,12 +1122,25 @@ const isBct = tr => tr.topic === "bct";
 const capOf = tr => isBct(tr) ? Math.min(tr.capacity || 6, 6) : tr.capacity;
 const trCount = tr => capOf(tr) ? `${goers(tr)} / ${esc(capOf(tr))}` : String(goers(tr));
 const canInstruct = () => leadsOps() || !!state.me.is_sl || !!state.me.is_instructor;
+// specs/bct-rolling (054): topics with two daily cards without a time, the floor between the operations and the other
+// trainings; "Mam zajem" before the time is set is the same yes row as "Prijdu" (Petr 2026-10-31). ACT later: add its topic
+const ROLLING = ["bct"];
+const isTbd = tr => !!tr.time_tbd;
+const whenOf = tr => isTbd(tr) ? "Dnes, čas určí instruktor" : fmtSpan(tr);
+const flashFor = ids => state.trFlash && ids.includes(state.trFlashId) ? `<p class="err ros-msg" role="alert">${esc(state.trFlash)}</p>` : "";
 
 function trainingsSection() {
-  const list = state.trainings.length ? `<ul class="trl">${state.trainings.map(trainingRow).join("")}</ul>`
+  const xs = state.trainings.filter(tr => !ROLLING.includes(tr.topic));
+  const list = xs.length ? `<ul class="trl">${xs.map(trainingRow).join("")}</ul>`
     : '<p class="note">Teď není vypsaný žádný trénink ani kurz.</p>';
-  const msg = state.trFlash ? `<p class="err ros-msg" role="alert">${esc(state.trFlash)}</p>` : "";
-  return `<section class="block" id="treninky"><h2>Tréninky a kurzy</h2>${msg}${list}</section>`;
+  return `<section class="block" id="treninky"><h2>Tréninky a kurzy</h2>${flashFor(xs.map(t => t.id))}${list}</section>`;
+}
+// the BCT floor (specs/bct-rolling R2): every open BCT, the two daily cards and any founded by hand, as small plates
+function bctSection() {
+  const xs = state.trainings.filter(isBct);
+  const list = xs.length ? `<ul class="trl bctl">${xs.map(trainingRow).join("")}</ul>`
+    : '<p class="note">Dnes už žádný Basic Combat Training není, o půlnoci přibudou dvě nové karty.</p>';
+  return `<section class="block" id="bct"><h2>Basic Combat Training</h2>${flashFor(xs.map(t => t.id))}${list}</section>`;
 }
 
 function trainingRow(tr) {
@@ -1137,9 +1151,9 @@ function trainingRow(tr) {
   const full = capOf(tr) && goers(tr) >= capOf(tr) && mine !== "yes";
   // BCT: only "Prijdu" / "Odhlasit se", the instructor's slot for the command, an SL or the role Instruktor (053)
   const bct = isBct(tr), lead = bct && tr.instructor === state.me.user_id;
-  const rsvp = lead ? [] : bct ? [mine === "yes" ? ["leave", "Odhlásit se"] : ["yes", "Přijdu"]] : RSVP;
-  const slot = !bct || isGuest() ? "" : !tr.instructor ? (canInstruct() ? `<button type="button" class="act" data-tlead="${id}:take">Povedu jako instruktor</button>` : "")
-    : lead || leadsOps() ? `<button type="button" class="act" data-tlead="${id}:drop">${lead ? "Nepovedu" : "Uvolnit instruktora"}</button>` : "";
+  const rsvp = lead ? [] : bct ? [mine === "yes" ? ["leave", "Odhlásit se"] : ["yes", isTbd(tr) ? "Mám zájem" : "Přijdu"]] : RSVP;
+  const slot = !bct || isGuest() || !tr.instructor ? "" : lead || leadsOps() ? `<button type="button" class="act" data-tlead="${id}:drop">${lead ? "Nepovedu" : "Uvolnit instruktora"}</button>` : "";
+  const take = bct && !isGuest() && !tr.instructor && canInstruct() ? leadForm(tr) : "";  // 054: taking a card sets its time
   const leader = bct ? (tr.instructor ? `Instruktor <b>${esc(tr.instr ? tr.instr.name : "?")}</b>` : '<b class="tr-noinstr">Chybí instruktor</b>')
     : `Vede <b>${esc(tr.leader ? tr.leader.name : "?")}</b>`;
   const ctl = leadsOps() || tr.created_by === state.me.user_id || lead ? `<details class="t${id}"><summary>Uzavřít nebo zrušit</summary>
@@ -1148,12 +1162,12 @@ function trainingRow(tr) {
       <button type="button" class="act" data-tclose="${id}:closed">Proběhl, uzavřít</button> <button type="button" class="act" data-tclose="${id}:cancelled">Zrušit</button></details>` : "";
   return `<li class="tr"><p class="tr-k"><span class="ref">${esc(label(KINDS, tr.kind))}</span>${esc(label(TOPICS, tr.topic))}${tr.invited && !isGuest() ? "<span>· Jen pro pozvané</span>" : ""}</p>
     <h3>${esc(tr.title)}</h3>
-    <p class="tr-m"><time datetime="${esc(tr.starts_at)}">${esc(fmtSpan(tr))}</time> · ${leader} · Přijde <b>${trCount(tr)}</b></p>
+    <p class="tr-m">${isTbd(tr) ? `<b class="tr-tbd">${whenOf(tr)}</b>` : `<time datetime="${esc(tr.starts_at)}">${esc(fmtSpan(tr))}</time>`} · ${leader} · ${isTbd(tr) ? "Zájem" : "Přijde"} <b>${trCount(tr)}</b></p>
     ${tr.description ? `<p class="tr-d">${esc(tr.description)}</p>` : ""}
-    <div class="rsvp" role="group" aria-label="${esc(tr.title)}: přijdeš?">${rsvp.map(([k, l]) => `<button type="button" class="act" data-trsvp="${id}:${k}" aria-pressed="${mine === k}"${k === "yes" && full ? ` disabled aria-describedby="full-${id}"` : ""}>${l}</button>`).join("")}${slot}</div>
+    <div class="rsvp" role="group" aria-label="${esc(tr.title)}: přijdeš?">${rsvp.map(([k, l]) => `<button type="button" class="act" data-trsvp="${id}:${k}" aria-pressed="${mine === k}"${k === "yes" && full ? ` disabled aria-describedby="full-${id}"` : ""}>${l}</button>`).join("")}${slot}</div>${take}
     ${full ? `<p class="tr-full" id="full-${id}">Kurz je plný.</p>` : ""}
     ${bct && !tr.instructor ? '<p class="tr-full">Bez instruktora se BCT nekoná.</p>' : ""}
-    ${WHO.map(([k, l]) => by[k].length ? `<p class="tr-who"><b>${l}:</b> ${by[k].map(memberLink).join(" ")}</p>` : "").join("")}
+    ${(isTbd(tr) ? [["yes", "Mají zájem"]] : WHO).map(([k, l]) => by[k].length ? `<p class="tr-who"><b>${l}:</b> ${by[k].map(memberLink).join(" ")}</p>` : "").join("")}
     ${ctl}</li>`;
 }
 
@@ -1199,19 +1213,42 @@ async function rsvpTraining(id, status) {
   const { error } = status === "leave" ? await sb.from("rsvps").delete().eq("event_id", id).eq("user_id", state.me.user_id) : await sb.from("rsvps").upsert({ event_id: id, user_id: state.me.user_id, status, updated_at: new Date().toISOString() },
     { onConflict: "event_id,user_id" });
   // 23514 = the capacity trigger (012): someone took the last place a moment earlier
+  state.trFlashId = id;
   state.trFlash = !error ? null : error.code === "23514" ? "Kurz je plný." : error.code === "42501" ? "Trénink už je uzavřený." : saveErr(error);
   await loadEvent();
 }
 
-// 053: take or leave a BCT's instructor slot; 23514 = someone took it a moment earlier
-async function leadTraining(id, take) {
-  const { error } = await sb.rpc("bct_lead", { e: id, take });
-  state.trFlash = !error ? null : error.code === "23514" ? "Instruktora už má někdo jiný." : saveErr(error);
+// 054: the instructor takes a BCT card and sets its time; the day is the card's (the database refuses another day or a
+// time already gone). A card with a time shows that time prefilled, so taking it as it is costs one more click
+function leadForm(tr) {
+  const at = isTbd(tr) ? "19:00" : new Date(tr.starts_at).toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
+  const len = tr.ends_at && !isTbd(tr) ? String((new Date(tr.ends_at) - new Date(tr.starts_at)) / 3600e3) : "2";
+  const opts = [["1", "1 h"], ["1.5", "1,5 h"], ["2", "2 h"], ["3", "3 h"]], sel = opts.some(([v]) => v === len) ? len : "2";
+  return `<details class="lead${esc(tr.id)}"><summary>Povedu jako instruktor</summary><form class="leadf" data-form="lead" data-id="${esc(tr.id)}">
+    <label>Od <input type="time" name="at" value="${esc(at)}" required></label>
+    <label>Délka <select name="hours">${opts.map(([v, l]) => `<option value="${v}"${v === sel ? " selected" : ""}>${l}</option>`).join("")}</select></label>
+    <button type="submit" class="act">Povedu v tento čas</button></form></details>`;
+}
+// 053/054: take or leave a BCT's instructor slot, with the card's time when taking; 23514 = the database's own refusal
+async function leadTraining(id, take, starts = null, ends = null) {
+  const { error } = await sb.rpc("bct_lead", starts ? { e: id, take, starts, ends } : { e: id, take });
+  state.trFlashId = id;
+  state.trFlash = !error ? null : error.code !== "23514" ? saveErr(error) : /minulosti/.test(error.message) ? "Ten čas už je pryč, vyber pozdější."
+    : /mimo den/.test(error.message) ? "Čas musí být v den karty." : "Instruktora už má někdo jiný.";
   await loadEvent();
+}
+async function leadTime(f) {
+  const tr = state.trainings.find(t => t.id === Number(f.dataset.id));
+  if (!tr) return;
+  const [h, m] = f.elements.at.value.split(":").map(Number), start = new Date(tr.starts_at);
+  start.setHours(h, m, 0, 0);  // ponytail: the browser's day, not Prague's; abroad the database says "mimo den" and the card flashes it
+  const hours = Number(f.elements.hours.value);
+  await leadTraining(tr.id, true, start.toISOString(), hours ? new Date(+start + hours * 3600e3).toISOString() : null);
 }
 
 // T5: the founder or the Commander (events_close, 012); no row back = not open any more, or not his
 async function closeTraining(id, status) {
+  state.trFlashId = id;
   // attendance first (019 runs_event: the founder or the Commander while open); counts for ranks (specs/hodnosti)
   const att = status === "closed" ? [...document.querySelectorAll(`.t${id} input[name^="tatt_"]`)].map(x => ({ event_id: id, user_id: x.name.slice(5), attended: x.checked })) : [];
   if (att.length) {
@@ -1323,6 +1360,7 @@ document.addEventListener("submit", async e => {
   if (btn.disabled) return;  // double click: the first submit is still saving
   btn.disabled = true;
   if (f.dataset.form === "training") { await createTraining(f); btn.disabled = false; await loadEvent(); return; }
+  if (f.dataset.form === "lead") { await leadTime(f); btn.disabled = false; return; }
   if (f.dataset.form === "merit") { await addMerit(f); btn.disabled = false; return; }
   const v = Object.fromEntries(new FormData(f)), eventId = state.event && state.event.id;
   // OWASP 2026-10-19 Low: map and team only pick one of our plans, a tampered <option> cannot send its own strategy_id
@@ -1578,7 +1616,7 @@ function homeEvent() {
   if (!sb || !state.me) return "";
   const ev = state.event, tr = state.trainings[0];
   // specs/typy-akci T6: the nearest training or course as a second line, under the operation or without one
-  const next = tr ? `<a class="trnext" href="#/akce"><span class="ref">${esc(label(KINDS, tr.kind))}</span><span>${esc(tr.title)} · ${esc(fmtSpan(tr))} · přijde ${trCount(tr)}</span></a>` : "";
+  const next = tr ? `<a class="trnext" href="#/akce"><span class="ref">${esc(label(KINDS, tr.kind))}</span><span>${esc(tr.title)} · ${esc(whenOf(tr))} · ${isTbd(tr) ? "zájem" : "přijde"} ${trCount(tr)}</span></a>` : "";
   if (!ev) return (state.evErr ? `<p class="err home-ev">${LOAD_ERR}</p>` : '<p class="note home-ev">Teď není otevřená žádná akce.</p>') + next;
   const more = state.ops.filter(x => x.id !== ev.id).map(x => `<a class="trnext" href="#/akce/${x.id}"><span class="ref">Operace</span><span>${esc(docName(x.doctrine))} · ${esc(fmtWhen(x.starts_at))}</span></a>`).join("");
   const mine = myPlace(state.claims);
@@ -2185,7 +2223,7 @@ const wv = (png, w) => png.replace(/\.png$/, `-${w}.webp`);  // smaller copies f
 // BCT is the shared record the trainer opens at the start and everyone comes back to, so it is in the row 'hub'
 function viewVycvik(sub) {
   const v = D.vycvik, act = sub === "act";
-  const cards = v.lessons.map(l => `<ol class="drill">${l.cards.map(c => `<li><a class="pic" href="${esc(c.file)}" target="_blank" rel="noopener"><img src="${esc(wv(c.file, 1600))}" srcset="${esc(wv(c.file, 800))} 800w, ${esc(wv(c.file, 1600))} 1600w, ${esc(wv(c.file, 2400))} 2400w" sizes="(min-width: 1360px) 1280px, 100vw" width="2400" height="1500" loading="lazy" alt="${esc(c.title)}: ${esc(c.sub)}"></a>
+  const cards = v.lessons.map(l => `${v.lessons.length > 1 ? `<h4>${esc(l.name)}</h4>` : ""}<ol class="drill">${l.cards.map(c => `<li><a class="pic" href="${esc(c.file)}" target="_blank" rel="noopener"><img src="${esc(wv(c.file, 1600))}" srcset="${esc(wv(c.file, 800))} 800w, ${esc(wv(c.file, 1600))} 1600w, ${esc(wv(c.file, 2400))} 2400w" sizes="(min-width: 1360px) 1280px, 100vw" width="2400" height="1500" loading="lazy" alt="${esc(c.title)}: ${esc(c.sub)}"></a>
         <div class="cap"><b>${esc(c.title)}</b><span>${esc(c.sub)}</span><a class="dl" href="${esc(c.file)}" download>PNG pro Discord</a></div></li>`).join("")}</ol>`).join("");
   return `${isGuest() ? "" : `<nav class="tabs vy-tabs" aria-label="Výcvik"><a href="#/vycvik"${act ? "" : ' aria-current="page"'}>Basic Combat Training</a><a href="#/vycvik/act"${act ? ' aria-current="page"' : ""}>Advanced Combat Training</a></nav>`}
     ${act ? `<p><span class="draft">DRAFT</span> Návrh osnovy. Projde ho vedení a squad leadeři, pak se finalizuje.</p><article class="proto">${v.act}</article>`
@@ -2429,7 +2467,7 @@ function renderNav(active) {
 
 function viewAkce() {
   if (isGuest()) return `<header class="unit-head"><div><h1>Basic Combat Training</h1><p>Navrhli tě na Rekruta. Zapiš se na BCT a vydrž celé. Instruktor ti na konci potvrdí účast a War Room tě hned povýší na Rekruta: pak uvidíš celou aplikaci. Co se na BCT naučíš, je ve <a href="#/vycvik">Výcviku</a>.</p></div></header>
-    <section class="sestava" id="sestava">${trainingsSection()}</section>`;
+    <section class="sestava" id="sestava">${akceBody()}</section>`;
   if (state.focusId) return `<p class="crumb"><a href="#/akce">Akce</a> / Operace</p><section class="sestava" id="sestava">${akceBody()}</section>`;
   return `<header class="unit-head"><div><h1>Akce</h1></div></header>
     <section class="sestava" id="sestava">${akceBody()}</section>
@@ -2511,7 +2549,7 @@ document.addEventListener("keydown", () => { if (unlocking) unlocking(200); });
 const logiOp = () => (state.ops || [])[0] || null;
 // one flat list, no groups (Petr 2026-10-31 evening: the grouped page was long, "ty predmety jsou velmi zname"); what runs
 // out first comes first: rounds and rockets, then healing, then the rest; weapons, the backpack and the vest are never flown in
-const LOGI_FIRST = ["Munice", "Zásobník pistole", "Munice pistole", "Rakety", "Lékárna", "Léčení", "Obvazy", "Sprint", "Revive"];
+const LOGI_FIRST = ["Munice", "Munice pistole", "Rakety", "Lékárna", "Léčení", "Obvazy", "Sprint", "Revive"];
 const LOGI_SKIP = /^(slot[123]|sling|backpack|vest)$/;
 function logiRole(op) {
   const mine = op && state.me ? op.claims.filter(c => c.user_id === state.me.user_id) : [];
@@ -2531,7 +2569,10 @@ function squadItems(op, card) {
     const have = state.logi.have.get(c.user_id) || (state.lobbyHave && state.lobbyHave.get(c.user_id)) || new Set();
     const k = asPlayer({ name: c.members.name, have, trk: (state.lobbyTrk && state.lobbyTrk.get(c.user_id)) || null }, () => myKit(rc[1]));
     const add = (st, rank) => { if (st && st.item && !out.has(st.item)) out.set(st.item, { item: st.item, icon: st.icon, per: st.stack || 1, rank }); };
-    for (const e of k.store) { const i = e.lad ? LOGI_FIRST.indexOf(e.lad.group) : 0; add(e.st, i < 0 ? LOGI_FIRST.length : i); }  // magazines have no ladder: rounds
+    for (const e of k.store) {
+      if (!e.lad || e.lad.group === "Zásobník pistole") continue;  // magazines (no ladder) and pistol magazines are not flown in (Petr 2026-10-31)
+      const i = LOGI_FIRST.indexOf(e.lad.group); add(e.st, i < 0 ? LOGI_FIRST.length : i);
+    }
     for (const [key, e] of Object.entries(k.slots)) if (e && e.st && !LOGI_SKIP.test(key)) add(e.st, LOGI_FIRST.length + 1);  // helmet, armor, parachute last
   }
   return [...out.values()].sort((a, b) => a.rank - b.rank);

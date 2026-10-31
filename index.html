@@ -878,6 +878,7 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .proto { max-width: 96ch; }
 .proto h1 { font-size: clamp(32px, 2vw + 22px, 52px); text-transform: uppercase; margin-bottom: 12px; }
 .proto h2 { font-size: 20px; margin: 36px 0 10px; padding-top: 14px; border-top: 1px solid var(--rule); }
+.proto h4 { margin: 28px 0 0; font: 700 13px/1 var(--cond); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
 .proto h1 + p, .proto p { max-width: 80ch; margin: 8px 0; }
 .proto ul, .proto ol { margin: 8px 0 12px; }
 .proto li { position: relative; padding-left: 20px; margin-top: 6px; max-width: 80ch; }
@@ -1094,6 +1095,14 @@ h1 { text-shadow: 0 0 28px oklch(0.86 0.15 205 / 0.18); }
 .tr details summary { display: inline-flex; align-items: center; min-height: 40px; margin-top: 10px; padding: 10px 14px 9px; font: 600 14px/1 var(--cond); letter-spacing: .06em; text-transform: uppercase; cursor: pointer;
   border: 1px solid var(--rule); background: linear-gradient(180deg, oklch(0.25 0.05 245 / 0.9), oklch(0.18 0.04 252 / 0.9)); box-shadow: inset 0 1px 0 oklch(0.86 0.15 205 / 0.18); }
 .tr details summary { color: var(--ink-3); }
+/* specs/bct-rolling (054): the BCT floor, two small cards a day; the time form under "Povedu jako instruktor" */
+.bctl { grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+.bctl .tr { padding: 12px 14px; }
+.bctl .tr h3 { margin: 6px 0 4px; font-size: 18px; }
+.tr-tbd { color: var(--ink); }
+.leadf { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; margin-top: 10px; }
+.leadf label { display: grid; gap: 4px; font-size: 14px; color: var(--ink-2); }
+.leadf input, .leadf select { min-height: 40px; }
 
 /* change marks (app.js markChanges): one authored move per kind, from an already visible state */
 .rg li, .veh { position: relative; }
