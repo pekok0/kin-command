@@ -1742,7 +1742,7 @@ function pickGear(g) {
 const extrasCost = (r, skip) => r.gear.map(pickGear).filter(p => p.name && !(skip && skip.has(p.name))).reduce((a, p) => a + (p.cost || 0), 0);
 function shopList(s, r, skip = null) {
   const picks = r.gear.map(g => [g, pickGear(g)]).filter(([, p]) => !(p.name && skip && skip.has(p.name)));
-  if (!picks.length) return `<p class="note" style="margin-top:0">${r.class ? "Nic navíc." : "Nic předepsaného."}</p>`;
+  if (!picks.length) return "";  // nothing to list: nothing shown, no placeholder (Petr 2026-10-31)
   const part = picks.some(([, p]) => p.name && p.qty === "?") ? ' <span class="unk">+ ?</span>' : "";
   const tiles = picks.map(([g, p]) => p.name ? `<li class="tile">${itemIcon(p.icon)}<div class="tx">
       <div class="nm"><span class="qty">${p.qty === "?" ? '<span class="unk">?</span>' : p.qmax ? `${p.qty}–${p.qmax}×` : p.qty + "×"}</span><span>${esc(p.name)}</span></div>
@@ -1928,7 +1928,7 @@ function loadoutCard(q, c, h = "h2") {
       <div><h3>Equipment</h3>${["slot1", "slot2", "slot3", ...(k.slots.sling ? ["sling"] : [])].map(key => cell(key) + (key === "slot1" || key === "sling" ? att(key) : "")).join("")}
         <h3>Gear</h3><div class="lo-gear">${["helmet", "armor", "vest"].map(cell).join("")}</div></div>
       <div><h3>Storage</h3><div class="lo-gear">${["backpack", "traversal"].map(cell).join("")}</div>
-        <h3>V batohu${k.grid ? ` <span class="bag-n">· ${esc(k.grid.name)}</span>` : ""}</h3>${k.grid ? bagGrid(k.grid) : ""}${k.store.length ? `<ul class="lo-store">${k.store.map(e => `<li${judged && e.g ? ` class="g-${e.g}" title="${GRADE[e.g]}"` : ""}>${itemIcon(e.st.icon, "sm")}<span class="q">${e.st.qty}${e.st.cost ? `<span class="pr">${usd(e.st.cost)}</span>` : ""}</span><span class="n">${esc(e.st.item)}${e.over ? '<span class="cut">Nevejde se: kup větší batoh</span>' : e.cut ? '<span class="cut">Víc se nevejde, větší batoh unese víc</span>' : ""}</span></li>`).join("")}</ul>` : '<p class="note">Nic.</p>'}
+        ${k.grid || k.store.length ? `<h3>V batohu${k.grid ? ` <span class="bag-n">· ${esc(k.grid.name)}</span>` : ""}</h3>${k.grid ? bagGrid(k.grid) : ""}${k.store.length ? `<ul class="lo-store">${k.store.map(e => `<li${judged && e.g ? ` class="g-${e.g}" title="${GRADE[e.g]}"` : ""}>${itemIcon(e.st.icon, "sm")}<span class="q">${e.st.qty}${e.st.cost ? `<span class="pr">${usd(e.st.cost)}</span>` : ""}</span><span class="n">${esc(e.st.item)}${e.over ? '<span class="cut">Nevejde se: kup větší batoh</span>' : e.cut ? '<span class="cut">Víc se nevejde, větší batoh unese víc</span>' : ""}</span></li>`).join("")}</ul>` : ""}` : ""}
         ${quick.length ? `<h3>Rychlé sloty</h3><ol class="lo-quick">${quick.map((n, i) => `<li><span class="kb">${(i + 4) % 10}</span>${esc(n)}</li>`).join("")}</ol>` : ""}</div>
     </div>
     <footer class="lo-sum"><span>Za život</span><b>${usd(k.cost)}</b></footer></article>`;
@@ -1940,7 +1940,7 @@ function roleBlock(s, r) {
   return `<article class="rb"><header><a class="rid big" href="${roleHref(s, r)}">${esc(r.id)}</a>
     <div class="rb-t"><a class="rn" href="${roleHref(s, r)}">${esc(r.name)}</a><p>${esc(r.transport)}</p>${r.class ? (([cq, cc]) => `<p><a class="ref" href="${classHref(cq, cc)}">${esc(cc.name)}</a></p>`)(classById(r.class)) : ""}</div>
     <div class="rb-sum">${usd((cc ? loadoutCost(cc) : 0) + extrasCost(r))}${part}</div></header>
-    ${strip ? `<ul class="strip">${strip}</ul>` : `<p class="note">${r.class ? "Jen sestava sub-classy." : "Nic předepsaného."}</p>`}</article>`;
+    ${strip ? `<ul class="strip">${strip}</ul>` : ""}</article>`;
 }
 
 function viewRole(s, r) {
