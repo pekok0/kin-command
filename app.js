@@ -11,7 +11,7 @@ const sb = window.supabase ? supabase.createClient(window.KIN_BACKEND.url, windo
 // a stored Supabase session means the login check is on its way: the gate shows "checking", not the button
 const hadSession = (() => { try { return Object.keys(localStorage).some(k => /^sb-.*-auth-token$/.test(k)); } catch { return false; } })();
 // never echo the provider's error text from the URL (content spoofing); drop it so a reload is clean
-let state = { me: null, error: urlQs.has("error") ? "Přihlášení přes Discord selhalo." : null, event: null, claims: [], rsvps: [], trainings: [], ops: [], focusId: null, opsLoaded: false, flash: null, trFlash: null, novaFlash: null, checking: !!sb && (hadSession || FRESH),
+let state = { me: null, error: urlQs.has("error") ? "Přihlášení přes Discord selhalo." : null, event: null, claims: [], rsvps: [], trainings: [], ops: [], focusId: null, opsLoaded: false, flash: null, trFlash: null, tadd: {}, novaFlash: null, checking: !!sb && (hadSession || FRESH),
   logi: { orders: [], have: new Map(), local: null, timer: null, pick: null, flash: null, err: false, loaded: null, chan: null } };
 if (urlQs.has("error")) history.replaceState(null, "", location.pathname + location.hash);
 
@@ -1158,9 +1158,14 @@ function trainingRow(tr) {
   const take = bct && !isGuest() && !tr.instructor && canInstruct() ? leadForm(tr) : "";  // 054: taking a card sets its time
   const leader = bct ? (tr.instructor ? `Instruktor <b>${esc(tr.instr ? tr.instr.name : "?")}</b>` : '<b class="tr-noinstr">Chybí instruktor</b>')
     : `Vede <b>${esc(tr.leader ? tr.leader.name : "?")}</b>`;
+  // Petr 2026-10-31: the one closing adds anyone from the War Room who was there without signing up (state.tadd, by name
+  // from the list that loads when the form opens); the database treats him like the others (bct_done, a guest's promotion)
+  const yes = tr.rsvps.filter(r => r.status === "yes" && r.members).map(r => ({ user_id: r.user_id, name: r.members.name, guest: r.members.guest }));
+  const was = [...yes, ...(state.tadd[tr.id] || []).map(uid => (state.clan || []).find(m => m.user_id === uid)).filter(m => m && !yes.some(y => y.user_id === m.user_id))];
   const ctl = leadsOps() || tr.created_by === state.me.user_id || lead ? `<details class="t${id}"><summary>Uzavřít nebo zrušit</summary>
-      ${by.yes.length ? `<fieldset class="atts"><legend>${tr.topic === "bct" ? "Kdo byl celou dobu (hosté se stanou Rekruty)" : "Kdo byl"}</legend>${tr.rsvps.filter(r => r.status === "yes" && r.members).map(r =>
-        `<label class="att"><input type="checkbox" name="tatt_${esc(r.user_id)}" checked>${esc(r.members.name)}${r.members.guest ? " (host)" : ""}</label>`).join("")}</fieldset>` : ""}
+      <fieldset class="atts"><legend>${tr.topic === "bct" ? "Kdo byl celou dobu (hosté se stanou Rekruty)" : "Kdo byl"}</legend>${was.map(m =>
+        `<label class="att"><input type="checkbox" name="tatt_${esc(m.user_id)}" checked>${esc(m.name)}${m.guest ? " (host)" : ""}</label>`).join("")}
+        <span class="att tadd"><input list="clan-${id}" name="tadd_${id}" placeholder="Dopsat dalšího" autocomplete="off" maxlength="80"><button type="button" class="act" data-tadd="${id}">Přidat</button><datalist id="clan-${id}">${(state.clan || []).filter(m => !was.some(w => w.user_id === m.user_id)).map(m => `<option value="${esc(m.name)}">`).join("")}</datalist></span></fieldset>
       <button type="button" class="act" data-tclose="${id}:closed">Proběhl, uzavřít</button> <button type="button" class="act" data-tclose="${id}:cancelled">Zrušit</button></details>` : "";
   return `<li class="tr"><p class="tr-k"><span class="ref">${esc(label(KINDS, tr.kind))}</span>${esc(label(TOPICS, tr.topic))}${tr.invited && !isGuest() ? "<span>· Jen pro pozvané</span>" : ""}</p>
     <h3>${esc(tr.title)}</h3>
@@ -1193,7 +1198,7 @@ const capToggle = f => { const off = f.elements.kind.value !== "kurz"; f.querySe
 // a failed load leaves the list empty until a reload (a retry from the next render would loop)
 async function loadClan() {
   state.clan = null;
-  const { data, error } = await sb.from("members").select("user_id, name").eq("active", true).order("name");
+  const { data, error } = await sb.from("members").select("user_id, name, guest").eq("active", true).order("name");
   state.clan = error ? [] : data;
   if (error) state.novaFlash = "Seznam členů se nepodařilo načíst, obnov stránku.";
   renderRoster();
@@ -1260,7 +1265,17 @@ async function closeTraining(id, status) {
   const { data, error } = await sb.from("events").update({ status: status === "closed" ? "closed" : "cancelled" })
     .eq("id", id).neq("kind", "operace").select("id");
   state.trFlash = error ? saveErr(error) : !data.length ? "Nepodařilo se uložit: trénink už není otevřený, nebo ho nevypsal ty." : null;
+  if (!state.trFlash) delete state.tadd[id];
   await loadEvent();
+}
+
+function addAttendee(id) {
+  const f = document.querySelector(`input[name="tadd_${id}"]`), name = f ? f.value.trim() : "";
+  const m = (state.clan || []).find(x => x.name === name);  // ponytail: the first of that name; two members with one name are one option twice
+  state.trFlashId = id;
+  state.trFlash = m ? null : "Takové jméno v seznamu není.";
+  if (m) (state.tadd[id] = state.tadd[id] || []).push(m.user_id);
+  renderRoster();
 }
 
 // Viktor #003: the button says what gets founded or saved; a map without a team is not a plan yet (decision 1)
@@ -2872,14 +2887,17 @@ function render() {
   window.scrollTo(0, 0);
 }
 
+// the list of everyone loads the first time a closing form opens (the list a private training invites from)
+$app.addEventListener("toggle", e => { if (e.target.open && /^t\d+$/.test(e.target.className) && state.clan === undefined) loadClan(); }, true);
 $app.addEventListener("click", e => {
-  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-drawer],[data-role],[data-squad],[data-lock],[data-briefwin],[data-sqdrop],[data-cmd],[data-seat],[data-fx],[data-leadfor],[data-nocash],[data-merit-del],[data-support],[data-lead],[data-trsvp],[data-tlead],[data-tclose],[data-tracker],[data-nova],[data-ctask],[data-cans]");
+  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-drawer],[data-role],[data-squad],[data-lock],[data-briefwin],[data-sqdrop],[data-cmd],[data-seat],[data-fx],[data-leadfor],[data-nocash],[data-merit-del],[data-support],[data-lead],[data-trsvp],[data-tlead],[data-tclose],[data-tadd],[data-tracker],[data-nova],[data-ctask],[data-cans]");
   if (state.sqArm != null && !(t && t.dataset.sqdrop)) { state.sqArm = null; renderRoster(); }  // a click elsewhere: no drop
   if (!t) return;
   if (t.dataset.ctask) { const [id, st] = t.dataset.ctask.split(":"); setTask(id, st); return; }
   if (t.dataset.cans) { setTask(t.dataset.cans, "odpoved", t.dataset.val); return; }
   if (t.dataset.trsvp) { const [id, st] = t.dataset.trsvp.split(":"); rsvpTraining(Number(id), st); return; }
   if (t.dataset.tlead) { t.disabled = true; const [id, k] = t.dataset.tlead.split(":"); leadTraining(Number(id), k === "take"); return; }
+  if (t.dataset.tadd) { addAttendee(Number(t.dataset.tadd)); return; }
   if (t.dataset.tclose) { t.disabled = true; const [id, st] = t.dataset.tclose.split(":"); closeTraining(Number(id), st); return; }
   if (t.dataset.role) { const [i, kit, d] = t.dataset.role.split(":"); setRole(Number(i), kit, Number(d)); return; }
   if (t.dataset.squad) { setSquad(t.dataset.squad); return; }
