@@ -2343,11 +2343,11 @@ async function loadHist(p) {
     } else if (p[0] === "akce") {
       const id = Number(p[1]);  // #/akce/abc: not an id, so "Akce neexistuje" instead of a database error (Viktor UAT #011)
       const { data: ev, error } = Number.isSafeInteger(id) && id > 0
-        ? await sb.from("events").select("id, strategy_id, doctrine, starts_at, status, variant, placement, weather, note, went_well, went_wrong, next_time").eq("id", id).eq("kind", "operace").neq("status", "cancelled").maybeSingle()
+        ? await sb.from("events").select("id, strategy_id, doctrine, starts_at, status, variant, placement, weather, note, went_well, went_wrong, next_time, roster, squad_swarm, squad_support").eq("id", id).eq("kind", "operace").neq("status", "cancelled").maybeSingle()
         : { data: null, error: null };
       if (error) throw error;
       const [cl, at] = ev ? await Promise.all([
-        sb.from("claims").select("slot_label, user_id, members(name, avatar_url, discord_id)").eq("event_id", ev.id),
+        sb.from("claims").select("slot_key, slot_label, user_id, lead, members(name, avatar_url, discord_id)").eq("event_id", ev.id),
         sb.from("attendance").select("user_id, attended").eq("event_id", ev.id),  // RLS: Commander all, member own row
       ]) : [{ data: [] }, { data: [] }];
       if (cl.error) throw cl.error;
@@ -2444,9 +2444,18 @@ const weatherName = id => !id ? "-" : (D.bitvy.pocasi.find(w => w.id === id) || 
 const lblWidth = groups => `min(${Math.max(...Object.values(groups).flat().map(x => x.role.length)) + 1}ch, 9em)`;
 
 function viewEvent(ev, claims, absent = new Set()) {
-  // slot_label was stored at sign-up ("Skupina · Role"), so renamed roles keep their old name here
+  // Petr 2026-11-01 "do historie ... kdo byl v jakem squadu": the place key holds the squad (SW-Q2-RF3, since 21. 10.), so
+  // the event's roster gives each place its squad or vehicle, in the lobby's order; a place the roster no longer has keeps
+  // slot_label as stored at sign-up ("Skupina · Role", renamed roles keep their old name), in its squad by the key when it
+  // was a squad's (Medic, dropped 29. 10.); grouped by the squad's id, two squads may share a name (1172)
+  const r = isSq(ev) ? rosterOf(ev) : null, sqName = n => (r.names && r.names[n - 1]) || `Squad ${n}`;
+  const at = new Map(r ? planOf(ev).roster.flatMap(g => g.slots.map(x => [x.key, { id: g.id, g: g.name, role: x.label }])) : []), pos = [...at.keys()];
+  const where = c => { const [g, ...rest] = c.slot_label.split(" · "), q = r && /^SW-Q(\d+)-/.exec(c.slot_key || "");
+    return at.get(c.slot_key) || (q ? { id: `Q${q[1]}`, g: sqName(q[1]), role: rest.join(" · ") || g } : { id: g, g, role: rest.join(" · ") || g }); };
+  const ord = c => at.has(c.slot_key) ? pos.indexOf(c.slot_key) : pos.length;
   const groups = {};
-  for (const c of claims) { const [g, ...rest] = c.slot_label.split(" · "); (groups[g] = groups[g] || []).push({ role: rest.join(" · ") || g, m: c.members, away: absent.has(c.user_id) }); }
+  for (const c of [...claims].sort((a, b) => ord(a) - ord(b))) { const p = where(c);
+    (groups[p.id] = groups[p.id] || { g: p.g, xs: [] }).xs.push({ role: p.role, m: c.members, sl: c.lead, away: absent.has(c.user_id) }); }
   const played = claims.length - claims.filter(c => absent.has(c.user_id)).length;
   const debrief = [["Co fungovalo", ev.went_well], ["Co ne", ev.went_wrong], ["Co příště jinak", ev.next_time]].filter(([, t]) => t);
   return `<p class="crumb"><a href="#/akce">Akce</a> / ${esc(fmtWhen(ev.starts_at))}</p>
@@ -2454,8 +2463,8 @@ function viewEvent(ev, claims, absent = new Set()) {
     <p class="lede">Umístění <b>${place(ev.placement)}</b> · zóna ${esc(variantName(ev.strategy_id, ev.variant))}${ev.weather ? ` · ${esc(weatherName(ev.weather))}` : ""} · ${played === claims.length ? plural(played, "člověk", "lidé", "lidí") : `hrálo ${played} z ${claims.length} zapsaných`}</p>
     ${debrief.length ? `<section class="block"><h2>Debrief</h2><dl class="debrief">${debrief.map(([h, t]) => `<dt>${h}</dt><dd class="evnote">${esc(t)}</dd>`).join("")}</dl></section>` : ""}
     ${ev.note ? `<section class="block"><h2>Poznámka Commandera</h2><p class="evnote">${esc(ev.note)}</p></section>` : ""}
-    <section class="block"><h2>Sestava</h2>${claims.length ? `<div class="ros" style="--lbl: ${lblWidth(groups)}">${Object.entries(groups).map(([g, xs]) => `<div class="rg"><div class="pg-head"><div><b>${esc(g)}</b></div><span class="num">${xs.length}</span></div>
-      <ul>${xs.map(x => `<li class="hrow${x.away ? " absent" : ""}"><span class="lbl">${esc(x.role)}</span>${memberLink(x.m)}${x.away ? '<span class="ref">neúčast</span>' : ""}</li>`).join("")}</ul></div>`).join("")}</div>` : '<p class="note">Nikdo se nezapsal.</p>'}</section>`;
+    <section class="block"><h2>Sestava</h2>${claims.length ? `<div class="ros" style="--lbl: ${lblWidth(Object.values(groups).map(x => x.xs))}">${Object.values(groups).map(({ g, xs }) => `<div class="rg"><div class="pg-head"><div><b>${esc(g)}</b></div><span class="num">${xs.length}</span></div>
+      <ul>${xs.map(x => `<li class="hrow${x.away ? " absent" : ""}"><span class="lbl">${esc(x.role)}</span>${memberLink(x.m)}${x.sl || x.away ? `<span class="ref">${[x.sl && "SL", x.away && "neúčast"].filter(Boolean).join(" · ")}</span>` : ""}</li>`).join("")}</ul></div>`).join("")}</div>` : '<p class="note">Nikdo se nezapsal.</p>'}</section>`;
 }
 
 // profile: which sub-classes the player can field this season (from what they ticked on loadout cards)
