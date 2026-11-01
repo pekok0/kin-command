@@ -2076,14 +2076,17 @@ function viewSwarm(k) {
 
 // Petr 2026-10-25 (D17): two doctrines, Fun (SWARM) and CW (Clan War); FORTRESS is gone from the menu; 2026-10-31 (D54):
 // Fun: Builder's Dream as the third
+// 2026-11-01: CW: Clan War only for the command, SL and Instruktor (seesClanWar, row 'clanwar' 061)
+const seesClanWar = () => !!state.me && canInstruct();
 function viewDoktrina(tab, sub) {
-  const k = D.doktrina, cur = ["builder", "cw", "vycvik"].includes(tab) ? tab : "swarm";
-  const tabs = [["swarm", `Fun: ${k.swarm.title}`], ["builder", `Fun: ${k.builder.title}`], ["cw", `PO: ${k.cw.title}`], ["vycvik", "Výcvik"]];
+  const k = D.doktrina, cwar = seesClanWar(), cur = ["builder", "cw", "vycvik"].includes(tab) || cwar && tab === "clanwar" ? tab : "swarm";
+  const tabs = [["swarm", `Fun: ${k.swarm.title}`], ["builder", `Fun: ${k.builder.title}`], ["cw", `PO: ${k.cw.title}`],
+    ...(cwar ? [["clanwar", "CW: Clan War"]] : []), ["vycvik", "Výcvik"]];
   return `
     <div class="narrow">
     <header class="unit-head"><div><h1>Doktrína</h1><p>Platí pro všechny mapy a barvy. Kterou hrajeme, rozhodne Commander před zápasem.</p></div></header>
     <nav class="tabs" aria-label="Doktrína">${tabs.map(([path, label]) => `<a href="#/doktrina${path && "/" + path}"${path === cur ? ' aria-current="page"' : ""}>${esc(label)}</a>`).join("")}</nav>
-    ${vybDoc(cur) ? viewCw(k[cur]) : cur === "vycvik" ? viewVycvik(sub) : viewSwarm(k)}
+    ${vybDoc(cur) ? viewCw(k[cur]) : cur === "vycvik" ? viewVycvik(sub) : cur === "clanwar" ? '<section class="block" id="clanwar"><p class="note">Načítám…</p></section>' : viewSwarm(k)}
     </div>`;
 }
 
@@ -2820,6 +2823,16 @@ async function loadBriefing() {
     : data && data.data && data.data.briefing ? `<article class="proto">${data.data.briefing}</article>`
     : '<p class="note">Protokol briefingu je jen pro velení.</p>');
 }
+// the Clan War doctrine (Petr 2026-11-01 "at to vidi jenom veleni, SL a instuktor"): the row 'clanwar' is readable by
+// can_instruct() only (061), so the others get no data, not just no tab; the HTML is built from content/clanwar.md
+async function loadClanWar() {
+  const { data, error } = await sb.from("content").select("data").eq("id", "clanwar").maybeSingle();
+  const el = document.getElementById("clanwar");
+  if (!el) return;
+  el.innerHTML = error ? (console.error(error), '<p class="err">Doktrína se nenačetla, obnov stránku (F5).</p>')
+    : data && data.data && data.data.html ? `<h2>Clan War</h2><article class="proto">${data.data.html}</article>`
+    : '<p class="note">Doktrína Clan War je jen pro velení, squad leadery a instruktory.</p>';
+}
 
 // phones scroll the nav sideways: keep the current page's link in view (again after #who changes width)
 const navToCurrent = () => {
@@ -2888,7 +2901,8 @@ function render() {
     active = "vycvik"; title = "Basic Combat Training · KIN";
   } else if (p[0] === "doktrina" || p[0] === "vycvik") {
     const tab = p[0] === "vycvik" ? "vycvik" : p[1], sub = p[0] === "vycvik" ? p[1] : p[2];
-    html = viewDoktrina(tab, sub); active = "doktrina"; title = (vybDoc(tab) ? docOf(tab).title : tab === "vycvik" ? (sub === "act" ? "Advanced Combat Training" : "Basic Combat Training") : "SWARM") + " · KIN";
+    html = viewDoktrina(tab, sub); active = "doktrina"; title = (vybDoc(tab) ? docOf(tab).title : tab === "vycvik" ? (sub === "act" ? "Advanced Combat Training" : "Basic Combat Training") : tab === "clanwar" && seesClanWar() ? "Clan War" : "SWARM") + " · KIN";
+    if (tab === "clanwar" && sb && seesClanWar()) setTimeout(loadClanWar);
   } else if (p[0] === "akce" && (!p[1] || /^\d+$/.test(p[1]) && (!state.opsLoaded && !state.evErr || state.ops.some(e => e.id === +p[1])))) {
     state.focusId = p[1] ? +p[1] : null; focusEvent();
     plan = planOf(state.event); if (plan && !plan.swarm) curVariant = state.event.variant || pickVariant(plan, qs);
