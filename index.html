@@ -516,6 +516,73 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .lg-done { min-height: 64px; font: 700 26px/1 var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--ground); background: var(--fr); border: 0; cursor: pointer; }
 .lg-done:hover { background: oklch(0.86 0.095 215 / 0.9); }
 @media (max-width: 720px) { .lg-items li { grid-template-columns: 52px 2.6em minmax(0, 1fr); font-size: 18px; } .lg-items .item { width: 52px; height: 36px; } .lg-items small { grid-column: 3; } }
+/* Palba (Petr 2026-11-01, hub/specs/palba): like Logistika everything big, the gun needs only two numbers */
+#pf-root { display: grid; gap: 36px; margin-top: 18px; }
+.pf-sec { display: grid; gap: 14px; }
+.pf-sec h2 { font: 700 clamp(24px, 1.2vw + 18px, 34px)/1.1 var(--cond); letter-spacing: .04em; text-transform: uppercase; }
+.pf-f { display: grid; gap: 6px; font: 700 15px/1 var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+.pf-f input { min-height: 56px; width: 100%; padding: 8px 14px; font: 600 clamp(22px, 1vw + 16px, 30px)/1.1 var(--cond); letter-spacing: .03em;
+  color: var(--ink); background: var(--slot-bg); border: 1px solid var(--rule); text-transform: none; }
+.pf-f input:focus { outline: 2px solid var(--fr); outline-offset: 0; border-color: var(--fr); }
+.pf-salvos { display: flex; align-items: center; gap: 12px; font: 700 18px/1 var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+.pf-salvos button { width: 56px; height: 56px; font: 700 32px/1 var(--cond); color: var(--ink); background: var(--panel-2); border: 1px solid var(--rule); cursor: pointer; }
+.pf-salvos button:hover { border-color: var(--fr); color: var(--fr); }
+.pf-salvos b { min-width: 1.6em; text-align: center; font: 700 44px/1 var(--cond); color: var(--fr); }
+.pf-send { width: 100%; min-height: 72px; padding: 10px 16px; font: 700 clamp(26px, 1.2vw + 18px, 36px)/1.1 var(--cond); letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ground); background: var(--ho); border: 0; cursor: pointer; box-shadow: 0 14px 34px -12px oklch(0.72 0.19 25 / 0.6); }
+.pf-send:hover { background: oklch(0.78 0.17 30); }
+.pf-send:disabled { color: var(--ink-3); background: var(--panel-2); box-shadow: none; cursor: default; }
+.pf-cover { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--rule-soft); background: var(--slot-bg); }
+.pf-cv { font: 700 clamp(24px, 1vw + 18px, 32px)/1 var(--cond); letter-spacing: .06em; }
+.pf-cv.ok { color: var(--gr); }
+.pf-cv.no { color: var(--ho); }
+.pf-cv-sub { font: 700 17px/1 var(--cond); letter-spacing: .1em; color: var(--ho); }
+.pf-guns { list-style: none; display: grid; gap: 4px; font-size: 17px; color: var(--ink-2); }
+.pf-guns .ok { color: var(--gr); }
+.pf-guns .other { color: var(--ink-3); }
+.pf-mine { list-style: none; display: grid; gap: 6px; }
+.pf-mine li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 12px; border: 1px solid var(--rule-soft); background: var(--slot-bg); font-size: 16px; }
+.pf-mine .pf-cv { font-size: 20px; }
+.pf-mine .pf-cv-sub { font-size: 14px; }
+.pf-mcv { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.pf-st { font: 700 16px/1.2 var(--cond); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
+.pf-mine .open .pf-st { color: var(--un); }
+.pf-sum { flex: 1 1 220px; color: var(--ink-2); overflow-wrap: anywhere; }
+.pf-edit { display: grid; gap: 12px; }
+.pf-seg { margin: 0; }
+.pf-seg button { min-height: 52px; font-size: 18px; }
+.pf-gunline { font-size: 20px; color: var(--ink-2); }
+.pf-gunline b { color: var(--ink); }
+.pf-gunact { display: flex; flex-wrap: wrap; gap: 8px; }
+.pf-go { width: 100%; min-height: 64px; font: 700 26px/1 var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--ground); background: var(--fr); border: 0; cursor: pointer; }
+.pf-go:hover { background: oklch(0.86 0.095 215 / 0.9); }
+.pf-go:disabled { color: var(--ink-3); background: var(--panel-2); cursor: default; }
+#pf-list { display: grid; gap: 12px; }
+.pf-o { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--fr); background: var(--plate-bg); box-shadow: var(--plate-lift); }
+.pf-o.other, .pf-o.done { border-color: var(--rule); opacity: .6; }
+.pf-o header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
+.pf-sq { font: 700 clamp(26px, 1.2vw + 18px, 36px)/1 var(--cond); letter-spacing: .04em; text-transform: uppercase; }
+.pf-o header span { font-size: 18px; color: var(--ink-2); }
+.pf-nums { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.pf-nums div { display: grid; gap: 4px; }
+.pf-nums small { font: 700 15px/1 var(--cond); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.pf-az, .pf-m { font: 700 clamp(72px, 4vw + 48px, 128px)/.9 var(--cond); color: var(--fr); text-shadow: 0 0 24px var(--fr-glow); white-space: nowrap; }
+.pf-nums.warn .pf-az, .pf-nums.warn .pf-m { color: var(--ink-3); text-shadow: none; }
+.pf-warn { font: 700 22px/1 var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--ho); }
+.pf-nogun { font: 700 22px/1.2 var(--cond); letter-spacing: .06em; text-transform: uppercase; color: var(--un); }
+/* a phone stacks the two numbers: side by side "4000 m" at 72 px is wider than half the card */
+@media (max-width: 720px) { .pf-nums { grid-template-columns: 1fr; } .pf-az, .pf-m { font-size: 72px; } }
+/* the radio call over the page for 3 s (P9): the command in English, the Czech line under it */
+.pf-call { position: fixed; z-index: 70; left: 50%; top: 18vh; transform: translateX(-50%); width: min(720px, calc(100vw - 32px)); display: grid; gap: 10px;
+  padding: 22px 24px; text-align: center; background: var(--plate-bg); border: 2px solid var(--fr); box-shadow: 0 30px 80px -20px oklch(0 0 0 / 0.9), 0 0 40px var(--fr-glow);
+  animation: pf-call 3s var(--ease) both; pointer-events: none; }
+.pf-call b { font: 700 clamp(34px, 3vw + 20px, 64px)/1 var(--cond); letter-spacing: .08em; color: var(--fr); }
+.pf-call span { font: 600 clamp(18px, .6vw + 15px, 24px)/1.3 var(--sans); color: var(--ink); }
+.pf-call.sent, .pf-call.incoming { border-color: var(--ho); box-shadow: 0 30px 80px -20px oklch(0 0 0 / 0.9), 0 0 40px oklch(0.72 0.19 25 / 0.5); }
+.pf-call.sent b, .pf-call.incoming b { color: var(--ho); }
+.pf-call.done b { color: var(--gr); }
+@keyframes pf-call { 0% { opacity: 0; transform: translateX(-50%) scale(1.15); } 8%, 85% { opacity: 1; transform: translateX(-50%) scale(1); } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .pf-call { animation: none; } }
 /* the command's right click on a free place: who said Prijdu (Petr 2026-10-30, 051) */
 .pick { position: fixed; z-index: 60; min-width: 220px; max-width: min(320px, calc(100vw - 16px)); max-height: min(420px, calc(100vh - 16px)); overflow: auto;
   padding: 6px; background: var(--plate-bg, var(--panel)); border: 1px solid var(--rule); box-shadow: 0 22px 44px -22px oklch(0 0 0 / 0.8), 0 2px 6px oklch(0 0 0 / 0.5), inset 0 1px 0 oklch(0.86 0.15 205 / 0.35); }
@@ -924,9 +991,10 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
   .bar .wrap { gap: 10px; min-height: 52px; }
   .bar nav a { padding: 8px 6px 7px; font-size: 14px; }
   /* five items since 2026-10-19 (specs/akce-flow A8): the nav gets its own full-width row, nothing hidden sideways
-     (with 8 items it scrolled sideways and "Moje role" kept falling out of view, Viktor #005 #024) */
+     (with 8 items it scrolled sideways and "Moje role" kept falling out of view, Viktor #005 #024); the Commander's
+     seventh item (Podezreli, 056) wraps onto a second row instead of overflowing by 16 px (test_commander_task_kinds) */
   .bar .wrap { flex-wrap: wrap; row-gap: 0; }
-  .bar nav { order: 3; flex: 1 1 100%; flex-wrap: nowrap; justify-content: space-between; margin: 0 -6px 4px; }
+  .bar nav { order: 3; flex: 1 1 100%; flex-wrap: wrap; justify-content: space-between; margin: 0 -6px 4px; }
   .bar nav a { white-space: nowrap; }
   .tabs { flex-wrap: wrap; }  /* four Doktrina tabs since 2026-10-31 (D54): all on a phone, two rows, no sideways scroll (Petr 2026-10-25) */
   .tabs a { padding: 11px 8px 10px; font-size: 14px; letter-spacing: .05em; }
