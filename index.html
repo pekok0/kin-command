@@ -810,7 +810,6 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .tr .act:disabled { color: var(--ink-3); border-style: dashed; cursor: default; }
 .tr .act:disabled:hover { border-color: var(--rule); }
 .tr-full { margin-top: 6px; color: var(--ink-2); }
-.tr-noinstr { color: var(--ho); }
 .tr-who { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 8px; }
 .tr details { margin-top: 12px; }
 #treninky summary { display: inline-flex; align-items: center; cursor: pointer; font: 600 14px/1 var(--cond); letter-spacing: .06em; text-transform: uppercase; padding: 8px 10px 7px; border: 1px solid var(--rule); }
@@ -1105,6 +1104,18 @@ h1 { text-shadow: 0 0 28px oklch(0.86 0.15 205 / 0.18); }
 .bctl { grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
 .bctl .tr { padding: 12px 14px; }
 .bctl .tr h3 { margin: 6px 0 4px; font-size: 18px; }
+.bctl .tr-m { font: 600 17px/1.3 var(--cond); }
+/* Petr 2026-11-01: the instructor's own slot on a BCT card, lit when taken, dashed red when missing */
+.bct-in { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 10px; padding: 8px 10px; border: 1px solid oklch(0.86 0.15 205 / 0.7);
+  background: linear-gradient(90deg, oklch(0.86 0.15 205 / 0.2), oklch(0.86 0.15 205 / 0.04)); box-shadow: inset 3px 0 0 var(--fr), 0 0 22px -8px var(--fr-glow); }
+.bct-in .bct-l { flex: 0 0 100%; font: 700 12px/1 var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--fr); }
+.bct-in img { width: 28px; height: 28px; border-radius: 50%; }
+.bct-in > b { font: 700 19px/1.15 var(--cond); overflow-wrap: anywhere; }
+.bct-in > .act { margin-left: auto; }
+.bct-in.miss { border: 1px dashed oklch(0.72 0.19 25 / 0.7); background: linear-gradient(90deg, oklch(0.72 0.19 25 / 0.14), transparent 60%); box-shadow: inset 3px 0 0 var(--ho); }
+.bct-in.miss > b { color: var(--ho); }
+.bct-in.miss > span { color: var(--ink-2); }
+.bct-in details { flex: 0 0 100%; margin-top: 0; }
 .tr-tbd { color: var(--ink); }
 .leadf { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; margin-top: 10px; }
 .leadf label { display: grid; gap: 4px; font-size: 14px; color: var(--ink-2); }

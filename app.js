@@ -118,7 +118,7 @@ async function loadEvent() {
     // are a list of their own and never state.event
     const [op, tr] = await Promise.all([
       sb.from("events").select("id, strategy_id, doctrine, variant, squad_swarm, squad_support, roster, starts_at, open_to_hosts, leader:members!events_created_by_fkey(name)").eq("status", "open").eq("kind", "operace").order("starts_at"),
-      sb.from("events").select("id, kind, topic, title, description, capacity, invited, starts_at, ends_at, time_tbd, created_by, instructor, leader:members!events_created_by_fkey(name), instr:members!events_instructor_fkey(name), rsvps(user_id, status, members(name, avatar_url, discord_id, guest))")
+      sb.from("events").select("id, kind, topic, title, description, capacity, invited, starts_at, ends_at, time_tbd, created_by, instructor, leader:members!events_created_by_fkey(name), instr:members!events_instructor_fkey(name, avatar_url), rsvps(user_id, status, members(name, avatar_url, discord_id, guest))")
         .eq("status", "open").neq("kind", "operace").order("starts_at"),
     ]);
     if (op.error) throw op.error;
@@ -1161,8 +1161,13 @@ function trainingRow(tr) {
   const rsvp = lead ? [] : bct ? [mine === "yes" ? ["leave", "Odhlásit se"] : ["yes", isTbd(tr) ? "Mám zájem" : "Přijdu"]] : RSVP;
   const slot = !bct || isGuest() || !tr.instructor ? "" : lead || leadsOps() ? `<button type="button" class="act" data-tlead="${id}:drop">${lead ? "Nepovedu" : "Uvolnit instruktora"}</button>` : "";
   const take = bct && !isGuest() && !tr.instructor && canInstruct() ? leadForm(tr) : "";  // 054: taking a card sets its time
-  const leader = bct ? (tr.instructor ? `Instruktor <b>${esc(tr.instr ? tr.instr.name : "?")}</b>` : '<b class="tr-noinstr">Chybí instruktor</b>')
-    : `Vede <b>${esc(tr.leader ? tr.leader.name : "?")}</b>`;
+  // Petr 2026-11-01: a BCT card has no kicker, title or description (the section names it, everyone knows the Sunday rule);
+  // the instructor sits in a slot of his own, lit when taken, dashed red when missing (bct-kapacita 3)
+  const instr = !bct ? "" : tr.instructor
+    ? `<div class="bct-in"><span class="bct-l">Instruktor</span>${tr.instr && tr.instr.avatar_url ? `<img src="${esc(tr.instr.avatar_url)}" alt="" loading="lazy">` : ""}<b>${esc(tr.instr ? tr.instr.name : "?")}</b>${slot}</div>`
+    : `<div class="bct-in miss"><b>Chybí instruktor</b><span>bez něj se BCT nekoná</span>${take}</div>`;
+  const head = bct ? "" : `<p class="tr-k"><span class="ref">${esc(label(KINDS, tr.kind))}</span>${esc(label(TOPICS, tr.topic))}${tr.invited && !isGuest() ? "<span>· Jen pro pozvané</span>" : ""}</p>
+    <h3>${esc(tr.title)}</h3>`;
   // Petr 2026-10-31: the one closing adds anyone from the War Room who was there without signing up (state.tadd, by name
   // from the list that loads when the form opens); the database treats him like the others (bct_done, a guest's promotion)
   const yes = tr.rsvps.filter(r => r.status === "yes" && r.members).map(r => ({ user_id: r.user_id, name: r.members.name, guest: r.members.guest }));
@@ -1172,13 +1177,11 @@ function trainingRow(tr) {
         `<label class="att"><input type="checkbox" name="tatt_${esc(m.user_id)}" checked>${esc(m.name)}${m.guest ? " (host)" : ""}</label>`).join("")}
         <span class="att tadd"><input list="clan-${id}" name="tadd_${id}" placeholder="Dopsat dalšího" autocomplete="off" maxlength="80"><button type="button" class="act" data-tadd="${id}">Přidat</button><datalist id="clan-${id}">${(state.clan || []).filter(m => !was.some(w => w.user_id === m.user_id)).map(m => `<option value="${esc(m.name)}">`).join("")}</datalist></span></fieldset>
       <button type="button" class="act" data-tclose="${id}:closed">Proběhl, uzavřít</button> <button type="button" class="act" data-tclose="${id}:cancelled">Zrušit</button></details>` : "";
-  return `<li class="tr"><p class="tr-k"><span class="ref">${esc(label(KINDS, tr.kind))}</span>${esc(label(TOPICS, tr.topic))}${tr.invited && !isGuest() ? "<span>· Jen pro pozvané</span>" : ""}</p>
-    <h3>${esc(tr.title)}</h3>
-    <p class="tr-m">${isTbd(tr) ? `<b class="tr-tbd">${whenOf(tr)}</b>` : `<time datetime="${esc(tr.starts_at)}">${esc(fmtSpan(tr))}</time>`} · ${leader} · ${isTbd(tr) ? "Zájem" : "Přijde"} <b>${trCount(tr)}</b></p>
-    ${tr.description ? `<p class="tr-d">${esc(tr.description)}</p>` : ""}
-    <div class="rsvp" role="group" aria-label="${esc(tr.title)}: přijdeš?">${rsvp.map(([k, l]) => `<button type="button" class="act" data-trsvp="${id}:${k}" aria-pressed="${mine === k}"${k === "yes" && full ? ` disabled aria-describedby="full-${id}"` : ""}>${l}</button>`).join("")}${slot}</div>${take}
+  return `<li class="tr">${head}
+    <p class="tr-m">${isTbd(tr) ? `<b class="tr-tbd">${whenOf(tr)}</b>` : `<time datetime="${esc(tr.starts_at)}">${esc(fmtSpan(tr))}</time>`}${bct ? "" : ` · Vede <b>${esc(tr.leader ? tr.leader.name : "?")}</b>`} · ${isTbd(tr) ? "Zájem" : "Přijde"} <b>${trCount(tr)}</b></p>
+    ${tr.description && !bct ? `<p class="tr-d">${esc(tr.description)}</p>` : ""}${instr}
+    <div class="rsvp" role="group" aria-label="${esc(tr.title)}: přijdeš?">${rsvp.map(([k, l]) => `<button type="button" class="act" data-trsvp="${id}:${k}" aria-pressed="${mine === k}"${k === "yes" && full ? ` disabled aria-describedby="full-${id}"` : ""}>${l}</button>`).join("")}</div>
     ${full ? `<p class="tr-full" id="full-${id}">Kurz je plný.</p>` : ""}
-    ${bct && !tr.instructor ? '<p class="tr-full">Bez instruktora se BCT nekoná.</p>' : ""}
     ${(isTbd(tr) ? [["yes", "Mají zájem"]] : WHO).map(([k, l]) => by[k].length ? `<p class="tr-who"><b>${l}:</b> ${by[k].map(memberLink).join(" ")}</p>` : "").join("")}
     ${ctl}</li>`;
 }
