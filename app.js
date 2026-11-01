@@ -13,7 +13,8 @@ const hadSession = (() => { try { return Object.keys(localStorage).some(k => /^s
 // never echo the provider's error text from the URL (content spoofing); drop it so a reload is clean
 let state = { me: null, error: urlQs.has("error") ? "Přihlášení přes Discord selhalo." : null, event: null, claims: [], rsvps: [], trainings: [], ops: [], focusId: null, opsLoaded: false, flash: null, trFlash: null, tadd: {}, novaFlash: null, checking: !!sb && (hadSession || FRESH),
   logi: { orders: [], have: new Map(), local: null, timer: null, pick: null, flash: null, err: false, loaded: null, chan: null, html: null, node: null },
-  fire: { guns: [], missions: [], flash: null, err: false, loaded: null, chan: null, tgt: "", note: "", salvos: 1, gunXY: "", pickMap: null, pickWeapon: null, edit: false } };
+  fire: { games: [], slots: [], missions: [], flash: null, err: false, loaded: false, asked: false, chan: null, tgt: "", note: "", salvos: 1,
+    gunXY: "", pickWeapon: null, edit: false, newName: "", newMap: null, endAsk: null } };
 if (urlQs.has("error")) history.replaceState(null, "", location.pathname + location.hash);
 
 const LOGIN_ERR = "Přihlášení se nepovedlo. Zkus to znovu.";
@@ -151,7 +152,6 @@ async function loadEvent() {
   if (state.focusId && !state.ops.some(e => e.id === state.focusId) && (state.opsLoaded || state.evErr)) { state.focusId = null; render(); return; }
   renderRoster();
   renderLogi();  // the menu item and the Logistika page follow the places (an SL badge, a seat in Logi heli)
-  renderFire();  // Palba: the menu item and the page follow the places too (hub/specs/palba)
 }
 // hub/specs/nakupni-seznam: what the members of the open operations unlocked this season; members nest their items so
 // the row cap counts people, not unlocks (like Pokrytí); a member without rows has no Tracker data
@@ -2772,8 +2772,8 @@ document.addEventListener("click", e => {
   else if (d.logiSq) { state.logi.pick = d.logiSq; renderLogi(); }
 });
 
-// ---------- palba (Petr 2026-11-01, hub/specs/palba, 063) ----------
-// the SL or the command calls fire on map coordinates; whoever built a mortar or an artillery piece entered his own
+// ---------- palba (Petr 2026-11-01, hub/specs/palba, 063; v2 games 065) ----------
+// a caller calls fire on map coordinates; whoever built a mortar or an artillery piece entered his own
 // position once and sees only two numbers: the azimuth and the range. The game writes "x103.52, y74.99": one unit is
 // 100 m and y grows to the north (the community calculator wardogs-fire-control, knowledge/taktiky-s2.md 5; the north
 // has that single source, the first live shot confirms it)
@@ -2795,16 +2795,23 @@ const fireReach = (weapon, m) => { const [lo, hi] = FIRE_RANGE[weapon]; return m
 const FIRE_MAPS = [["ozeti", "Ozeti"], ["zestafona", "Zestafona"], ["bakurani", "Bakurani"]];
 const FIRE_WEAPONS = [["mortar", "Mortar"], ["artillery", "Artilerie"]];
 const fireLabel = (list, k) => (list.find(([v]) => v === k) || [k, k])[1];
-// the operation of Logistika (the earliest open one); the SL badge calls fire, anyone signed up shoots (Petr 2026-11-01)
-function fireRole(op) {
-  const mine = op && state.me ? op.claims.filter(c => c.user_id === state.me.user_id) : [];
-  const lead = mine.find(c => c.lead && /^SW-Q\d+-/.test(c.slot_key));
-  return { cmd: !!op && leadsOps(), caller: lead ? slotCard(lead.slot_key) : null, inOp: mine.length > 0 };
-}
-const seesFire = () => { const op = logiOp(), r = fireRole(op); return !!op && (r.cmd || r.inOp); };
-// the open calls count for whoever has a gun and for the command (P6)
-const fireCount = () => fireMyGun() || leadsOps() ? state.fire.missions.filter(x => x.state === "open").length : 0;
-const navFire = () => !state.me || !seesFire() ? [] : [["palba", "Palba", fireCount()]];
+// Palba v2 (Petr 2026-11-01 night, specs/palba, 065): no operation. Any clan member (no guest, no RAID) founds a game
+// with a name and a map and takes one of 30 caller or 10 gun places; a game ends by its founder or the command, or by
+// itself 6 h after the last write in it
+const FIRE_CAP = { caller: 30, gun: 10 };
+const FIRE_QUIET_MS = 6 * 3600e3;
+const fireMember = () => !!state.me && !isGuest() && !isRaid();
+const fireGame = id => state.fire.games.find(g => g.id === id) || null;
+const fireMine = id => state.me && state.fire.slots.find(s => s.game_id === id && s.user_id === state.me.user_id) || null;
+const fireRoleIn = id => (fireMine(id) || {}).role || null;
+// my gun in that game, once it has a position (the numbers need one)
+const fireMyGun = id => { const s = fireMine(id); return s && s.role === "gun" && s.x != null ? s : null; };
+const fireCalls = id => state.fire.missions.filter(x => x.game_id === id);
+// the open calls of the games where I shoot: the menu and the tab title (P11)
+const fireCount = () => state.fire.missions.filter(x => x.state === "open" && fireRoleIn(x.game_id) === "gun").length;
+const navFire = () => fireMember() ? [["palba", "Palba", fireCount()]] : [];
+const fireRoute = () => { const m = location.hash.match(/^#\/palba(?:\/(\d+))?/); return m ? (m[1] ? +m[1] : 0) : null; };
+const fireCanEnd = g => g.created_by === state.me.user_id || leadsOps();
 // the radio call on screen with the spoken line under it, and the recorded voice (Petr 2026-11-01 evening: "Fire
 // Mission Request initiated ... request granted ... Fire mission completed ... chci je namluvene", voice Baldur). The
 // recordings come from tools/palba_hlas.py with the same lines: change both
@@ -2831,81 +2838,94 @@ function fireCallout(kind) {
   state.fire.callTimer = setTimeout(() => el.remove(), 6000);  // as long as the voice speaks
   fireVoice(kind);
 }
-// what changed since the last load: a new call rings for a gun (not the caller's own), the caller hears roger and done
-function fireNotify(op, prev) {
-  const me = state.me.user_id, r = fireRole(op), gun = fireMyGun();
-  const mine = x => r.caller ? x.squad === r.caller : x.created_by === me;
+// what changed since the last load: a new call rings for the guns of its game with a position (not the caller's own),
+// the caller hears granted and completed
+function fireNotify(prev) {
+  const me = state.me.user_id;
   for (const x of state.fire.missions) {
     const was = prev.get(x.id);
-    if (!was && x.state === "open" && gun && x.created_by !== me) fireCallout("incoming");
-    else if (was && was !== x.state && (x.state === "taken" || x.state === "done") && mine(x)) fireCallout(x.state);
+    if (!was && x.state === "open" && fireMyGun(x.game_id) && x.created_by !== me) fireCallout("incoming");
+    else if (was && was !== x.state && (x.state === "taken" || x.state === "done") && x.created_by === me) fireCallout(x.state);
   }
 }
-const fireMyGun = () => state.me && state.fire.guns.find(g => g.user_id === state.me.user_id) || null;
-const fireWho = (op, sq) => sq ? squadName(op, sq) : "Velení";
+let fireSeq = 0;
+// every live game with its places and calls: after login and on every change, so a gun hears a call on any page (P11)
 async function loadFire() {
-  const op = logiOp();
-  if (!sb || !state.me || !op) return renderFire();
-  const [m, g] = await Promise.all([
-    sb.from("fire_missions").select("id, squad, x, y, salvos, note, state, created_by, created_at, taken_by, taken_at, done_at, author:members!fire_missions_created_by_fkey(name), gunner:members!fire_missions_taken_by_fkey(name)").eq("event_id", op.id).order("id"),
-    sb.from("fire_guns").select("user_id, map, weapon, x, y, updated_at, who:members!fire_guns_user_id_fkey(name)").eq("event_id", op.id)]);
-  if (m.error || g.error) { console.error(m.error || g.error); state.fire.err = true; return renderFire(); }
-  const prev = state.fire.loaded === op.id ? new Map(state.fire.missions.map(x => [x.id, x.state])) : null;  // the first load stays quiet
-  Object.assign(state.fire, { missions: m.data, guns: g.data, err: false, loaded: op.id });
-  if (prev) fireNotify(op, prev);
-  if (!state.fire.chan) state.fire.chan = sb.channel("fire").on("postgres_changes", { event: "*", schema: "public", table: "fire_missions" }, () => loadFire())
-    .on("postgres_changes", { event: "*", schema: "public", table: "fire_guns" }, () => loadFire()).subscribe();
+  if (!sb || !fireMember()) return renderFire();
+  const seq = ++fireSeq, F = state.fire;
+  const g = await sb.from("fire_games").select("id, name, map, created_by, created_at, founder:members!fire_games_created_by_fkey(name)")
+    .is("ended_at", null).gt("active_at", new Date(Date.now() - FIRE_QUIET_MS).toISOString());
+  const ids = g.error ? [] : g.data.map(x => x.id);
+  const [s, m] = ids.length ? await Promise.all([
+    sb.from("fire_slots").select("game_id, user_id, role, weapon, x, y, who:members!fire_slots_user_id_fkey(name)").in("game_id", ids),
+    sb.from("fire_missions").select("id, game_id, x, y, salvos, note, state, created_by, created_at, taken_by, taken_at, done_at, author:members!fire_missions_created_by_fkey(name), gunner:members!fire_missions_taken_by_fkey(name)").in("game_id", ids).order("id")])
+    : [{ data: [] }, { data: [] }];
+  if (seq !== fireSeq) return;  // a newer load is on its way
+  const err = g.error || s.error || m.error;
+  if (err) { console.error(err); F.err = true; return renderFire(); }
+  const prev = F.loaded ? new Map(F.missions.map(x => [x.id, x.state])) : null;  // the first load stays quiet
+  Object.assign(F, { games: g.data.slice().sort((a, b) => b.id - a.id), slots: s.data, missions: m.data, err: false, loaded: true });
+  if (prev) fireNotify(prev);
+  if (!F.chan) F.chan = ["fire_games", "fire_slots", "fire_missions"].reduce((c, t) => c.on("postgres_changes", { event: "*", schema: "public", table: t }, () => loadFire()), sb.channel("fire")).subscribe();
   renderFire();
 }
 async function fireWrite(req, failed) {
   const { error } = await req;
-  state.fire.flash = error ? (console.error(error), error.code === "42501" && failed === "take" ? "Už to převzal někdo jiný." : "Nepodařilo se uložit, zkus to znovu.") : null;
+  state.fire.flash = !error ? null : (console.error(error), error.code === "42501" && failed === "take" ? "Už to převzal někdo jiný."
+    : /fire_full/.test(error.message || "") ? "Tahle místa jsou plná." : "Nepodařilo se uložit, zkus to znovu.");
   await loadFire();
   return !error;
 }
-async function fireSend() {
-  const op = logiOp(), r = fireRole(op), t = parseXY(state.fire.tgt);
+async function fireGameNew() {
+  const F = state.fire, name = F.newName.trim();
+  if (!name || !F.newMap) return;
+  const { data, error } = await sb.rpc("fire_game_new", { p_name: name, p_map: F.newMap });
+  if (error) { console.error(error); F.flash = "Hru se nepodařilo založit, zkus to znovu."; return renderFire(); }
+  Object.assign(F, { newName: "", newMap: null, flash: null });
+  await loadFire();
+  location.hash = `#/palba/${data}`;
+}
+const fireGameEnd = id => fireWrite(sb.rpc("fire_game_end", { g: id }));
+const fireJoin = (id, role) => (state.fire.edit = false, fireWrite(sb.from("fire_slots").upsert({ game_id: id, user_id: state.me.user_id, role, weapon: null, x: null, y: null })));
+const fireLeave = id => fireWrite(sb.from("fire_slots").delete().eq("game_id", id).eq("user_id", state.me.user_id));
+const fireMySlot = (id, row) => sb.from("fire_slots").update(row).eq("game_id", id).eq("user_id", state.me.user_id);
+async function fireGunSave(id) {
+  const F = state.fire, xy = parseXY(F.gunXY);
+  if (!xy || !F.pickWeapon) return;
+  if (await fireWrite(fireMySlot(id, { weapon: F.pickWeapon, x: xy.x, y: xy.y }))) { F.edit = false; renderFire(); }
+}
+const fireGunDrop = id => fireWrite(fireMySlot(id, { weapon: null, x: null, y: null }));
+async function fireSend(id) {
+  const F = state.fire, t = parseXY(F.tgt);
   if (!t) return;
-  const ok = await fireWrite(sb.from("fire_missions").insert({ event_id: op.id, squad: r.caller, x: t.x, y: t.y, salvos: state.fire.salvos, note: state.fire.note.trim() }));
-  if (!ok) return;
+  if (!await fireWrite(sb.from("fire_missions").insert({ game_id: id, x: t.x, y: t.y, salvos: F.salvos, note: F.note.trim() }))) return;
   fireCallout("sent");
-  Object.assign(state.fire, { tgt: "", note: "", salvos: 1 });
+  Object.assign(F, { tgt: "", note: "", salvos: 1 });
   const root = document.getElementById("pf-root"); if (root) root.dataset.key = "";  // the next render redraws the empty form
   renderFire();
 }
 function fireSet(id, st) {
-  const op = logiOp(), x = state.fire.missions.find(o => o.id === id), g = fireMyGun();
-  if (st === "again") return fireWrite(sb.from("fire_missions").insert({ event_id: op.id, squad: x.squad, x: x.x, y: x.y, salvos: x.salvos, note: x.note })).then(ok => ok && fireCallout("sent"));
-  const take = st === "taken" ? { gun_map: g.map, gun_weapon: g.weapon, gun_x: g.x, gun_y: g.y } : {};
-  return fireWrite(sb.from("fire_missions").update({ state: st, ...take }).eq("id", id), st === "taken" ? "take" : "");
+  const x = state.fire.missions.find(o => o.id === id);
+  if (st === "again") return fireWrite(sb.from("fire_missions").insert({ game_id: x.game_id, x: x.x, y: x.y, salvos: x.salvos, note: x.note })).then(ok => ok && fireCallout("sent"));
+  return fireWrite(sb.from("fire_missions").update({ state: st }).eq("id", id), st === "taken" ? "take" : "");
 }
-async function fireGunSave() {
-  const op = logiOp(), F = state.fire, xy = parseXY(F.gunXY);
-  if (!xy || !F.pickMap || !F.pickWeapon) return;
-  const ok = await fireWrite(sb.from("fire_guns").upsert({ event_id: op.id, user_id: state.me.user_id, map: F.pickMap, weapon: F.pickWeapon, x: xy.x, y: xy.y }));
-  if (ok) { F.edit = false; renderFire(); }
-}
-const fireGunDrop = () => fireWrite(sb.from("fire_guns").delete().eq("event_id", logiOp().id).eq("user_id", state.me.user_id));
-// the current map = the map of the newest gun position: a gun left on another map is from the last match (P12)
-const fireMap = () => { const g = state.fire.guns.slice().sort((a, b) => b.updated_at.localeCompare(a.updated_at))[0]; return g ? g.map : null; };
-const fireCover = t => state.fire.guns.map(g => { const s = fireSolve(g, t);
-  return { name: g.who ? g.who.name : "?", weapon: g.weapon, map: g.map, m: s.m, reach: fireReach(g.weapon, s.m), current: g.map === fireMap() }; });
-// out of reach only warns: the ranges are measured by players, not datamined (P5)
+// the guns of the game with a position: who reaches the target (P9)
+const fireCover = (id, t) => state.fire.slots.filter(s => s.game_id === id && s.role === "gun" && s.x != null).map(s => { const r = fireSolve(s, t);
+  return { name: s.who ? s.who.name : "?", weapon: s.weapon, m: r.m, reach: fireReach(s.weapon, r.m) }; });
+// out of reach only warns: the ranges are measured by players, not datamined (P6)
 const fireWarn = (weapon, reach) => reach === "ok" ? "" : reach === "near" && weapon === "mortar" ? "Možná mrtvá zóna" : "Mimo dostřel";
-function fireCoverHead(t) {
-  const cur = fireCover(t).filter(g => g.current), k = cur.filter(g => g.reach === "ok").length;
-  return k ? `<b class="pf-cv ok">DOSTŘELÍ ${k} ZE ${cur.length}</b>` : '<b class="pf-cv no">NIKDO NEDOSTŘELÍ</b><span class="pf-cv-sub">PODPORA NEPŘIJDE</span>';
+function fireCoverHead(id, t) {
+  const cov = fireCover(id, t), k = cov.filter(g => g.reach === "ok").length;
+  return k ? `<b class="pf-cv ok">DOSTŘELÍ ${k} ZE ${cov.length}</b>` : '<b class="pf-cv no">NIKDO NEDOSTŘELÍ</b><span class="pf-cv-sub">PODPORA NEPŘIJDE</span>';
 }
-function fireCoverHtml(t) {
+function fireCoverHtml(id, t) {
   if (!t) return "";
-  const row = g => `<li class="${g.current ? g.reach : "other"}">${esc(g.name)} · ${fireLabel(FIRE_WEAPONS, g.weapon)} · ${g.current
-    ? `${g.m} m · ${fireWarn(g.weapon, g.reach).toLowerCase() || "v dostřelu"}` : `${fireLabel(FIRE_MAPS, g.map)}, jiná mapa`}</li>`;
-  const cov = fireCover(t);
-  return `<div class="pf-cover">${fireCoverHead(t)}${cov.length ? `<ul class="pf-guns">${cov.map(row).join("")}</ul>` : ""}</div>`;
+  const cov = fireCover(id, t), row = g => `<li class="${g.reach}">${esc(g.name)} · ${fireLabel(FIRE_WEAPONS, g.weapon)} · ${g.m} m · ${fireWarn(g.weapon, g.reach).toLowerCase() || "v dostřelu"}</li>`;
+  return `<div class="pf-cover">${fireCoverHead(id, t)}${cov.length ? `<ul class="pf-guns">${cov.map(row).join("")}</ul>` : ""}</div>`;
 }
 // the two numbers for my gun, or why there are none
 function fireNumbers(x) {
-  const g = fireMyGun();
+  const g = fireMyGun(x.game_id);
   if (!g) return '<p class="pf-nogun">Zadej postavení zbraně</p>';
   const s = fireSolve(g, x), warn = fireWarn(g.weapon, fireReach(g.weapon, s.m));
   return `<div class="pf-nums${warn ? " warn" : ""}"><div><small>Azimut</small><b class="pf-az">${s.az}°</b></div><div><small>Range</small><b class="pf-m">${s.m} m</b></div></div>${warn ? `<p class="pf-warn">${warn}</p>` : ""}`;
@@ -2913,63 +2933,89 @@ function fireNumbers(x) {
 const fireState = x => x.state === "open" ? `Čeká na střelce · ${ago(x.created_at)}` : x.state === "taken" ? `Převzal ${esc(x.gunner ? x.gunner.name : "?")} · ${ago(x.taken_at)}`
   : x.state === "done" ? `Hotovo · ${esc(x.gunner ? x.gunner.name : "?")} · ${ago(x.done_at)}` : "Zrušeno";
 const fireTarget = x => `x${x.x}, y${x.y} · ${plural(x.salvos, "salva", "salvy", "salv")}${x.note ? ` · ${esc(x.note)}` : ""}`;
-// the caller's own calls: his squad's, the command's own when it has none
-function fireMineHtml(op) {
-  const r = fireRole(op), mine = state.fire.missions.filter(x => r.caller ? x.squad === r.caller : x.created_by === state.me.user_id).slice().reverse().slice(0, 5);
-  return mine.length ? `<ul class="pf-mine">${mine.map(x => `<li class="${x.state}"><span class="pf-st">${fireState(x)}</span>${x.state === "open" ? `<span class="pf-mcv">${fireCoverHead(x)}</span>` : ""}<span class="pf-sum">${fireTarget(x)}</span>
+function fireMineHtml(id) {
+  const mine = fireCalls(id).filter(x => x.created_by === state.me.user_id).slice().reverse().slice(0, 5);
+  return mine.length ? `<ul class="pf-mine">${mine.map(x => `<li class="${x.state}"><span class="pf-st">${fireState(x)}</span>${x.state === "open" ? `<span class="pf-mcv">${fireCoverHead(id, x)}</span>` : ""}<span class="pf-sum">${fireTarget(x)}</span>
     <button type="button" class="act" data-fire-again="${x.id}">Znovu</button>${x.state === "open" || x.state === "taken" ? `<button type="button" class="act" data-fire-cancel="${x.id}">Zrušit</button>` : ""}</li>`).join("")}</ul>` : "";
 }
-function fireGunHtml() {
-  const g = fireMyGun();
-  return g ? `<p class="pf-gunline"><b>${fireLabel(FIRE_WEAPONS, g.weapon)}</b> · ${fireLabel(FIRE_MAPS, g.map)} · x${g.x}, y${g.y}</p>
+function fireGunHtml(id) {
+  const g = fireMyGun(id);
+  return g ? `<p class="pf-gunline"><b>${fireLabel(FIRE_WEAPONS, g.weapon)}</b> · x${g.x}, y${g.y}</p>
     <div class="pf-gunact"><button type="button" class="act" data-fire-gun-edit>Změnit</button><button type="button" class="act" data-fire-gun-drop>Zbraň pryč</button></div>` : "";
 }
-// open calls first (the oldest on top), then the taken ones, then the last few done
-function fireListHtml(op) {
-  const all = state.fire.missions, me = state.me.user_id;
+// open calls first (the oldest on top), then the taken ones, then the last few done; a watcher sees them without buttons
+function fireListHtml(id) {
+  const all = fireCalls(id), me = state.me.user_id, shoots = fireRoleIn(id) === "gun";
   const list = [...all.filter(x => x.state === "open"), ...all.filter(x => x.state === "taken"), ...all.filter(x => x.state === "done").slice(-5).reverse()];
-  const card = x => `<article class="pf-o ${x.state}${x.state === "taken" && x.taken_by !== me ? " other" : ""}"><header><b class="pf-sq">${esc(fireWho(op, x.squad))}</b><span>${esc(x.author ? x.author.name : "?")} · ${ago(x.created_at)}</span></header>
-    ${x.state === "done" ? "" : fireNumbers(x)}<p class="pf-sum">${fireTarget(x)}</p>
-    ${x.state === "open" ? `<button type="button" class="pf-go" data-fire-take="${x.id}"${fireMyGun() ? "" : " disabled"}>Potvrdit</button>`
+  const card = x => `<article class="pf-o ${x.state}${x.state === "taken" && x.taken_by !== me ? " other" : ""}"><header><b class="pf-sq">${esc(x.author ? x.author.name : "?")}</b><span>${ago(x.created_at)}</span></header>
+    ${shoots && x.state !== "done" ? fireNumbers(x) : ""}<p class="pf-sum">${fireTarget(x)}</p>
+    ${shoots && x.state === "open" ? `<button type="button" class="pf-go" data-fire-take="${x.id}"${fireMyGun(id) ? "" : " disabled"}>Potvrdit</button>`
       : x.state === "taken" && x.taken_by === me ? `<button type="button" class="pf-go" data-fire-done="${x.id}">Hotovo</button>` : `<p class="pf-st">${fireState(x)}</p>`}</article>`;
   return list.length ? list.map(card).join("") : '<p class="note">Žádná palba.</p>';
 }
-const fireKey = op => { const r = fireRole(op); return op ? `${op.id}|${r.cmd}|${r.caller}|${r.inOp}|${!!fireMyGun()}|${state.fire.edit}` : ""; };
-function viewPalba() {
-  const op = logiOp(), head = '<header class="unit-head"><div><h1>Palba</h1></div></header>', F = state.fire;
-  if (!op) return head + `<p class="note">${state.opsLoaded ? "Teď není otevřená žádná operace." : "Načítám…"}</p>`;
-  const r = fireRole(op), gun = fireMyGun(), caller = r.cmd || !!r.caller;
-  if (!(r.cmd || r.inOp)) return head + '<p class="note">Palba je pro členy zapsané v téhle operaci a pro velení.</p>';
-  const msg = F.flash ? `<p class="err" role="alert">${esc(F.flash)}</p>` : F.err ? '<p class="err" role="alert">Palba se nenačetla, zkus stránku načíst znovu.</p>' : "";
-  const call = caller ? `<section class="pf-sec" id="pf-call-sec"><h2>Zavolat palbu · ${esc(fireWho(op, r.caller))}</h2>
+function fireGamesHtml() {
+  const F = state.fire;
+  return F.games.length ? F.games.map(g => { const n = r => F.slots.filter(s => s.game_id === g.id && s.role === r).length;
+    return `<a class="pf-game" href="#/palba/${g.id}"><b>${esc(g.name)}</b><span>${fireLabel(FIRE_MAPS, g.map)} · ${esc(g.founder ? g.founder.name : "?")}</span>
+      <span>Objednávači ${n("caller")}/${FIRE_CAP.caller} · Střelci ${n("gun")}/${FIRE_CAP.gun}</span>${fireMine(g.id) ? "<em>jsi v ní</em>" : ""}</a>`; }).join("")
+    : '<p class="note">Teď neběží žádná hra. Založ první.</p>';
+}
+// the two sides of a game: who is in, my way in, out or across (one place a member, P3)
+function fireSlotsHtml(id) {
+  const mine = fireRoleIn(id), all = state.fire.slots.filter(s => s.game_id === id);
+  const side = (role, head, go) => { const ss = all.filter(s => s.role === role);
+    const btn = mine === role ? "" : ss.length >= FIRE_CAP[role] ? '<span class="pf-full">Plno</span>' : `<button type="button" class="act" data-fire-join="${role}">${go}</button>`;
+    const who = s => `<li>${esc(s.who ? s.who.name : "?")}${role === "gun" ? ` · ${s.x != null ? fireLabel(FIRE_WEAPONS, s.weapon) : "bez postavení"}` : ""}</li>`;
+    return `<div class="pf-place"><h3>${head} ${ss.length}/${FIRE_CAP[role]}</h3>${btn}${ss.length ? `<ul>${ss.map(who).join("")}</ul>` : ""}</div>`; };
+  return `<div class="pf-places">${side("caller", "Objednávači", "Objednávat")}${side("gun", "Střelci", "Střílet")}</div>${mine ? '<button type="button" class="act" data-fire-leave>Odejít ze hry</button>' : ""}`;
+}
+const fireKey = id => { const F = state.fire, g = id && fireGame(id);
+  return !F.loaded ? "wait" : !id ? "list" : !g ? `gone|${id}` : `${id}|${fireRoleIn(id)}|${!!fireMyGun(id)}|${F.edit}|${F.endAsk === id}`; };
+const fireMsg = () => { const F = state.fire; return F.flash ? `<p class="err" role="alert">${esc(F.flash)}</p>` : F.err ? '<p class="err" role="alert">Palba se nenačetla, zkus stránku načíst znovu.</p>' : ""; };
+function viewPalba(id) {
+  const F = state.fire, head = (h, sub) => `<header class="unit-head"><div><h1>${h}</h1>${sub ? `<p>${sub}</p>` : ""}</div></header>`;
+  if (!fireMember()) return head("Palba") + '<p class="note">Palba je pro členy klanu.</p>';
+  if (!F.loaded) return head("Palba") + `<p class="note">${F.err ? "Palba se nenačetla, zkus stránku načíst znovu." : "Načítám…"}</p>`;
+  if (!id) return `${head("Palba", "Mortar a artilerie na souřadnice. Založ hru a pošli odkaz do Discordu.")}<div id="pf-root" data-key="list"><div id="pf-msg">${fireMsg()}</div>
+    <section class="pf-sec"><h2>Hry</h2><div id="pf-games" class="pf-games">${fireGamesHtml()}</div></section>
+    <section class="pf-sec"><h2>Založit hru</h2><label class="pf-f">Název<input id="pf-name" maxlength="40" autocomplete="off" value="${esc(F.newName)}"></label>
+      <div class="pf-seg vbar seg" role="group" aria-label="Mapa">${FIRE_MAPS.map(([k, l]) => `<button type="button" data-fire-newmap="${k}" aria-pressed="${F.newMap === k}">${l}</button>`).join("")}</div>
+      <button type="button" class="pf-go" data-fire-new${F.newName.trim() && F.newMap ? "" : " disabled"}>Založit hru</button></section></div>`;
+  const g = fireGame(id);
+  if (!g) return `${head("Palba")}<div id="pf-root" data-key="${fireKey(id)}"><p class="note">Hra skončila.</p><p><a class="act" href="#/palba">Zpět na hry</a></p></div>`;
+  const role = fireRoleIn(id), gun = fireMyGun(id);
+  const call = role === "caller" ? `<section class="pf-sec" id="pf-call-sec"><h2>Zavolat palbu</h2>
     <label class="pf-f">Cíl<input id="pf-tgt" autocomplete="off" spellcheck="false" placeholder="x103.52, y74.99" value="${esc(F.tgt)}"></label>
-    <div id="pf-cover">${fireCoverHtml(parseXY(F.tgt))}</div>
+    <div id="pf-cover">${fireCoverHtml(id, parseXY(F.tgt))}</div>
     <div class="pf-salvos"><span>Salvy</span><button type="button" data-fire-salvo="-1" aria-label="Méně salv">−</button><b id="pf-salvos-n">${F.salvos}</b><button type="button" data-fire-salvo="1" aria-label="Více salv">+</button></div>
     <label class="pf-f">Poznámka<input id="pf-note" maxlength="140" autocomplete="off" value="${esc(F.note)}"></label>
     <button type="button" class="pf-send" data-fire-send${parseXY(F.tgt) ? "" : " disabled"}>Palba!</button>
-    <div id="pf-mine">${fireMineHtml(op)}</div></section>` : "";
-  const editing = F.edit || (!gun && !caller);  // who calls fire (SL, command) opens the gun form only when he shoots
-  const editor = editing ? `<div class="pf-edit"><div class="pf-seg vbar seg" role="group" aria-label="Mapa">${FIRE_MAPS.map(([k, l]) => `<button type="button" data-fire-map="${k}" aria-pressed="${F.pickMap === k}">${l}</button>`).join("")}</div>
-      <div class="pf-seg vbar seg" role="group" aria-label="Zbraň">${FIRE_WEAPONS.map(([k, l]) => `<button type="button" data-fire-weapon="${k}" aria-pressed="${F.pickWeapon === k}">${l}</button>`).join("")}</div>
+    <div id="pf-mine">${fireMineHtml(id)}</div></section>` : "";
+  const editing = role === "gun" && (F.edit || !gun);
+  const editor = editing ? `<div class="pf-edit"><div class="pf-seg vbar seg" role="group" aria-label="Zbraň">${FIRE_WEAPONS.map(([k, l]) => `<button type="button" data-fire-weapon="${k}" aria-pressed="${F.pickWeapon === k}">${l}</button>`).join("")}</div>
       <label class="pf-f">Moje souřadnice<input id="pf-gun-xy" autocomplete="off" spellcheck="false" placeholder="x103.52, y74.99" value="${esc(F.gunXY)}"></label>
-      <button type="button" class="pf-go" data-fire-gun-save${parseXY(F.gunXY) && F.pickMap && F.pickWeapon ? "" : " disabled"}>Uložit postavení</button></div>`
-    : !gun ? '<button type="button" class="act" data-fire-gun-edit>Mám zbraň</button>' : "";
-  const list = gun || !r.caller ? `<section class="pf-sec" id="pf-list-sec"><h2>Objednávky palby</h2><div id="pf-list">${fireListHtml(op)}</div></section>` : "";
-  return `${head}<div id="pf-root" data-key="${esc(fireKey(op))}"><div id="pf-msg">${msg}</div>${call}
-    <section class="pf-sec" id="pf-gun-sec"><h2>Moje zbraň</h2>${editor}<div id="pf-gun">${editing ? "" : fireGunHtml()}</div></section>${list}</div>`;
+      <button type="button" class="pf-go" data-fire-gun-save${parseXY(F.gunXY) && F.pickWeapon ? "" : " disabled"}>Uložit postavení</button></div>` : "";
+  const gunSec = role === "gun" ? `<section class="pf-sec" id="pf-gun-sec"><h2>Moje zbraň</h2>${editor}<div id="pf-gun">${editing ? "" : fireGunHtml(id)}</div></section>` : "";
+  const list = role !== "caller" ? `<section class="pf-sec" id="pf-list-sec"><h2>Objednávky palby</h2><div id="pf-list">${fireListHtml(id)}</div></section>` : "";
+  const end = fireCanEnd(g) ? `<button type="button" class="act" data-fire-end>${F.endAsk === id ? "Opravdu ukončit hru?" : "Ukončit hru"}</button>` : "";
+  return `${head(esc(g.name), `${fireLabel(FIRE_MAPS, g.map)} · založil ${esc(g.founder ? g.founder.name : "?")}`)}<div id="pf-root" data-key="${esc(fireKey(id))}"><div id="pf-msg">${fireMsg()}</div>
+    <section class="pf-sec"><h2>Místa</h2><div id="pf-slots">${fireSlotsHtml(id)}</div>${end}</section>${call}${gunSec}${list}<p><a href="#/palba">Všechny hry</a></p></div>`;
 }
-// a realtime change redraws only the live parts: the SL may be typing the target (the text and the cursor stay)
+// a realtime change redraws only the live parts: the caller may be typing the target (the text and the cursor stay)
 function renderFire() {
-  if (!/^#\/palba/.test(location.hash)) return renderNav(navActive);
-  const op = logiOp(), root = document.getElementById("pf-root"), F = state.fire;
-  if (!root || root.dataset.key !== fireKey(op)) $app.innerHTML = viewPalba();
+  const id = fireRoute();
+  if (id === null) return renderNav(navActive);
+  const root = document.getElementById("pf-root"), F = state.fire;
+  if (!root || root.dataset.key !== fireKey(id)) $app.innerHTML = viewPalba(id);
   else {
-    const set = (id, html) => { const el = document.getElementById(id); if (el && el.innerHTML !== html) el.innerHTML = html; };
-    set("pf-msg", F.flash ? `<p class="err" role="alert">${esc(F.flash)}</p>` : F.err ? '<p class="err" role="alert">Palba se nenačetla, zkus stránku načíst znovu.</p>' : "");
-    set("pf-cover", fireCoverHtml(parseXY(F.tgt)));
-    set("pf-mine", fireMineHtml(op));
-    if (!F.edit) set("pf-gun", fireGunHtml());
-    set("pf-list", fireListHtml(op));
+    const set = (el, html) => { const e = document.getElementById(el); if (e && e.innerHTML !== html) e.innerHTML = html; };
+    set("pf-msg", fireMsg());
+    if (!id) set("pf-games", fireGamesHtml());
+    else {
+      set("pf-slots", fireSlotsHtml(id)); set("pf-cover", fireCoverHtml(id, parseXY(F.tgt))); set("pf-mine", fireMineHtml(id));
+      if (!F.edit) set("pf-gun", fireGunHtml(id));
+      set("pf-list", fireListHtml(id));
+    }
   }
   const n = fireCount();
   document.title = n ? `(${n}) Palba · KIN` : "Palba · KIN";
@@ -2979,29 +3025,37 @@ document.addEventListener("input", e => {
   const F = state.fire, id = e.target.id;
   if (id === "pf-tgt") { F.tgt = e.target.value; const b = document.querySelector("[data-fire-send]"), t = parseXY(F.tgt);
     if (b) b.disabled = !t;
-    document.getElementById("pf-cover").innerHTML = fireCoverHtml(t); }
+    document.getElementById("pf-cover").innerHTML = fireCoverHtml(fireRoute(), t); }
   else if (id === "pf-note") F.note = e.target.value;
   else if (id === "pf-gun-xy") { F.gunXY = e.target.value; fireGunReady(); }
+  else if (id === "pf-name") { F.newName = e.target.value; fireNewReady(); }
 });
-const fireGunReady = () => { const F = state.fire, b = document.querySelector("[data-fire-gun-save]"); if (b) b.disabled = !(parseXY(F.gunXY) && F.pickMap && F.pickWeapon); };
+const fireGunReady = () => { const F = state.fire, b = document.querySelector("[data-fire-gun-save]"); if (b) b.disabled = !(parseXY(F.gunXY) && F.pickWeapon); };
+const fireNewReady = () => { const F = state.fire, b = document.querySelector("[data-fire-new]"); if (b) b.disabled = !(F.newName.trim() && F.newMap); };
 document.addEventListener("click", e => {
-  const b = e.target.closest?.("[data-fire-send],[data-fire-salvo],[data-fire-take],[data-fire-done],[data-fire-again],[data-fire-cancel],[data-fire-map],[data-fire-weapon],[data-fire-gun-save],[data-fire-gun-edit],[data-fire-gun-drop]");
+  const b = e.target.closest?.("[data-fire-send],[data-fire-salvo],[data-fire-take],[data-fire-done],[data-fire-again],[data-fire-cancel],[data-fire-weapon],[data-fire-gun-save],[data-fire-gun-edit],[data-fire-gun-drop],[data-fire-new],[data-fire-newmap],[data-fire-join],[data-fire-leave],[data-fire-end]");
   if (!b || b.disabled) return;
-  const d = b.dataset, F = state.fire;
-  if (d.fireSend !== undefined) fireSend();
+  const d = b.dataset, F = state.fire, id = fireRoute();
+  if (d.fireSend !== undefined) fireSend(id);
   else if (d.fireSalvo) { F.salvos = Math.min(20, Math.max(1, F.salvos + +d.fireSalvo)); document.getElementById("pf-salvos-n").textContent = F.salvos; }
   else if (d.fireTake) fireSet(+d.fireTake, "taken");
   else if (d.fireDone) fireSet(+d.fireDone, "done");
   else if (d.fireAgain) fireSet(+d.fireAgain, "again");
   else if (d.fireCancel) fireSet(+d.fireCancel, "cancelled");
-  else if (d.fireMap || d.fireWeapon) {
-    const k = d.fireMap ? "pickMap" : "pickWeapon"; F[k] = d.fireMap || d.fireWeapon;
+  else if (d.fireWeapon || d.fireNewmap) {
+    if (d.fireWeapon) F.pickWeapon = d.fireWeapon; else F.newMap = d.fireNewmap;
     b.parentElement.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
-    fireGunReady();
+    fireGunReady(); fireNewReady();
   }
-  else if (d.fireGunSave !== undefined) fireGunSave();
-  else if (d.fireGunDrop !== undefined) fireGunDrop();
-  else if (d.fireGunEdit !== undefined) { const g = fireMyGun(); Object.assign(F, { edit: true, ...(g && { pickMap: g.map, pickWeapon: g.weapon, gunXY: `x${g.x}, y${g.y}` }) }); renderFire(); }
+  else if (d.fireGunSave !== undefined) fireGunSave(id);
+  else if (d.fireGunDrop !== undefined) fireGunDrop(id);
+  else if (d.fireGunEdit !== undefined) { const g = fireMyGun(id); Object.assign(F, { edit: true, ...(g && { pickWeapon: g.weapon, gunXY: `x${g.x}, y${g.y}` }) }); renderFire(); }
+  else if (d.fireNew !== undefined) fireGameNew();
+  else if (d.fireJoin) fireJoin(id, d.fireJoin);
+  else if (d.fireLeave !== undefined) fireLeave(id);
+  else if (d.fireEnd !== undefined) {  // a second click confirms: ending is for everyone in the game and cannot be undone
+    if (F.endAsk === id) { F.endAsk = null; fireGameEnd(id); } else { F.endAsk = id; renderFire(); }
+  }
 });
 
 // the Commander's tasks from the KIN kernel (specs/ukoly-velitele, 037): what waits for him first, newest first; "Odbav ty"
@@ -3157,7 +3211,7 @@ function render() {
     html = viewLogistika(); active = "logistika"; title = "Logistika · KIN";
     if (sb && state.me) setTimeout(loadLogi);
   } else if (p[0] === "palba") {
-    html = viewPalba(); active = "palba"; title = "Palba · KIN";
+    html = viewPalba(fireRoute()); active = "palba"; title = "Palba · KIN";
     if (sb && state.me) setTimeout(loadFire);
   } else if (p[0] === "moje-ukoly") {
     html = viewCmdTasks(); active = "moje-ukoly"; title = "Úkoly · KIN";
@@ -3173,6 +3227,7 @@ function render() {
   }
   else html = viewHome();
   if (sb && state.me && state.me.is_commander && !state.cmdAsked) { state.cmdAsked = true; setTimeout(() => loadCmdTasks(true)); }
+  if (sb && fireMember() && !state.fire.asked) { state.fire.asked = true; setTimeout(loadFire); }  // Palba v2 P11: a gun hears calls on any page
   $app.innerHTML = html;
   renderDrawers();
   document.title = title;

@@ -520,6 +520,17 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 #pf-root { display: grid; gap: 36px; margin-top: 18px; }
 .pf-sec { display: grid; gap: 14px; }
 .pf-sec h2 { font: 700 clamp(24px, 1.2vw + 18px, 34px)/1.1 var(--cond); letter-spacing: .04em; text-transform: uppercase; }
+.pf-games { display: grid; gap: 10px; }
+.pf-game { display: grid; gap: 4px; min-height: 64px; padding: 14px 16px; border: 1px solid var(--rule); background: var(--slot-bg); color: var(--ink-2); text-decoration: none; font-size: 17px; }
+.pf-game:hover { border-color: var(--fr); }
+.pf-game b { font: 700 clamp(24px, 1vw + 18px, 32px)/1.1 var(--cond); letter-spacing: .04em; color: var(--ink); overflow-wrap: anywhere; }
+.pf-game em { font: 700 15px/1 var(--cond); font-style: normal; letter-spacing: .1em; text-transform: uppercase; color: var(--fr); }
+.pf-places { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.pf-place { display: grid; align-content: start; gap: 8px; padding: 12px 14px; border: 1px solid var(--rule-soft); background: var(--slot-bg); }
+.pf-place h3 { font: 700 20px/1 var(--cond); letter-spacing: .08em; text-transform: uppercase; }
+.pf-place ul { list-style: none; display: grid; gap: 2px; font-size: 16px; color: var(--ink-2); overflow-wrap: anywhere; }
+.pf-full { font: 700 16px/1 var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--ho); }
+@media (max-width: 720px) { .pf-places { grid-template-columns: 1fr; } }
 .pf-f { display: grid; gap: 6px; font: 700 15px/1 var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
 .pf-f input { min-height: 56px; width: 100%; padding: 8px 14px; font: 600 clamp(22px, 1vw + 16px, 30px)/1.1 var(--cond); letter-spacing: .03em;
   color: var(--ink); background: var(--slot-bg); border: 1px solid var(--rule); text-transform: none; }
