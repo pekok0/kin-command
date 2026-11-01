@@ -39,6 +39,8 @@ async function errText(e) {
 const saveErr = e => { console.error(e); return "Nepodařilo se uložit, zkus to znovu."; };
 // 049 (Petr 2026-10-30, hub/specs/hoste-bct): a guest proposed for promotion sees only BCT and his own profile
 const isGuest = () => !!(state.me && state.me.guest);
+// 059 (Petr 2026-11-01, hub/specs/raid): RAID see only the operations and their lobby: no training, kit, doctrine, profile
+const isRaid = () => !!(state.me && state.me.is_raid);
 
 async function onAuth(session) {
   // a queued event can carry a session that an earlier onAuth already signed out (Host refused): treat it as
@@ -64,16 +66,16 @@ async function onAuth(session) {
     try { back = sessionStorage.getItem(BACK); sessionStorage.removeItem(BACK); } catch { /* storage blocked */ }
     if (back && back !== location.hash) location.hash = back;
   }
-  const { data, error } = await sb.from("members").select("user_id, discord_id, name, avatar_url, is_commander, is_officer, is_sl, is_instructor, rank, guest")
+  const { data, error } = await sb.from("members").select("user_id, discord_id, name, avatar_url, is_commander, is_officer, is_sl, is_instructor, rank, guest, is_raid")
     .eq("user_id", session.user.id).maybeSingle();
   if (error) throw error;
   if (!data) { state.error = "Nejsi ověřený člen KIN. Přihlas se znovu."; await sb.auth.signOut(); return; }
   state.me = data; state.error = null;
   // unlocks need the seasons from the content, so they load after it (both at once = haveSet never set, Viktor UAT)
-  if (!was) loadContent(data.guest ? "host" : "hub")
-    .then(() => Promise.all([loadUnlocks().catch(e => { console.error(e); haveSet = null; }), loadTracker().catch(e => console.error(e))]))
+  if (!was) loadContent(data.guest ? "host" : data.is_raid ? "raid" : "hub")
+    .then(() => isRaid() || Promise.all([loadUnlocks().catch(e => { console.error(e); haveSet = null; }), loadTracker().catch(e => console.error(e))]))
     // history pages and loadout cards wait for the login to know what to load / which boxes to tick
-    .then(() => { if (onHistRoute() || onCardRoute()) { const y = scrollY; render(); scrollTo(0, y); } autoSyncTracker(); },
+    .then(() => { if (isRaid()) return; if (onHistRoute() || onCardRoute()) { const y = scrollY; render(); scrollTo(0, y); } autoSyncTracker(); },
       () => { state.error = "Obsah se nenačetl. Zkus stránku načíst znovu."; state.checking = false; renderWho(); render(); });
   renderWho(); loadEvent(); subscribe();
 }
@@ -82,7 +84,8 @@ const onHistRoute = () => HIST.includes(location.hash.replace(/^#\/?/, "").split
 
 function renderWho() {
   document.getElementById("who").innerHTML = !sb ? '<span class="err">Přihlášení se nenačetlo</span>' : state.me
-    ? `<a class="mlink" href="#/hrac/${encodeURIComponent(state.me.discord_id)}" title="Můj profil"><img src="${esc(state.me.avatar_url)}" alt=""><span class="nm">${esc(state.me.name)}</span></a><button type="button" class="act" data-logout>Odhlásit</button>`
+    ? `${isRaid() ? `<span class="mlink"><img src="${esc(state.me.avatar_url)}" alt=""><span class="nm">${esc(state.me.name)}</span></span>`  // 059: no profile
+      : `<a class="mlink" href="#/hrac/${encodeURIComponent(state.me.discord_id)}" title="Můj profil"><img src="${esc(state.me.avatar_url)}" alt=""><span class="nm">${esc(state.me.name)}</span></a>`}<button type="button" class="act" data-logout>Odhlásit</button>`
     : `${state.error && D.strategies ? `<span class="err">${esc(state.error)}</span>` : ""}<button type="button" class="act" data-login>Přihlásit<span class="long"> přes Discord</span></button>`;
   navToCurrent();
 }
@@ -123,7 +126,7 @@ async function loadEvent() {
     // ponytail: two small queries per open operation (a handful at most); one `in` query when there are many
     const ops = await Promise.all((op.data || []).map(async ev => {
       const [cl, rs] = await Promise.all([
-        sb.from("claims").select("slot_key, slot_label, user_id, lead, no_cash, members(name, avatar_url, discord_id)").eq("event_id", ev.id),
+        sb.from("claims").select("slot_key, slot_label, user_id, lead, no_cash, members(name, avatar_url, discord_id, is_raid)").eq("event_id", ev.id),
         sb.from("rsvps").select("user_id, status, members(name, avatar_url, discord_id)").eq("event_id", ev.id),
       ]);
       if (cl.error) throw cl.error;
@@ -131,7 +134,7 @@ async function loadEvent() {
       return { ...ev, claims: cl.data, rsvps: rs.data };
     }));
     // the shopping list's unlocks fail on their own: the roster stays usable (null = the block says it did not load)
-    const [have, trks] = await Promise.all([loadLobbyHave(ops).catch(e => (console.error(e), null)), loadLobbyTrk(ops).catch(e => (console.error(e), null))]);
+    const [have, trks] = isRaid() ? [null, null] : await Promise.all([loadLobbyHave(ops).catch(e => (console.error(e), null)), loadLobbyTrk(ops).catch(e => (console.error(e), null))]);
     // swap the whole state at once, and only for the newest load (a slower old response must not win)
     if (seq !== loadSeq) return;
     state.ops = ops; state.opsLoaded = true; state.trainings = tr.data; state.evErr = false; state.lobbyHave = have; state.lobbyTrk = trks;
@@ -324,7 +327,7 @@ function slotRow(x, c, sq) {
     ? `<button type="button" class="kick" data-unclaim="${esc(x.key)}" aria-label="${mine ? "Odhlásit se z místa" : `Odhlásit ${esc(c.members.name)}`}" title="${mine ? "Odhlásit se z místa" : ""}">${cross()}</button>` : "";
   const drag = lift ? ` data-drag="${esc(c.user_id)}"` : sqd && !c && !locked && (cmd || !need) ? " data-free" : "";
   // Petr 2026-10-30: how the player's kit stands for the role of his place, a click opens it with his data
-  const rc = c && state.lobbyHave && isSq(state.event) && slotClass(x);
+  const rc = c && state.lobbyHave && !c.members?.is_raid && isSq(state.event) && slotClass(x);  // 059: no kit check for RAID
   const chip = rc ? readyChip({ name: c.members.name, have: state.lobbyHave.get(c.user_id) || new Set(), trk: (state.lobbyTrk && state.lobbyTrk.get(c.user_id)) || null },
     rc[1], `${classHref(...rc)}?hrac=${encodeURIComponent(c.members.discord_id)}`) : "";
   return `<li data-key="${esc(x.key)}"${drag}${mine ? ' class="is-me"' : ""}><button type="button" class="rslot" ${act}><span class="lbl">${x.role ? `<span class="rid">${esc(x.role)}</span>` : ""}${esc(x.label)}</span>${who}</button>${chip}${moveto}${kick}</li>`;
@@ -464,7 +467,7 @@ function viewRoster(s) {
   // the map form too: picking a known map or "zatím nevím" keeps the sign-ups, cancelling drops them (threat model N1)
   if (!s) return `${head}<p class="note">Otevřená akce (${esc(fmtWhen(ev.starts_at))}) je pro mapu ${esc(ev.strategy_id)}, kterou War Room nezná.</p>${msg}${leadsOps() ? mapTeamForm(ev) : ""}${cancel}`;
   const by = Object.fromEntries(state.claims.map(c => [c.slot_key, c]));
-  state.buy = s.swarm ? nakupGroups(s) : null;
+  state.buy = s.swarm && !isRaid() ? nakupGroups(s) : null;
   const filled = state.claims.filter(c => s.roster.some(g => g.slots.some(x => x.key === c.slot_key))).length;
   const total = s.roster.reduce((n, g) => n + g.max, 0);
   // without builders and logistics there is no FOB and no supplies: show the plan's fill order still open
@@ -475,7 +478,7 @@ function viewRoster(s) {
   const myc = myPlace(state.claims);
   const mys = myc && s.roster.flatMap(g => g.slots.map(x => ({ g, x }))).find(o => o.x.key === myc.slot_key);
   const myr = mys && !s.swarm && mys.x.role && roleOf(s, mys.x.role);
-  const mine = !mys ? "" : s.swarm
+  const mine = !mys ? "" : isRaid() ? `<p class="mine-kit">Máš místo: <b>${esc(mys.x.car || mys.g.name)} · ${esc(mys.x.label)}</b></p>` : s.swarm
     ? `<p class="mine-kit">Máš místo: <b>${esc(mys.x.car || mys.g.name)} · ${esc(mys.x.label)}</b> ${KIT_BTN}</p>`
     : myr ? `<p class="mine-kit">Máš místo: <b>${esc(myr.id)} · ${esc(mys.g.name)}</b>${s.nomap ? "" : ` <a class="kitl" href="${roleHref(s, myr)}">Tvoje karta: nákup a kroky</a>`}</p>` : "";
   const miss = s.swarm ? ""  // Petr 2026-10-28: the red strip repeated what the SL plates show
@@ -490,13 +493,13 @@ function viewRoster(s) {
   return `<div class="opcon"><div class="ros-head"><div class="op-id"><span class="op-lamp" aria-hidden="true"></span>${head}</div>
     <div class="op-fill"><span class="num">${filled} <small>/ ${total}</small></span><span class="gauge" style="--p:${pct}%" aria-hidden="true"></span><small>zapsaných</small></div></div>
     ${miss ? `<div class="op-status">${miss}</div>` : ""}
-    <div class="op-me">${mine || (s.swarm ? `<p class="mine-kit">${KIT_BTN}</p>` : "")}${rsvpBar()}</div>
+    <div class="op-me">${mine || (s.swarm && !isRaid() ? `<p class="mine-kit">${KIT_BTN}</p>` : "")}${rsvpBar()}</div>
     ${leadsOps() ? `<div class="op-cmd" role="group" aria-label="Příkazy velení">${mapTeamForm(ev)}${closeEventForm(s)}<button type="button" class="act" data-briefwin title="Otevře se ve vlastním okně, mimo stream">Protokol briefingu</button>${cancel}</div>` : ""}</div>
     ${msg}
     <div class="ros${s.swarm ? " swarm" : ""}">${s.roster.map(g => g.cmdg ? cmdCard(g, by) : g.sq ? squadCard(g, by) : g.vehicles ? podporaCard(g, by) : rosterGroup(g, by)).join("")}${s.swarm ? addPlate() : ""}</div>
     ${s.base && leadsOps() && s.base.length > s.roster.length ? `<div class="sqtools hidden-g">Skryté: ${s.base.filter(b => !s.roster.some(g => g.id === b.id)).map(b =>
       `<button type="button" class="act sqadd" data-fx="${b.id}:hide:0">+ ${esc(b.name)}</button>`).join("")}</div>` : ""}
-    ${nakupBlock(s)}`;
+    ${isRaid() ? "" : nakupBlock(s)}`;
 }
 
 // "T-01:12:05" before the start, "+00:14" after it; one interval ticks every clock on the page
@@ -515,11 +518,12 @@ function akceBody() {
   const s = plan, ev = state.me && state.event;
   if (!sb || !state.me) return viewRoster(s);
   if (isGuest()) return bctSection();  // a proposed guest: the BCT floor and nothing else (hoste-bct, bct-rolling R2)
-  const nova = newPanel();
+  if (isRaid() && !state.focusId) return opCards();  // 059: the operations, no training floors, no founding
+  const nova = isRaid() ? "" : newPanel();
   // the overview: founding on top, every open operation and training, the history under it (viewAkce)
   if (!state.focusId) return nova + opCards() + bctSection() + trainingsSection();  // floors 1, 2, 4 (specs/bct-rolling R2)
   if (!ev) return nova + (state.evErr ? `<section class="lobby">${viewRoster(s)}</section>` : "");
-  return nova + eventHero(ev, s) + `<section class="lobby" id="lobby">${viewRoster(s)}${!s || s.swarm || s.nomap ? "" : buildOrder(s)}</section>`;
+  return nova + eventHero(ev, s) + `<section class="lobby" id="lobby">${viewRoster(s)}${!s || s.swarm || s.nomap || isRaid() ? "" : buildOrder(s)}</section>`;
 }
 // the operation's head (Petr 2026-10-22: "prehlednejsi nadpis ... doktrina urcite jde znazornit a vizualizovat lepe"):
 // what, when, how long to go, the doctrine as a plate, the map and team, who leads; x closes back to the overview
@@ -539,9 +543,10 @@ function eventHero(ev, s) {
   const sw = isSq(ev), d = sw ? ev.doctrine : "defence", v = !sw && s && ev.variant && vById(s, ev.variant);
   return `<header class="evhero"><a class="evx" href="#/akce" aria-label="Zavřít detail akce" title="Zavřít">${cross()}</a>
     <div class="evh-when"><p class="evh-k">Operace${ev.open_to_hosts ? ' <b class="hosts">Otevřená hostům</b>' : ""}</p><h1>${esc(fmtWhen(ev.starts_at))}</h1><b class="tminus" data-t0="${esc(ev.starts_at)}">${tminus(ev.starts_at)}</b></div>
-    <a class="docplate doc-${d}" href="${sw ? `#/doktrina/${d}` : "#/doktrina"}" title="${esc(docOf(d).short)}">${docEmblem(d)}<b>${esc(docName(d))}</b></a>
+    ${isRaid() ? `<span class="docplate doc-${d}">${docEmblem(d)}<b>${esc(docName(d))}</b></span>`
+      : `<a class="docplate doc-${d}" href="${sw ? `#/doktrina/${d}` : "#/doktrina"}" title="${esc(docOf(d).short)}">${docEmblem(d)}<b>${esc(docName(d))}</b></a>`}
     ${state.me ? rsvpTally() : ""}<p class="evh-m">${!ev.strategy_id ? NOPICK
-      : !sw && s && !s.nomap ? `<a href="${planHref(s)}">${sideOf(ev.strategy_id)}</a>${v ? ` · zóna ${esc(v.name)}` : ""}` : sideOf(ev.strategy_id)}${ev.leader ? ` · vede <b>${esc(ev.leader.name)}</b>` : ""}</p></header>`;
+      : !sw && s && !s.nomap && !isRaid() ? `<a href="${planHref(s)}">${sideOf(ev.strategy_id)}</a>${v ? ` · zóna ${esc(v.name)}` : ""}` : sideOf(ev.strategy_id)}${ev.leader ? ` · vede <b>${esc(ev.leader.name)}</b>` : ""}</p></header>`;
 }
 // every open operation as a card (specs/akce-v2 A2): when, how long to go, doctrine, map, how full, my place; the card
 // in focus is lit, a click shows its lobby below
@@ -602,7 +607,7 @@ function nakupList(s) {
   const rows = new Map(), bezDat = [];
   for (const c of state.claims) {
     const x = slots.get(c.slot_key), mine = have.get(c.user_id);
-    if (!x) continue;
+    if (!x || c.members && c.members.is_raid) continue;  // 059
     if (!mine && !c.no_cash) { bezDat.push(name(c)); continue; }
     for (const e of slotNeeds(x)) {
       if (!c.no_cash && (!e.unlock || mine.has(e.item))) continue;
@@ -622,7 +627,7 @@ function nakupGroups(s) {
   const name = c => (c.members && c.members.name) || "?";
   const can = (pool, item) => pool.filter(c => !c.no_cash && have.get(c.user_id)?.has(item)).map(name);
   return new Map(s.roster.map(g => {
-    const keys = new Set(g.slots.map(x => x.key)), people = state.claims.filter(c => keys.has(c.slot_key)), rows = new Map(), bezDat = [];
+    const keys = new Set(g.slots.map(x => x.key)), people = state.claims.filter(c => keys.has(c.slot_key) && !(c.members && c.members.is_raid)), rows = new Map(), bezDat = [];
     for (const c of people) {
       const mine = have.get(c.user_id);
       if (!mine && !c.no_cash) { bezDat.push(name(c)); continue; }
@@ -920,7 +925,7 @@ const KIT_BTN = '<button type="button" class="kitl" data-drawer="kit"><svg class
 function drawers(s) {
   const d = state.drawer, one = (k, title, body) => `<aside class="dw${d === k ? " open" : ""}" id="dw-${k}" role="dialog" aria-labelledby="dw-${k}-h"${d === k ? "" : " inert"}>
     <header class="dw-h"><h2 id="dw-${k}-h">${title}</h2><button type="button" class="ib dw-x" data-dwclose aria-label="Zavřít panel">${cross()}</button></header><div class="dw-b">${body}</div></aside>`;
-  return `<div class="dws"><div class="dw-shade${d ? " open" : ""}" data-dwclose></div>${s && s.swarm ? one("kit", "Tvůj nákup", swarmMyKit()) : ""}${one("rsvp", "Kdo se ozval", rsvpWho())}</div>`;
+  return `<div class="dws"><div class="dw-shade${d ? " open" : ""}" data-dwclose></div>${s && s.swarm && !isRaid() ? one("kit", "Tvůj nákup", swarmMyKit()) : ""}${one("rsvp", "Kdo se ozval", rsvpWho())}</div>`;
 }
 // the panels sit outside #app (renderDrawers), so their x and shade need their own listener (Petr 2026-10-28: "nejde zavrit
 // krizkem ani klikem mimo"); buttons inside a panel that act on the lobby go through the same handler as #app
@@ -1198,7 +1203,7 @@ const capToggle = f => { const off = f.elements.kind.value !== "kurz"; f.querySe
 // a failed load leaves the list empty until a reload (a retry from the next render would loop)
 async function loadClan() {
   state.clan = null;
-  const { data, error } = await sb.from("members").select("user_id, name, guest").eq("active", true).order("name");
+  const { data, error } = await sb.from("members").select("user_id, name, guest").eq("active", true).eq("is_raid", false).order("name");  // 059: never at a training
   state.clan = error ? [] : data;
   if (error) state.novaFlash = "Seznam členů se nepodařilo načíst, obnov stránku.";
   renderRoster();
@@ -2314,7 +2319,7 @@ async function loadHist(p) {
       if (all.error) throw all.error;
       html = viewCoverage(s, cov.data, all.data);
     } else if (p[0] === "ukoly") {
-      const [ms, td, tr] = await Promise.all([sb.from("members").select("user_id, discord_id, name, avatar_url").eq("active", true),
+      const [ms, td, tr] = await Promise.all([sb.from("members").select("user_id, discord_id, name, avatar_url").eq("active", true).eq("is_raid", false),  // 059
         sb.from("tasks_done").select("user_id, task"), sb.from("tracker").select("user_id, status, counted")]);
       for (const r of [ms, td, tr]) if (r.error) throw r.error;
       // ponytail: one progress call per member (~20); a counts view when the clan outgrows it
@@ -2487,7 +2492,7 @@ const navCmd = () => !state.me || !state.me.is_commander ? [] : [["moje-ukoly", 
 function renderNav(active) {
   navActive = active;
   document.getElementById("nav").innerHTML =
-    (isGuest() ? [["akce", "BCT"], ["vycvik", "Výcvik"]] : [...NAV, ...navLogi(), ...navCmd()]).map(([k, l, n]) => `<a href="#/${k}"${active === k ? ' aria-current="page"' : ""}>${l}${n ? `<b class="nav-n">${n}</b>` : ""}</a>`).join("");
+    (isRaid() ? [] : isGuest() ? [["akce", "BCT"], ["vycvik", "Výcvik"]] : [...NAV, ...navLogi(), ...navCmd()]).map(([k, l, n]) => `<a href="#/${k}"${active === k ? ' aria-current="page"' : ""}>${l}${n ? `<b class="nav-n">${n}</b>` : ""}</a>`).join("");
   navToCurrent();
 }
 
@@ -2497,7 +2502,7 @@ function viewAkce() {
   if (state.focusId) return `<p class="crumb"><a href="#/akce">Akce</a> / Operace</p><section class="sestava" id="sestava">${akceBody()}</section>`;
   return `<header class="unit-head"><div><h1>Akce</h1></div></header>
     <section class="sestava" id="sestava">${akceBody()}</section>
-    ${histShell(sb && state.me ? '<p class="note">Načítám odehrané akce…</p>' : "")}`;
+    ${isRaid() ? "" : histShell(sb && state.me ? '<p class="note">Načítám odehrané akce…</p>' : "")}`;
 }
 // opening an operation unlocks it (Petr 2026-10-28: "jako herni menu ... nacitalo akci ... animace s vasim animovanym
 // logem ... jako otevirajici se zamek, vic otacejicich se prvku ... cool, ale zaroven slick ... od kliku po nastup a
@@ -2842,6 +2847,7 @@ function render() {
   const p = h.split("/").filter(Boolean);
   if (p[0] === "historie") { location.replace("#/akce"); return; }  // links in Discord debrief threads
   if (isGuest() && !(["akce", "vycvik"].includes(p[0]) && !p[1] || p[0] === "hrac" && p[1] === state.me.discord_id)) { location.replace("#/akce"); return; }
+  if (isRaid() && p[0] !== "akce") { location.replace("#/akce"); return; }  // 059: RAID, the operations and their lobbies only
   let html, active = null, title = "KIN War Room";
   cur = null; trace = null; plan = null;
   if (p[0] !== "akce") { state.focusId = null; focusEvent(); }
@@ -2885,7 +2891,7 @@ function render() {
     plan = planOf(state.event); if (plan && !plan.swarm) curVariant = state.event.variant || pickVariant(plan, qs);
     cur = plan && !plan.swarm && !plan.nomap ? plan : null;  // the build order's role chips trace on this plan
     html = viewAkce(); active = "akce"; title = isGuest() ? "BCT · KIN" : "Akce · KIN";
-    if (sb && state.me && !p[1] && !isGuest()) setTimeout(() => loadHist(["historie"]));
+    if (sb && state.me && !p[1] && !isGuest() && !isRaid()) setTimeout(() => loadHist(["historie"]));
   } else if (p[0] === "logistika") {
     html = viewLogistika(); active = "logistika"; title = "Logistika · KIN";
     if (sb && state.me) setTimeout(loadLogi);
