@@ -1447,7 +1447,8 @@ function rosterOf(ev) {
   return { squads: k ? k.squady.map(q => ({ ...q })) : Array.from({ length: t.squads }, (_, i) =>
       ({ [t.core[0].kit]: 1, [t.core[1].kit]: 1, [t.swarm.kit]: (ev.squad_swarm && ev.squad_swarm[i]) || t.swarm.default })),
     ...(k && k.nazvy ? { names: [...k.nazvy] } : {}),
-    vehicles: Object.fromEntries(t.podpora.map((p, i) => [p.kit, Array(ev.squad_support?.[i] ?? (k && k.podpora_default ? k.podpora_default[i] : p.default)).fill(p.seats.length)])) };
+    // every seat (an event from before 017 kept its crews); Public Ops what a new vehicle opens (Petr 2026-11-01 "heli jen pilot")
+    vehicles: Object.fromEntries(t.podpora.map((p, i) => [p.kit, Array(ev.squad_support?.[i] ?? (k && k.podpora_default ? k.podpora_default[i] : p.default)).fill(ev.doctrine === "cw" ? p.open : p.seats.length)])) };
 }
 // Velení (Petr 2026-10-28: "misto Commandera v lobby ... bud jeden, nebo druhy, nebo oba, v budoucnu ... i Juro"): the
 // command's places first in the lobby, 2 unless the roster says otherwise (039: 0-4)
