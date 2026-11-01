@@ -791,10 +791,6 @@ const CUES = {  // [start Hz, end Hz, seconds, wave, delay s, peak gain (default
   tick: [[2200, 2200, .015, "square", 0, .012]],
   back: [[560, 220, .09, "triangle", 0, .06]],
   error: [[150, 120, .2, "square", 0]],
-  // Palba (hub/specs/palba): a shell whistling down onto a thump, the gun's dull shot, a far explosion
-  fire_in: [[1800, 600, .7, "sine", 0, .06], [70, 40, .35, "sine", .7, .3]],
-  fire_take: [[90, 40, .25, "sine", 0, .32], [2400, 300, .05, "square", 0, .04]],
-  fire_done: [[120, 30, .9, "sawtooth", 0, .05], [60, 30, .8, "sine", 0, .25]],
 };
 function sound(name) {
   if (!soundOn() || !CUES[name]) return;
@@ -2800,25 +2796,31 @@ const seesFire = () => { const op = logiOp(), r = fireRole(op); return !!op && (
 // the open calls count for whoever has a gun and for the command (P6)
 const fireCount = () => fireMyGun() || leadsOps() ? state.fire.missions.filter(x => x.state === "open").length : 0;
 const navFire = () => !state.me || !seesFire() ? [] : [["palba", "Palba", fireCount()]];
-// the radio call (as in the game, English) over a Czech line, picked at random; Petr approved the sample 2026-11-01
+// the radio call on screen with the spoken line under it, and the recorded voice (Petr 2026-11-01 evening: "Fire
+// Mission Request initiated ... request granted ... Fire mission completed ... chci je namluvene", voice Baldur). The
+// recordings come from tools/palba_hlas.py with the same lines: change both
 const FIRE_LINES = {
-  sent: ["FIRE MISSION, OVER", [() => "Souřadnice jsou venku. Někde se právě otáčí hlaveň.", () => "Hlavy dolů, objednávka letí do baterie.",
-    () => "Nepřítel o tom ještě neví. Za chvíli bude."], "fire_in"],
-  incoming: ["FIRE MISSION!", [() => "Máš práci. Azimut a range jsou dole.", c => `${c.squad} chce ohňostroj.`], "fire_in"],
-  taken: ["ROGER, FIRE MISSION", [c => `${c.name} míří na tvoje souřadnice.`, c => `${c.name} přebírá. Doručení zdarma, vrácení zboží nemožné.`,
-    c => `Baterie potvrzuje, ${c.name} je na tom. Drž hlavu u země.`], "fire_take"],
-  done: ["ROUNDS COMPLETE", [c => `${plural(c.salvos, "salva", "salvy", "salv")} ${c.salvos >= 2 && c.salvos <= 4 ? "jsou" : "je"} venku. Jdi se podívat, co zbylo.`,
-    () => "Splash. Zbytek uklidí squad."], "fire_done"],
+  sent: ["FIRE MISSION REQUEST INITIATED", "Fire mission request initiated. Grid transmitted. Stand by."],
+  incoming: ["NEW FIRE MISSION REQUEST", "New fire mission request created. Gun crew, stand to. Check your azimuth and range."],
+  taken: ["FIRE MISSION REQUEST GRANTED", "Fire mission request granted. Gun is laying on target. Stand by for splash."],
+  done: ["FIRE MISSION COMPLETED", "Rounds complete. Fire mission completed. Out."],
 };
-function fireCallout(kind, ctx = {}) {
-  const [cmd, lines, cue] = FIRE_LINES[kind], line = lines[Math.floor(Math.random() * lines.length)](ctx);
+// one voice at a time: a newer call cuts the older one; the sound switch in the bar mutes it too
+function fireVoice(kind) {
+  if (!soundOn()) return;
+  if (state.fire.voice) state.fire.voice.pause();
+  state.fire.voice = new Audio(`audio/palba-${kind}.mp3`);
+  state.fire.voice.play().catch(e => console.error(e));  // no click on the page yet: the browser keeps it silent
+}
+function fireCallout(kind) {
+  const [cmd, line] = FIRE_LINES[kind];
   let el = document.getElementById("pf-call");
   if (!el) { el = document.createElement("div"); el.id = "pf-call"; el.setAttribute("aria-live", "assertive"); document.body.append(el); }
   el.className = `pf-call ${kind}`;
   el.innerHTML = `<b>${esc(cmd)}</b><span>${esc(line)}</span>`;
   clearTimeout(state.fire.callTimer);
-  state.fire.callTimer = setTimeout(() => el.remove(), 3000);
-  sound(cue);
+  state.fire.callTimer = setTimeout(() => el.remove(), 6000);  // as long as the voice speaks
+  fireVoice(kind);
 }
 // what changed since the last load: a new call rings for a gun (not the caller's own), the caller hears roger and done
 function fireNotify(op, prev) {
@@ -2826,8 +2828,8 @@ function fireNotify(op, prev) {
   const mine = x => r.caller ? x.squad === r.caller : x.created_by === me;
   for (const x of state.fire.missions) {
     const was = prev.get(x.id);
-    if (!was && x.state === "open" && gun && x.created_by !== me) fireCallout("incoming", { squad: fireWho(op, x.squad) });
-    else if (was && was !== x.state && (x.state === "taken" || x.state === "done") && mine(x)) fireCallout(x.state, { name: x.gunner ? x.gunner.name : "?", salvos: x.salvos });
+    if (!was && x.state === "open" && gun && x.created_by !== me) fireCallout("incoming");
+    else if (was && was !== x.state && (x.state === "taken" || x.state === "done") && mine(x)) fireCallout(x.state);
   }
 }
 const fireMyGun = () => state.me && state.fire.guns.find(g => g.user_id === state.me.user_id) || null;
