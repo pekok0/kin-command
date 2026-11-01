@@ -1690,7 +1690,7 @@ function viewBattle(x, v, w) {
   const all = D.bitvy.plany.filter(p => p.strategy === x.id && (p.zone === v.id || !p.zone));
   const base = all.find(p => p.zone && !p.weather), wp = w && all.find(p => p.zone && p.weather === w), gen = all.find(p => !p.zone && !p.weather);
   const f = k => [wp, base, gen].map(p => p && p[k]).find(a => a && a.length) || null;
-  const sec = (h, body) => `<section class="block"><h2>${h}</h2>${body || '<p class="note">Zatím prázdné, doplníme s Jurem.</p>'}</section>`;
+  const sec = (h, body) => `<section class="block"><h2>${h}</h2>${body || ''}</section>`;
   const cil = f("cil"), drzet = f("drzet"), squady = f("squady"), pozn = f("poznamky");
   const nz = [wp, base].find(p => p && p.navrh.length), ng = gen && gen.navrh.length ? gen : null;
   const part = (h, p) => `<h3>${h}</h3>${p.zdroj ? `<p class="note">Zdroj: ${esc(p.zdroj)}</p>` : ""}${bullets(p.navrh)}`;
