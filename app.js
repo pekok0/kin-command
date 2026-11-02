@@ -73,8 +73,10 @@ async function onAuth(session) {
   if (error) throw error;
   if (!data) { state.error = "Nejsi ověřený člen KIN. Přihlas se znovu."; await sb.auth.signOut(); return; }
   state.me = data; state.error = null;
+  // 055 (D47): a guest reads no content, unlocks or Tracker (RLS); the page only has to stop "checking" and show the BCT list
+  if (data.guest) { D.strategies = []; state.checking = false; renderWho(); loadEvent(); subscribe(); render(); return; }  // the empty plan list opens render() like the old row 'host' did
   // unlocks need the seasons from the content, so they load after it (both at once = haveSet never set, Viktor UAT)
-  if (!was) loadContent(data.guest ? "host" : data.is_raid ? "raid" : "hub")
+  if (!was) loadContent(data.is_raid ? "raid" : "hub")  // a guest returned above (055); RAID reads only its row (059)
     .then(() => isRaid() || Promise.all([loadUnlocks().catch(e => { console.error(e); haveSet = null; }), loadTracker().catch(e => console.error(e))]))
     // history pages and loadout cards wait for the login to know what to load / which boxes to tick
     .then(() => { if (isRaid()) return; if (onHistRoute() || onCardRoute()) { const y = scrollY; render(); scrollTo(0, y); } autoSyncTracker(); },
@@ -86,7 +88,7 @@ const onHistRoute = () => HIST.includes(location.hash.replace(/^#\/?/, "").split
 
 function renderWho() {
   document.getElementById("who").innerHTML = !sb ? '<span class="err">Přihlášení se nenačetlo</span>' : state.me
-    ? `${isRaid() ? `<span class="mlink"><img src="${esc(state.me.avatar_url)}" alt=""><span class="nm">${esc(state.me.name)}</span></span>`  // 059: no profile
+    ? `${isGuest() || isRaid() ? `<span class="mlink"><img src="${esc(state.me.avatar_url)}" alt=""><span class="nm">${esc(state.me.name)}</span></span>`  // 055 guest, 059 RAID: no profile
       : `<a class="mlink" href="#/hrac/${encodeURIComponent(state.me.discord_id)}" title="Můj profil"><img src="${esc(state.me.avatar_url)}" alt=""><span class="nm">${esc(state.me.name)}</span></a>`}<button type="button" class="act" data-logout>Odhlásit</button>`
     : `${state.error && D.strategies ? `<span class="err">${esc(state.error)}</span>` : ""}<button type="button" class="act" data-login>Přihlásit<span class="long"> přes Discord</span></button>`;
   navToCurrent();
@@ -2506,16 +2508,17 @@ const NAV = [["akce", "Akce"], ["mapy", "Mapy"], ["vybava", "Výbava"], ["doktri
 // Logistika (052) for the command, the squad leaders and the crew of Logi heli in the open operation; the crew's count
 const navLogi = () => !state.me || !seesLogi() ? [] : [["logistika", "Logistika", logiRole(logiOp()).crew || logiRole(logiOp()).cmd ? state.logi.orders.filter(x => x.state === "open").length : 0]];
 // the Commander's own item after Doktrina (specs/ukoly-velitele U1), with the count of what waits for him
-const navCmd = () => !state.me || !state.me.is_commander ? [] : [["moje-ukoly", "Úkoly", state.cmdTasks ? state.cmdTasks.filter(waitsForMe).length : 0]];
+const navCmd = () => !state.me || !state.me.is_commander ? [] : [["moje-ukoly", "Úkoly", state.cmdTasks ? state.cmdTasks.filter(waitsForMe).length : 0],
+  ["podezreli", "Podezřelí", state.flags ? state.flags.length : 0]];  // 056 (D52)
 function renderNav(active) {
   navActive = active;
   document.getElementById("nav").innerHTML =
-    (isRaid() ? [] : isGuest() ? [["akce", "BCT"], ["vycvik", "Výcvik"]] : [...NAV, ...navLogi(), ...navFire(), ...navCmd()]).map(([k, l, n]) => `<a href="#/${k}"${active === k ? ' aria-current="page"' : ""}>${l}${n ? `<b class="nav-n">${n}</b>` : ""}</a>`).join("");
+    (isGuest() || isRaid() ? [] : [...NAV, ...navLogi(), ...navFire(), ...navCmd()]).map(([k, l, n]) => `<a href="#/${k}"${active === k ? ' aria-current="page"' : ""}>${l}${n ? `<b class="nav-n">${n}</b>` : ""}</a>`).join("");  // 055: a guest has no menu (D47), 059 RAID neither
   navToCurrent();
 }
 
 function viewAkce() {
-  if (isGuest()) return `<header class="unit-head"><div><h1>Basic Combat Training</h1><p>Navrhli tě na Rekruta. Zapiš se na BCT a vydrž celé. Instruktor ti na konci potvrdí účast a War Room tě hned povýší na Rekruta: pak uvidíš celou aplikaci. Co se na BCT naučíš, je ve <a href="#/vycvik">Výcviku</a>.</p></div></header>
+  if (isGuest()) return `<header class="unit-head"><div><h1>Basic Combat Training</h1><p>Navrhli tě na Rekruta. Zapiš se na BCT a vydrž celé. Instruktor ti na konci potvrdí účast a War Room tě hned povýší na Rekruta: pak uvidíš celou aplikaci.</p></div></header>
     <section class="sestava" id="sestava">${akceBody()}</section>`;
   if (state.focusId) return `<p class="crumb"><a href="#/akce">Akce</a> / Operace</p><section class="sestava" id="sestava">${akceBody()}</section>`;
   return `<header class="unit-head"><div><h1>Akce</h1></div></header>
@@ -3074,6 +3077,20 @@ async function loadCmdTasks(first) {
   renderNav(navActive);
   if (location.hash === "#/moje-ukoly") $app.innerHTML = viewCmdTasks();  // in place: a click does not jump to the top
 }
+async function loadFlags() {  // 056 (D52, specs/neaktivni-rekruti): the Commander's suspects, written by ceo/neaktivni.py --priznaky
+  const { data, error } = await sb.from("flags").select("discord_id, name, rank, reasons, since, updated_at").order("since");
+  if (error) console.error(error);
+  state.flags = error ? false : data;
+  renderNav(navActive);
+  if (location.hash === "#/podezreli") $app.innerHTML = viewPodezreli();
+}
+function viewPodezreli() {
+  const head = `<header class="unit-head"><div><h1>Podezřelí</h1><p class="lede">Kdo má na Trackeru tag jiného klanu (kromě KIN a RAID), je ve War Roomu a nehraje, nebo sdílí Tracker s dalším členem. Plní KIN Command po každé hlídce; nic se neděje samo, rozhoduješ ty.</p></div></header>`;
+  if (state.flags === false) return head + '<p class="note">Seznam se nenačetl.</p>';
+  if (!state.flags) return head + '<p class="note">Načítám…</p>';
+  if (!state.flags.length) return head + '<p class="note">Nikdo.</p>';
+  return head + `<section class="block"><ul class="bullets">${state.flags.map(f => `<li><a href="#/hrac/${encodeURIComponent(f.discord_id)}"><b>${esc(f.name)}</b></a> <span class="ref">${esc(f.rank)}</span>: ${(f.reasons || []).map(r => esc(r.text)).join("; ")} <span class="ref">od ${esc(new Date(f.since).toLocaleDateString("cs-CZ"))}</span></li>`).join("")}</ul></section>`;
+}
 async function setTask(id, st, odpoved) {
   const x = state.cmdTasks.find(y => y.id === id), was = [x.state, x.odpoved];
   x.state = st; x.updated_at = new Date().toISOString(); state.taskErr = null;
@@ -3161,7 +3178,7 @@ function render() {
   const [h, qs = ""] = location.hash.replace(/^#/, "").split("?");
   const p = h.split("/").filter(Boolean);
   if (p[0] === "historie") { location.replace("#/akce"); return; }  // links in Discord debrief threads
-  if (isGuest() && !(["akce", "vycvik"].includes(p[0]) && !p[1] || p[0] === "hrac" && p[1] === state.me.discord_id)) { location.replace("#/akce"); return; }
+  if (isGuest() && !(p[0] === "akce" && !p[1])) { location.replace("#/akce"); return; }  // 055 (D47): a guest sees only the BCT list
   if (isRaid() && p[0] !== "akce") { location.replace("#/akce"); return; }  // 059: RAID, the operations and their lobbies only
   let html, active = null, title = "KIN War Room";
   cur = null; trace = null; plan = null;
@@ -3195,9 +3212,6 @@ function render() {
         : `<p class="viewas">Výbava hráče <b>${esc(pl.name)}</b> · <a href="${classHref(q, c)}">moje</a></p>${asPlayer(pl, () => viewClass(q, c))}`;
       title = `${c.name} · ${pl && pl.name ? pl.name + " · " : ""}KIN`;
     } else if (c) { html = viewClass(q, c); title = `${c.name} · KIN`; } else { html = viewSquadPage(q); title = `${q.name} · KIN`; }
-  } else if (p[0] === "vycvik" && isGuest()) {  // Petr 2026-10-30: the BCT page for proposed guests too, without the doctrine
-    html = `<div class="narrow"><header class="unit-head"><div><h1>Basic Combat Training</h1><p>Co se na BCT naučíš.</p></div></header>${viewVycvik()}</div>`;
-    active = "vycvik"; title = "Basic Combat Training · KIN";
   } else if (p[0] === "doktrina" || p[0] === "vycvik") {
     const tab = p[0] === "vycvik" ? "vycvik" : p[1], sub = p[0] === "vycvik" ? p[1] : p[2];
     html = viewDoktrina(tab, sub); active = "doktrina"; title = (vybDoc(tab) ? docOf(tab).title : tab === "vycvik" ? (sub === "act" ? "Advanced Combat Training" : "Basic Combat Training") : tab === "clanwar" && seesClanWar() ? "Clan War" : "SWARM") + " · KIN";
@@ -3214,6 +3228,9 @@ function render() {
   } else if (p[0] === "palba") {
     html = viewPalba(fireRoute()); active = "palba"; title = "Palba · KIN";
     if (sb && state.me) setTimeout(loadFire);
+  } else if (p[0] === "podezreli") {  // 056 (D52): the Commander only; RLS gives everyone else no rows anyway
+    if (state.me && !state.me.is_commander) { location.replace("#/akce"); return; }
+    html = viewPodezreli(); active = "podezreli"; title = "Podezřelí · KIN";
   } else if (p[0] === "moje-ukoly") {
     html = viewCmdTasks(); active = "moje-ukoly"; title = "Úkoly · KIN";
   } else if (p[0] === "briefing") {
@@ -3227,7 +3244,7 @@ function render() {
     if (sb && state.me && !shut) setTimeout(() => loadHist(p));
   }
   else html = viewHome();
-  if (sb && state.me && state.me.is_commander && !state.cmdAsked) { state.cmdAsked = true; setTimeout(() => loadCmdTasks(true)); }
+  if (sb && state.me && state.me.is_commander && !state.cmdAsked) { state.cmdAsked = true; setTimeout(() => loadCmdTasks(true)); setTimeout(loadFlags); }
   if (sb && fireMember() && !state.fire.asked) { state.fire.asked = true; setTimeout(loadFire); }  // Palba v2 P11: a gun hears calls on any page
   $app.innerHTML = html;
   renderDrawers();
