@@ -2815,11 +2815,12 @@ const fireCanEnd = g => g.created_by === state.me.user_id || leadsOps();
 // the radio call on screen with the spoken line under it, and the recorded voice (Petr 2026-11-01 evening: "Fire
 // Mission Request initiated ... request granted ... Fire mission completed ... chci je namluvene", voice Baldur). The
 // recordings come from tools/palba_hlas.py with the same lines: change both
+// the voice says just the headline (Petr 2026-11-02 "jenom tu hlavni message")
 const FIRE_LINES = {
-  sent: ["FIRE MISSION REQUEST INITIATED", "Fire mission request initiated. Grid transmitted. Stand by."],
-  incoming: ["NEW FIRE MISSION REQUEST", "New fire mission request created. Gun crew, stand to. Check your azimuth and range."],
-  taken: ["FIRE MISSION REQUEST GRANTED", "Fire mission request granted. Gun is laying on target. Stand by for splash."],
-  done: ["FIRE MISSION COMPLETED", "Rounds complete. Fire mission completed. Out."],
+  sent: "FIRE MISSION REQUEST INITIATED",
+  incoming: "NEW FIRE MISSION REQUEST",
+  taken: "FIRE MISSION REQUEST GRANTED",
+  done: "FIRE MISSION COMPLETED",
 };
 // one voice at a time: a newer call cuts the older one; the sound switch in the bar mutes it too
 function fireVoice(kind) {
@@ -2829,11 +2830,11 @@ function fireVoice(kind) {
   state.fire.voice.play().catch(e => console.error(e));  // no click on the page yet: the browser keeps it silent
 }
 function fireCallout(kind) {
-  const [cmd, line] = FIRE_LINES[kind];
+  const cmd = FIRE_LINES[kind];
   let el = document.getElementById("pf-call");
   if (!el) { el = document.createElement("div"); el.id = "pf-call"; el.setAttribute("aria-live", "assertive"); document.body.append(el); }
   el.className = `pf-call ${kind}`;
-  el.innerHTML = `<b>${esc(cmd)}</b><span>${esc(line)}</span>`;
+  el.innerHTML = `<b>${esc(cmd)}</b>`;
   clearTimeout(state.fire.callTimer);
   state.fire.callTimer = setTimeout(() => el.remove(), 6000);  // as long as the voice speaks
   fireVoice(kind);
