@@ -537,11 +537,14 @@ const DOC_ICON = {
   cw: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M8 40L40 8M8 8l32 32"/><path d="M6 14V6h8M42 14V6h-8M6 34v8h8M42 34v8h-8"/></svg>',
   // Builder's Dream (D54): the hammer
   builder: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M8 40L23 25"/><path d="M19 13l8-8 12 12-8 8z"/><path d="M27 5l-4 4M35 17l4-4"/></svg>',
-  // Limit Testing (Petr 2026-11-03: "hardcore symbol powa, dominance, smrt, 1337, owning"): the skull
-  lt: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M13 31C4 27 4 10 15 5c6-3 12-3 18 0 11 5 11 22 2 26v6H13z"/><circle class="f" cx="18" cy="19.5" r="4.6"/><circle class="f" cx="30" cy="19.5" r="4.6"/><path class="f" d="M24 25l-3 5.5h6z"/><path d="M13 37v6h22v-6M19.5 37v6M24 37v6M28.5 37v6"/></svg>',
+  // Limit Testing (Petr 2026-11-03: "hardcore symbol ... smrt", then "znak special forces", his pick C): two crossed
+  // commando daggers behind a skull
+  lt: '<svg viewBox="0 0 48 48" aria-hidden="true"><circle class="f" cx="6" cy="6" r="2.3"/><path d="M7.8 7.8L12.7 12.7"/><path d="M17 8.5L8.5 17"/><path class="f" d="M15.9 11.9L43 43 11.9 15.9z"/><circle class="f" cx="42" cy="6" r="2.3"/><path d="M40.2 7.8L35.3 12.7"/><path d="M39.5 17L31 8.5"/><path class="f" d="M36.1 15.9L5 43 32.1 11.9z"/><path class="o" d="M15.5 29.5C10 26.5 10 15.5 17 12c4.5-2.3 9.5-2.3 14 0 7 3.5 7 14.5 1.5 17.5v4H15.5z"/><circle class="f" cx="20" cy="20.5" r="3.3"/><circle class="f" cx="28" cy="20.5" r="3.3"/><path class="f" d="M24 24l-2 3.6h4z"/><path d="M15.5 33.5v3.5h17v-3.5M20 33.5v3.5M24 33.5v3.5M28 33.5v3.5"/></svg>',
 };
 // Limit Testing (Petr 2026-11-03: "hardcore styl krvave, vstup na vlastni nebezpeci"): the hazard tape over its head
 const LT_TAPE = '<div class="lt-tape"><span>Vstup na vlastní nebezpečí</span></div>';
+// Petr 2026-11-03: "z prihlasenych budeme vybirat individualne"
+const LT_PICK = '<p class="lt-pick">Zápis je přihláška. Sestavu z přihlášených vybíráme individuálně.</p>';
 // the doctrine's emblem (Petr 2026-10-28: "v tom logu public ops neni potreba ten text na druhem radku ... radsi hezke a
 // krasne to logo typu akce"): its mark in a hexagonal badge, big in the event's head, small on the operation cards
 const docEmblem = (d, cls = "") => `<span class="docmark doc-${d}${cls ? " " + cls : ""}" aria-hidden="true"><svg viewBox="0 0 100 100">
@@ -555,7 +558,7 @@ function eventHero(ev, s) {
     ${isRaid() ? `<span class="docplate doc-${d}${pl}">${docEmblem(d)}<b>${esc(docName(d))}</b>${sub}</span>`
       : `<a class="docplate doc-${d}${pl}" href="${sw ? `#/doktrina/${d}` : "#/doktrina"}" title="${esc(docOf(d).short)}">${docEmblem(d)}<b>${esc(docName(d))}</b>${sub}</a>`}
     ${state.me ? rsvpTally() : ""}<p class="evh-m">${!ev.strategy_id ? NOPICK
-      : !sw && s && !s.nomap && !isRaid() ? `<a href="${planHref(s)}">${sideOf(ev.strategy_id)}</a>${v ? ` · zóna ${esc(v.name)}` : ""}` : sideOf(ev.strategy_id)}${ev.leader ? ` · vede <b>${esc(ev.leader.name)}</b>` : ""}</p></header>`;
+      : !sw && s && !s.nomap && !isRaid() ? `<a href="${planHref(s)}">${sideOf(ev.strategy_id)}</a>${v ? ` · zóna ${esc(v.name)}` : ""}` : sideOf(ev.strategy_id)}${ev.leader ? ` · vede <b>${esc(ev.leader.name)}</b>` : ""}</p>${lt ? LT_PICK : ""}</header>`;
 }
 // every open operation as a card (specs/akce-v2 A2): when, how long to go, doctrine, map, how full, my place; the card
 // in focus is lit, a click shows its lobby below
@@ -567,7 +570,7 @@ function opCards() {
     const mine = myPlace(ev.claims), said = (ev.rsvps.find(r => r.user_id === state.me.user_id) || {}).status;
     const on = state.focusId === ev.id;
     return `<a class="opc${ev.doctrine === "lt" ? " opc-lt" : ""}${on ? " on" : ""}" href="#/akce/${ev.id}"${on ? ' aria-current="true"' : ""}>
-      <span class="opc-k">${esc(docName(ev.doctrine))}${ev.open_to_hosts ? " · otevřená hostům" : ""}</span>${docEmblem(isSq(ev) ? ev.doctrine : "defence", "sm")}
+      <span class="opc-k">${esc(docName(ev.doctrine))}${ev.open_to_hosts ? " · otevřená hostům" : ""}</span>${docEmblem(isSq(ev) ? ev.doctrine : "defence", "sm")}${ev.doctrine === "lt" ? `<span class="opc-d">${esc(docOf("lt").title)}</span>` : ""}
       <b class="opc-t">${esc(fmtWhen(ev.starts_at))}</b><span class="tminus" data-t0="${esc(ev.starts_at)}">${tminus(ev.starts_at)}</span>
       <span class="opc-m">${sideOf(ev.strategy_id, NOPICK)}</span>
       <span class="opc-g"><i style="width:${total ? Math.min(100, Math.round(100 * n / total)) : 0}%"></i></span><span class="opc-f"><b>${n}</b> / ${total} míst</span>
