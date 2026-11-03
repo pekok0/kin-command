@@ -2510,10 +2510,13 @@ const navLogi = () => !state.me || !seesLogi() ? [] : [["logistika", "Logistika"
 // the Commander's own item after Doktrina (specs/ukoly-velitele U1), with the count of what waits for him
 const navCmd = () => !state.me || !state.me.is_commander ? [] : [["moje-ukoly", "Úkoly", state.cmdTasks ? state.cmdTasks.filter(waitsForMe).length : 0],
   ["podezreli", "Podezřelí", state.flags ? state.flags.length : 0]];  // 056 (D52)
+// the command's and the squad leaders' meeting (066, specs/porada P1), before the Commander's own items; the open points
+const seesPorada = () => !!state.me && (leadsOps() || !!state.me.is_sl);
+const navPorada = () => !seesPorada() ? [] : [["porada", "Porada", state.porada ? state.porada.filter(x => !x.vysledek).length : 0]];
 function renderNav(active) {
   navActive = active;
   document.getElementById("nav").innerHTML =
-    (isGuest() || isRaid() ? [] : [...NAV, ...navLogi(), ...navFire(), ...navCmd()]).map(([k, l, n]) => `<a href="#/${k}"${active === k ? ' aria-current="page"' : ""}>${l}${n ? `<b class="nav-n">${n}</b>` : ""}</a>`).join("");  // 055: a guest has no menu (D47), 059 RAID neither
+    (isGuest() || isRaid() ? [] : [...NAV, ...navLogi(), ...navFire(), ...navPorada(), ...navCmd()]).map(([k, l, n]) => `<a href="#/${k}"${active === k ? ' aria-current="page"' : ""}>${l}${n ? `<b class="nav-n">${n}</b>` : ""}</a>`).join("");  // 055: a guest has no menu (D47), 059 RAID neither
   navToCurrent();
 }
 
@@ -3130,6 +3133,68 @@ function viewCmdTasks() {
     + sec("claude", "U Clauda", xs.filter(x => ["claude", "prace", "odpoved"].includes(x.state)))
     + `<details class="block tks-sec tks-done" data-tsec="done"><summary><h2>Hotovo <span class="num">${done.length}</span>${arrow()}</h2></summary>${done.length ? `<ul class="tks">${done.map(row).join("")}</ul>` : ""}</details>`;
 }
+// ---------- porada (066, specs/porada): the points for Wednesday's meeting of the command and the squad leaders ----------
+const VYSLEDEK = { zkusime: "Zkusíme", nechame: "Necháme", fakta: "Nejdřív fakta" };  // klan/diskuse-doktriny.md P4
+// P2: Wednesday 17:30, today's until 18:30; ponytail: the browser's clock, the clan plays in CZ/SK
+function nextPorada(now = new Date()) {
+  const d = new Date(now); d.setDate(d.getDate() + (3 - d.getDay() + 7) % 7); d.setHours(17, 30, 0, 0);
+  if (d.getTime() + 3600e3 <= now.getTime()) d.setDate(d.getDate() + 7);
+  return d;
+}
+async function loadPorada(first) {
+  const { data, error } = await sb.from("porada").select("id, text, zdroj, odkaz, autor, created_at, vysledek, zaver, closed_at").order("created_at");
+  if (error) console.error(error);
+  state.porada = error ? false : data;
+  if (first) sb.channel("porada").on("postgres_changes", { event: "*", schema: "public", table: "porada" }, () => loadPorada()).subscribe();
+  renderNav(navActive);
+  if (location.hash === "#/porada") $app.innerHTML = viewPorada();  // in place, like the tasks
+}
+function viewPorada() {
+  if (state.me && !seesPorada()) return '<p class="note">Porada je jen pro velení a squad leadery.</p>';
+  const when = nextPorada().toLocaleDateString("cs-CZ", { weekday: "short", day: "numeric", month: "numeric" });
+  const xs = state.porada, head = `<header class="unit-head"><div><h1>Porada vedení</h1><p class="lede">Každou středu v 17:30 v hlasovce Command, velení a squad leadeři. Sem patří všechno, co chcete probrat. Body sem padají i z debriefů, z CLI a z fóra nápadů. Rozhoduje Commander: zkusíme, necháme, nebo nejdřív fakta.</p>
+    <p class="lede"><b>Příští porada: ${esc(when)} v 17:30</b></p></div></header>`;
+  if (xs === undefined) return head + '<p class="note">Načítám…</p>';
+  if (xs === false) return head + '<p class="err">Body se nenačetly, obnov stránku (F5).</p>';
+  const src = x => x.odkaz ? `<a href="${esc(x.odkaz)}" target="_blank" rel="noopener">${esc(x.zdroj)}</a>` : esc(x.zdroj);
+  // P5: the command closes a point; the buttons are plain buttons, Enter in the note closes nothing
+  const close = x => `<div class="tk-own"><input name="z" maxlength="500" placeholder="Závěr: kdo hlídá, kdy vyhodnotíme" aria-label="Závěr"></div>`
+    + Object.entries(VYSLEDEK).map(([k, l]) => `<button type="button" class="act" data-bodx="${x.id}:${k}">${l}</button>`).join("");
+  const row = x => `<li class="tk${!x.vysledek && leadsOps() ? " tk-dec" : ""}" data-bod="${x.id}"><div class="tk-meta"><span class="tk-kind">${src(x)}</span><span>${esc(x.autor)}</span><time datetime="${esc(x.created_at)}">${esc(ago(x.created_at))}</time></div>
+    <div class="tk-body"><p class="tk-text">${esc(x.text)}</p>${x.vysledek ? `<p class="tk-note"><b>${VYSLEDEK[x.vysledek]}</b>${x.zaver ? ": " + esc(x.zaver) : ""} <span class="ref">${esc(fmtWhen(x.closed_at))}</span></p>` : ""}</div>
+    <div class="tk-act">${!x.vysledek && leadsOps() ? close(x) : ""}</div></li>`;
+  const open = xs.filter(x => !x.vysledek), done = xs.filter(x => x.vysledek).sort((a, b) => String(b.closed_at).localeCompare(String(a.closed_at)));
+  return head + (state.poradaErr ? `<p class="err" role="alert">${esc(state.poradaErr)}</p>` : "")
+    + `<section class="block tks-sec"><h2>Přidat bod</h2><form class="tk-own" data-porada-add><input name="t" maxlength="500" required value="${esc(state.poradaDraft || "")}" placeholder="Co chceš probrat?" aria-label="Nový bod"><button type="submit" class="act">Přidat</button></form></section>`
+    + `<section class="block tks-sec" data-psec="open"><h2>Na poradu <span class="num">${open.length}</span></h2>${open.length ? `<ul class="tks">${open.map(row).join("")}</ul>` : ""}</section>`
+    + `<details class="block tks-sec tks-done" data-psec="done"><summary><h2>Vyřízeno <span class="num">${done.length}</span>${arrow()}</h2></summary>${done.length ? `<ul class="tks">${done.map(row).join("")}</ul>` : ""}</details>`;
+}
+async function addBod(text) {
+  state.poradaErr = null; state.poradaDraft = "";
+  const { error } = await sb.from("porada").insert({ text });  // the author and the source come from the database (066)
+  if (error) { console.error(error); state.poradaErr = "Bod se nepodařilo uložit, zkus to znovu."; state.poradaDraft = text; }
+  await loadPorada();
+}
+async function closeBod(id, v, zaver) {
+  const x = state.porada.find(y => y.id === id), was = { ...x };
+  Object.assign(x, { vysledek: v, zaver: zaver || null, closed_at: new Date().toISOString() }); state.poradaErr = null;
+  $app.innerHTML = viewPorada(); renderNav(navActive);
+  const { data, error } = await sb.from("porada").update({ vysledek: v, zaver: x.zaver, closed_at: x.closed_at }).eq("id", id).select("id");
+  if (error || !data.length) { Object.assign(x, was); state.poradaErr = "Bod se nepodařilo uzavřít, zkus to znovu."; $app.innerHTML = viewPorada(); renderNav(navActive); }
+}
+document.addEventListener("submit", e => {
+  const f = e.target.closest("form[data-porada-add]");
+  if (!f) return;
+  e.preventDefault();
+  const t = f.elements.t.value.trim();
+  if (t) addBod(t);
+});
+$app.addEventListener("click", e => {
+  const b = e.target.closest("[data-bodx]");
+  if (!b) return;
+  const [id, v] = b.dataset.bodx.split(":"), z = b.closest("[data-bod]").querySelector("input[name=z]");
+  closeBod(+id, v, z ? z.value.trim() : "");
+});
 // the Commander's briefing protocol (Petr 2026-10-21 "uvidim to jenom ja"): the row 'velitel' is readable by the
 // Commander only (014), so a member gets no data, not just no link; the HTML is built from klan/briefing-protokol.md
 async function loadBriefing() {
@@ -3231,6 +3296,8 @@ function render() {
   } else if (p[0] === "podezreli") {  // 056 (D52): the Commander only; RLS gives everyone else no rows anyway
     if (state.me && !state.me.is_commander) { location.replace("#/akce"); return; }
     html = viewPodezreli(); active = "podezreli"; title = "Podezřelí · KIN";
+  } else if (p[0] === "porada") {  // 066 (specs/porada P1): the command and SL; RLS gives everyone else no rows anyway
+    html = viewPorada(); active = "porada"; title = "Porada · KIN";
   } else if (p[0] === "moje-ukoly") {
     html = viewCmdTasks(); active = "moje-ukoly"; title = "Úkoly · KIN";
   } else if (p[0] === "briefing") {
@@ -3244,6 +3311,7 @@ function render() {
     if (sb && state.me && !shut) setTimeout(() => loadHist(p));
   }
   else html = viewHome();
+  if (sb && seesPorada() && !state.poradaAsked) { state.poradaAsked = true; setTimeout(() => loadPorada(true)); }
   if (sb && state.me && state.me.is_commander && !state.cmdAsked) { state.cmdAsked = true; setTimeout(() => loadCmdTasks(true)); setTimeout(loadFlags); }
   if (sb && fireMember() && !state.fire.asked) { state.fire.asked = true; setTimeout(loadFire); }  // Palba v2 P11: a gun hears calls on any page
   $app.innerHTML = html;
