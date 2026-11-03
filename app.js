@@ -68,7 +68,7 @@ async function onAuth(session) {
     try { back = sessionStorage.getItem(BACK); sessionStorage.removeItem(BACK); } catch { /* storage blocked */ }
     if (back && back !== location.hash) location.hash = back;
   }
-  const { data, error } = await sb.from("members").select("user_id, discord_id, name, avatar_url, is_commander, is_officer, is_sl, is_instructor, rank, guest, is_raid")
+  const { data, error } = await sb.from("members").select("user_id, discord_id, name, avatar_url, is_commander, is_officer, is_sl, is_instructor, rank, guest, is_raid, lt_lead")
     .eq("user_id", session.user.id).maybeSingle();
   if (error) throw error;
   if (!data) { state.error = "Nejsi ověřený člen KIN. Přihlas se znovu."; await sb.auth.signOut(); return; }
@@ -233,6 +233,8 @@ const rankAt = (m, r) => !!m && rankIdx(m.rank) >= rankIdx(r);
 // 038 (Petr 2026-10-28 "Wampalimu dej stejne moznosti kolem akci jako me"): a Velitel runs every event like the
 // Commander; the Commander's own (his tasks, merits, the briefing protocol) stay his
 const leadsOps = () => !!state.me && (state.me.is_commander || state.me.is_officer);
+// 069 (Petr 2026-11-03): members.lt_lead (Juro) runs the lobby of a Limit Testing operation like the command; the database decides (leads_lobby)
+const leadsLobby = (ev = state.event) => leadsOps() || (!!state.me && !!state.me.lt_lead && !!ev && ev.doctrine === "lt");
 // what the next rank takes; Veteran also merits for the clan, which the Commander judges
 const NEXT = { rekrut: [["Odehrané akce", "ops", 5]], operator: [["Odehrané akce", "ops", 10], ["Tréninky a kurzy", "trainings", 5]] };
 function rankCard(m, prog, merits) {
@@ -306,16 +308,16 @@ const BCT_FIRST = "Na akce od neděle 1. 11. jen po Basic Combat Training: je to
 const padlock = on => `<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 7.5 H12.5 V14 H3.5 Z"/><path d="${on ? "M5.5 7.5 V5 A2.5 2.5 0 0 1 10.5 5 V7.5" : "M5.5 7.5 V5 A2.5 2.5 0 0 1 10.3 4"}"/></svg>`;
 function lockBtn(g) {
   const on = lockedCards().has(g.id);
-  if (leadsOps()) return `<button type="button" class="ib lockb${on ? " on" : ""}" data-lock="${esc(g.id)}" aria-pressed="${on}" aria-label="${on ? "Odemknout" : "Zamknout"}: ${esc(g.name)}" title="${on ? "Zamčeno: nikdo se sám nezapíše ani neodejde. Klik odemkne." : "Zamknout: nikdo se sám nezapíše ani neodejde"}">${padlock(on)}</button>`;
+  if (leadsLobby()) return `<button type="button" class="ib lockb${on ? " on" : ""}" data-lock="${esc(g.id)}" aria-pressed="${on}" aria-label="${on ? "Odemknout" : "Zamknout"}: ${esc(g.name)}" title="${on ? "Zamčeno: nikdo se sám nezapíše ani neodejde. Klik odemkne." : "Zamknout: nikdo se sám nezapíše ani neodejde"}">${padlock(on)}</button>`;
   return on ? `<span class="lockb on" role="img" aria-label="Zamčeno" title="${LOCKED}">${padlock(true)}</span>` : "";
 }
 function slotRow(x, c, sq) {
   const mine = c && c.user_id === state.me.user_id;
-  const need = slotRank(x.key), locked = !c && need && !leadsOps() && !rankAt(state.me, need);
+  const need = slotRank(x.key), locked = !c && need && !leadsLobby() && !rankAt(state.me, need);
   // V4: the Commander moves someone already in the operation onto a free command slot (it stands for "volné" there)
-  const others = !c && need && need !== "velitel" && leadsOps() ? state.claims.filter(o => o.slot_key !== x.key) : [];  // Velení: carry, no select
+  const others = !c && need && need !== "velitel" && leadsLobby() ? state.claims.filter(o => o.slot_key !== x.key) : [];  // Velení: carry, no select
   const moveto = others.length ? `<select class="moveto" data-moveto="${esc(x.key)}" aria-label="Dosadit na ${esc(x.label)}"><option value="">Dosadit</option>${others.map(o => `<option value="${esc(o.user_id)}">${esc(o.members.name)}</option>`).join("")}</select>` : "";
-  const cmd = leadsOps();
+  const cmd = leadsLobby();
   // 044: a locked card shuts for a member, and so does every other place while his own is on one (no moving out)
   const lk = !cmd && lockedCards(), myc = lk && lk.size && myPlace(state.claims), stuck = !!myc && lk.has(slotCard(myc.slot_key));
   const shut = !!lk && (lk.has(slotCard(x.key)) || (stuck && !mine));
@@ -327,7 +329,7 @@ function slotRow(x, c, sq) {
   const act = lift ? `data-lift="${esc(c.user_id)}" aria-label="Přesunout ${esc(c.members.name)}" title="Přesunout: táhni na volné místo, nebo klikni a pak klikni na místo"`
     : mine ? (shut ? `disabled title="${LOCKED}"` : `data-unclaim="${esc(x.key)}" title="Odhlásit se"`) : c || locked || shut ? "disabled" : `data-claim="${esc(x.key)}"`;
   // an x on my own place too (UAT C-03: on a phone "click your slot to leave" was invisible); the Commander's on anyone's
-  const kick = c && (mine && !shut || leadsOps())
+  const kick = c && (mine && !shut || leadsLobby())
     ? `<button type="button" class="kick" data-unclaim="${esc(x.key)}" aria-label="${mine ? "Odhlásit se z místa" : `Odhlásit ${esc(c.members.name)}`}" title="${mine ? "Odhlásit se z místa" : ""}">${cross()}</button>` : "";
   const drag = lift ? ` data-drag="${esc(c.user_id)}"` : sqd && !c && !locked && (cmd || !need) ? " data-free" : "";
   // Petr 2026-10-30: how the player's kit stands for the role of his place, a click opens it with his data
@@ -345,11 +347,11 @@ function rosterGroup(g, by) {
     <ul>${g.slots.map(x => slotRow(x, by[x.key]).replace(/<\/li>$/, roleOffBtn(g, x, by) + "</li>")).join("")}</ul>${fortressTools(g, by)}</div>`;
 }
 // a free plan role: the Commander switches it off right on its row (the row says what it is, no extra words)
-const roleOffBtn = (g, x, by) => leadsOps() && plan && plan.base && x.role && !by[x.key]
+const roleOffBtn = (g, x, by) => leadsLobby() && plan && plan.base && x.role && !by[x.key]
   ? `<button type="button" class="rx-off" data-fx="${g.id}:off:${esc(x.role)}" aria-label="Vypnout roli ${esc(x.role)}" title="Vypnout roli">×</button>` : "";
 function fortressTools(g, by) {
   const base = plan && plan.base && plan.base.find(b => b.id === g.id);
-  if (!leadsOps() || !base) return "";
+  if (!leadsLobby() || !base) return "";
   const free = g.slots.filter(x => !x.role), last = free[free.length - 1], label = (base.slots.find(x => !x.role) || {}).label || "člen";
   const off = base.slots.filter(x => x.role && !g.slots.some(y => y.key === x.key));
   return `<div class="sqtools">
@@ -370,7 +372,7 @@ const leadOf = g => state.claims.find(c => c.lead && squadOf(c.slot_key) === g.i
 // the head. The Commander adds and removes a role's places ("-" only the last and only while free), the last squad
 // when it is empty, and a new squad at the end
 function squadCard(g, by) {
-  const cmd = leadsOps(), n = g.slots.filter(x => by[x.key]).length, lead = leadOf(g), sq = { led: !!lead };
+  const cmd = leadsLobby(), n = g.slots.filter(x => by[x.key]).length, lead = leadOf(g), sq = { led: !!lead };
   const cw = vybDoc(state.event.doctrine);  // D33: the same editor for SWARM, Public Ops and Builder's Dream, only the roles on offer differ
   const roles = squadRoles(state.event.doctrine);
   const lines = roles.map(ro => {
@@ -397,7 +399,7 @@ function squadCard(g, by) {
 // badge stamps onto it. One per squad (011): a member of the squad with the Discord role Squad Leader takes it here (041,
 // Petr 2026-10-29), the SL hands it over here, the Commander or a Velitel picks one of the squad or takes it off
 function slPlate(g, by, lead, n) {
-  const cmd = leadsOps(), me = state.me.user_id, people = g.slots.map(x => by[x.key]).filter(Boolean);
+  const cmd = leadsLobby(), me = state.me.user_id, people = g.slots.map(x => by[x.key]).filter(Boolean);
   const head = `<span class="slp-k" aria-hidden="true">SL</span>`;
   if (lead) return `<div class="slplate on" data-slq="${g.id}">${head}<img src="${esc(lead.members.avatar_url)}" alt="" loading="lazy"><b class="who" title="Squad leader">${esc(lead.members.name)}</b>
     ${lead.user_id === me ? '<button type="button" class="act lead" data-lead="0">Předat SL</button>'
@@ -412,7 +414,7 @@ function slPlate(g, by, lead, n) {
 // chips, - n + for the command (a place taken drops its member, like a role's -); a member sees it only when someone is in
 const STARS = '<svg class="cmd-stars" viewBox="0 0 40 16" aria-hidden="true"><path d="M10 1.5 L12 6.6 H17.4 L13 9.8 L14.7 15 L10 11.8 L5.3 15 L7 9.8 L2.6 6.6 H8 Z M30 1.5 L32 6.6 H37.4 L33 9.8 L34.7 15 L30 11.8 L25.3 15 L27 9.8 L22.6 6.6 H28 Z"/></svg>';
 function cmdCard(g, by) {
-  const n = g.slots.filter(x => by[x.key]).length, lead = leadsOps();
+  const n = g.slots.filter(x => by[x.key]).length, lead = leadsLobby();
   if (!lead && !n) return "";
   const ctl = lead ? `<span class="swctl">
       <button type="button" class="ib" data-cmd="-1" aria-label="Velení: ubrat místo"${g.slots.length ? "" : " disabled"}>${minus()}</button>
@@ -428,7 +430,7 @@ const setCmd = async d => {
 // the Commander's add plate at the end of the lobby (Petr 2026-10-28): a squad into the first gap, and every vehicle type
 // the operation has none of yet; a type with vehicles keeps its - / + on its own card
 function addPlate() {
-  if (!leadsOps()) return "";
+  if (!leadsLobby()) return "";
   const r = rosterOf(state.event), gap = r.squads.some(q => !Object.keys(q).length) || r.squads.length < 12;
   const t = D.doktrina.swarm.sestava, none = t.podpora.map((p, ti) => [p, ti]).filter(([p]) => !(r.vehicles[p.kit] || []).length);
   return `<div class="rg sqnew"><p class="sqnew-k">Přidat do sestavy</p><div class="sqnew-b">
@@ -441,7 +443,7 @@ function addPlate() {
 // one vehicle with its crew; the optional seat (Petr 2026-10-22: Tank Gunner, a helicopter's second crew member) closes only free
 function carBox(t, c, by) {
   // the optional seat is a small + / - by the vehicle's name (Petr 2026-10-28: "jenom nejakej malej symbol ... plusko")
-  const seat = () => { if (!leadsOps() || t.min === t.seats.length) return "";
+  const seat = () => { if (!leadsLobby() || t.min === t.seats.length) return "";
     const on = c.open > t.min, name = t.seats[t.min], busy = on && by[c.slots[c.slots.length - 1].key], what = `${esc(name)}: ${on ? "zavřít" : "otevřít"}`;
     return `<button type="button" class="ib seatt" data-seat="${t.kit}:${c.v}:${on ? -1 : 1}" aria-pressed="${on}" aria-label="${what}" title="${busy ? `${esc(name)} je obsazený` : what}"${busy ? " disabled" : ""}>${on ? minus() : plus()}</button>`; };
   return `<div class="veh" data-veh="${esc(c.slots[0].key)}"><div class="vh">${sym(t.symbol, "sm")}<b class="vn">${esc(c.name)}</b><span class="num">${c.slots.filter(x => by[x.key]).length}/${c.slots.length}</span>${seat()}</div>
@@ -452,7 +454,7 @@ function podporaCard(g, by) {
   const n = g.slots.filter(x => by[x.key]).length, t = g.vehicles[0];  // one vehicle type per card (D20)
   // the type's - n + sits in the card's head (Petr 2026-10-28: the space the row buttons gave back); tanks: on the last
   const more = t.n >= t.max ? `${t.name}: nejvýš ${t.max}` : "";
-  const ctl = leadsOps() && g.ctl !== false ? `<span class="swctl">
+  const ctl = leadsLobby() && g.ctl !== false ? `<span class="swctl">
       <button type="button" class="ib" data-support="${t.ti}:-1" aria-label="Podpora: ubrat ${esc(t.name)}" title="Ubrat ${esc(t.name)}">${minus()}</button>
       <b>${esc(t.n)}</b><button type="button" class="ib" data-support="${t.ti}:1" aria-label="Podpora: přidat ${esc(t.name)}"${more ? ` disabled title="${esc(more)}"` : ` title="Přidat ${esc(t.name)}"`}>${plus()}</button></span>` : "";
   return `<div class="rg podc${lockedCards().has(g.id) ? " lkd" : ""}"><div class="pg-head">${sym(g.symbol, "sm")}<div><b>${esc(g.name)}</b></div><span class="num">${n}/${g.max}</span>${ctl}${lockBtn(g)}</div>
@@ -467,9 +469,9 @@ function viewRoster(s) {
   const ev = state.event;
   if (!ev) return state.evErr ? `${head}${msg}`
     : `${head}<p class="note">Žádná akce není otevřená.</p>${msg}`;
-  const cancel = leadsOps() ? cancelEventForm() : "";
+  const cancel = leadsLobby() ? cancelEventForm() : "";
   // the map form too: picking a known map or "zatím nevím" keeps the sign-ups, cancelling drops them (threat model N1)
-  if (!s) return `${head}<p class="note">Otevřená akce (${esc(fmtWhen(ev.starts_at))}) je pro mapu ${esc(ev.strategy_id)}, kterou War Room nezná.</p>${msg}${leadsOps() ? mapTeamForm(ev) : ""}${cancel}`;
+  if (!s) return `${head}<p class="note">Otevřená akce (${esc(fmtWhen(ev.starts_at))}) je pro mapu ${esc(ev.strategy_id)}, kterou War Room nezná.</p>${msg}${leadsLobby() ? mapTeamForm(ev) : ""}${cancel}`;
   const by = Object.fromEntries(state.claims.map(c => [c.slot_key, c]));
   state.buy = s.swarm && !isRaid() ? nakupGroups(s) : null;
   const filled = state.claims.filter(c => s.roster.some(g => g.slots.some(x => x.key === c.slot_key))).length;
@@ -487,7 +489,7 @@ function viewRoster(s) {
     : myr ? `<p class="mine-kit">Máš místo: <b>${esc(myr.id)} · ${esc(mys.g.name)}</b>${s.nomap ? "" : ` <a class="kitl" href="${roleHref(s, myr)}">Tvoje karta: nákup a kroky</a>`}</p>` : "";
   const miss = s.swarm ? ""  // Petr 2026-10-28: the red strip repeated what the SL plates show
     : missing.length
-    ? `<p class="miss">Chybí: ${missing.slice(0, 6).map(r => (n => !n || leadsOps() || rankAt(state.me, n)  // a command slot above my rank: named, not offered (022)
+    ? `<p class="miss">Chybí: ${missing.slice(0, 6).map(r => (n => !n || leadsLobby() || rankAt(state.me, n)  // a command slot above my rank: named, not offered (022)
       ? `<button type="button" class="rid" data-claim="${esc(r.id)}" title="${esc(r.id)} – ${esc(r.name)}">${esc(r.id)}</button>`
       : `<span class="rid" title="${esc(r.id)} – ${esc(r.name)}, ${n === "veteran" ? "od Veterána" : "od Operátora"}">${esc(r.id)}</span>`)(slotRank(r.id))).join(" ")}${missing.length > 6 ? ` <span class="more">a dalších ${missing.length - 6}</span>` : ""}</p>`
     : '<p class="miss ok">Všechny role z plánu obsazené.</p>';
@@ -498,10 +500,10 @@ function viewRoster(s) {
     <div class="op-fill"><span class="num">${filled} <small>/ ${total}</small></span><span class="gauge" style="--p:${pct}%" aria-hidden="true"></span><small>zapsaných</small></div></div>
     ${miss ? `<div class="op-status">${miss}</div>` : ""}
     <div class="op-me">${mine || (s.swarm && !isRaid() ? `<p class="mine-kit">${KIT_BTN}</p>` : "")}${rsvpBar()}</div>
-    ${leadsOps() ? `<div class="op-cmd" role="group" aria-label="Příkazy velení">${mapTeamForm(ev)}${closeEventForm(s)}<button type="button" class="act" data-briefwin title="Otevře se ve vlastním okně, mimo stream">Protokol briefingu</button>${cancel}</div>` : ""}</div>
+    ${leadsLobby() ? `<div class="op-cmd" role="group" aria-label="Příkazy velení">${mapTeamForm(ev)}${closeEventForm(s)}<button type="button" class="act" data-briefwin title="Otevře se ve vlastním okně, mimo stream">Protokol briefingu</button>${cancel}</div>` : ""}</div>
     ${msg}
     <div class="ros${s.swarm ? " swarm" : ""}">${s.roster.map(g => g.cmdg ? cmdCard(g, by) : g.sq ? squadCard(g, by) : g.vehicles ? podporaCard(g, by) : rosterGroup(g, by)).join("")}${s.swarm ? addPlate() : ""}</div>
-    ${s.base && leadsOps() && s.base.length > s.roster.length ? `<div class="sqtools hidden-g">Skryté: ${s.base.filter(b => !s.roster.some(g => g.id === b.id)).map(b =>
+    ${s.base && leadsLobby() && s.base.length > s.roster.length ? `<div class="sqtools hidden-g">Skryté: ${s.base.filter(b => !s.roster.some(g => g.id === b.id)).map(b =>
       `<button type="button" class="act sqadd" data-fx="${b.id}:hide:0">+ ${esc(b.name)}</button>`).join("")}</div>` : ""}
     ${isRaid() ? "" : nakupBlock(s)}`;
 }
@@ -677,7 +679,7 @@ function nakupBlock(s) {
     ${state.buy.size ? [...state.buy.values()].map(x => { const lead = x.g.sq && leadOf(x.g);
       return `<div class="buy-g"><h3>${esc(x.g.name)}${lead ? ` <small>SL ${esc(lead.members.name)}</small>` : ""}</h3>${buyList(x)}</div>`; }).join("")
       : ""}
-    ${leadsOps() ? `<p class="note nocash">Bez peněz (označuje jen velení, členům se koupí celé minimum): ${state.claims.map(c =>
+    ${leadsLobby() ? `<p class="note nocash">Bez peněz (označuje jen velení, členům se koupí celé minimum): ${state.claims.map(c =>
       `<button type="button" class="act" data-nocash="${esc(c.user_id)}:${c.no_cash ? 0 : 1}" aria-pressed="${!!c.no_cash}">${esc((c.members && c.members.name) || "?")}</button>`).join(" ")}</p>` : ""}
     <p class="note">Kdo kupuje pro jiné, potřebuje bednu a vozidlo, kterým ji koupí: ${D.nakup.rezie.map(e => `${esc(e.item)} ${e.price == null ? "" : usd(e.price)}`).join(", ")}.</p></section>`;
 }
@@ -915,7 +917,7 @@ async function pickPlace(uid, key) {
 }
 document.addEventListener("contextmenu", e => {
   const li = e.target.closest?.("#sestava li[data-key]");
-  if (!li || !leadsOps() || !state.event || state.claims.some(c => c.slot_key === li.dataset.key)) return;
+  if (!li || !leadsLobby() || !state.event || state.claims.some(c => c.slot_key === li.dataset.key)) return;
   e.preventDefault();
   const r = li.getBoundingClientRect();
   openPick(li.dataset.key, e.clientX || r.left, e.clientY || r.bottom);
@@ -2639,7 +2641,7 @@ function logiRole(op) {
   // a vehicle crew orders for its vehicle (Petr 2026-10-31 evening: tanks, Humvee and artillery want their shells): any
   // seat, a vehicle has no badge; the logi heli is the courier, not a customer (058)
   const car = mine.map(c => slotCard(c.slot_key)).find(logiCar);
-  return { cmd: !!op && leadsOps(), crew: mine.some(c => /^SW-LP\d+$/.test(c.slot_key)), squad: lead ? slotCard(lead.slot_key) : car || null };
+  return { cmd: !!op && leadsLobby(op), crew: mine.some(c => /^SW-LP\d+$/.test(c.slot_key)), squad: lead ? slotCard(lead.slot_key) : car || null };
 }
 const logiCar = k => !!k && k.startsWith("POD-") && k !== "POD-LP";
 const seesLogi = () => { const op = logiOp(), r = logiRole(op); return !!op && isSq(op) && (r.cmd || r.crew || !!r.squad); };
