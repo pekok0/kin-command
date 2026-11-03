@@ -537,6 +537,8 @@ const DOC_ICON = {
   cw: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M8 40L40 8M8 8l32 32"/><path d="M6 14V6h8M42 14V6h-8M6 34v8h8M42 34v8h-8"/></svg>',
   // Builder's Dream (D54): the hammer
   builder: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M8 40L23 25"/><path d="M19 13l8-8 12 12-8 8z"/><path d="M27 5l-4 4M35 17l4-4"/></svg>',
+  // Limit Testing (Petr 2026-11-03: "hardcore symbol powa, dominance, smrt, 1337, owning"): the skull
+  lt: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M13 31C4 27 4 10 15 5c6-3 12-3 18 0 11 5 11 22 2 26v6H13z"/><circle class="f" cx="18" cy="19.5" r="4.6"/><circle class="f" cx="30" cy="19.5" r="4.6"/><path class="f" d="M24 25l-3 5.5h6z"/><path d="M13 37v6h22v-6M19.5 37v6M24 37v6M28.5 37v6"/></svg>',
 };
 // the doctrine's emblem (Petr 2026-10-28: "v tom logu public ops neni potreba ten text na druhem radku ... radsi hezke a
 // krasne to logo typu akce"): its mark in a hexagonal badge, big in the event's head, small on the operation cards
@@ -1077,7 +1079,7 @@ function newPanel() {
 function newEventForm() {
   return `<form class="evf" data-form="new">
     <label>Začátek <input type="datetime-local" name="starts" required min="${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}T00:00"></label>
-    <label>Doktrína <select name="doctrine">${[["swarm", "Fun"], ["builder", "Fun"], ["cw", "PO"]].map(([d, g]) => `<option value="${d}">${g}: ${esc(docOf(d).title)}</option>`).join("")}</select></label>
+    <label>Doktrína <select name="doctrine">${[["swarm", "Fun"], ["builder", "Fun"], ["cw", "PO"], ["lt", D.doktrina.lt.skupina]].map(([d, g]) => `<option value="${d}">${g}: ${esc(docOf(d).title)}</option>`).join("")}</select></label>
     ${pickFields(null)}
     <label class="att wide"><input type="checkbox" name="open_to_hosts"> Otevřená hostům (jedna akce týdně podle ankety)</label>
     <button type="submit" class="act">${esc(newLabel("swarm", null))}</button></form>`;
@@ -1452,7 +1454,7 @@ function rosterOf(ev) {
       ({ [t.core[0].kit]: 1, [t.core[1].kit]: 1, [t.swarm.kit]: (ev.squad_swarm && ev.squad_swarm[i]) || t.swarm.default })),
     ...(k && k.nazvy ? { names: [...k.nazvy] } : {}),
     // every seat (an event from before 017 kept its crews); Public Ops what a new vehicle opens (Petr 2026-11-01 "heli jen pilot")
-    vehicles: Object.fromEntries(t.podpora.map((p, i) => [p.kit, Array(ev.squad_support?.[i] ?? (k && k.podpora_default ? k.podpora_default[i] : p.default)).fill(ev.doctrine === "cw" ? p.open : p.seats.length)])) };
+    vehicles: Object.fromEntries(t.podpora.map((p, i) => [p.kit, Array(ev.squad_support?.[i] ?? (k && k.podpora_default ? k.podpora_default[i] : p.default)).fill(["cw", "lt"].includes(ev.doctrine) ? p.open : p.seats.length)])) };
 }
 // Velení (Petr 2026-10-28: "misto Commandera v lobby ... bud jeden, nebo druhy, nebo oba, v budoucnu ... i Juro"): the
 // command's places first in the lobby, 2 unless the roster says otherwise (039: 0-4)
@@ -1507,11 +1509,13 @@ const planOf = ev => !ev ? null : isSq(ev) ? swarmPlan(ev) : fortressOf(!ev.stra
 // doctrine names live in the content (Petr 2026-10-19: FORTRESS, SWARM); events store "defence" / "swarm" / "cw" / "builder"
 // squads and vehicles: SWARM (Fun), Public Ops and Builder's Dream share the roster shape (hub/specs/doktriny-fun-cw,
 // doktrina-builders-dream); Public Ops and Builder's Dream (VYB_DOCS) offer and buy by the Vybava roles (D24, D54)
-const VYB_DOCS = ["cw", "builder"], SQ_DOCS = ["swarm", ...VYB_DOCS];
+// Limit Testing (lt, 067): the Public Ops lobby, its own Vybava classes (hub/specs/doktrina-limit-testing)
+const VYB_DOCS = ["cw", "builder", "lt"], SQ_DOCS = ["swarm", ...VYB_DOCS];
 const docOf = d => SQ_DOCS.includes(d) ? D.doktrina[d] : D.doktrina.defence;
 const isSq = ev => SQ_DOCS.includes(ev.doctrine);
 const vybDoc = d => VYB_DOCS.includes(d);
-const docName = d => docOf(d).title;
+// an operation of Limit Testing is called Big Sweaty Hairy Balls (akce, Petr 2026-11-03), its doctrine keeps the title
+const docName = d => docOf(d).akce || docOf(d).title;
 
 let planMatrix = "";  // the map's Top defence plan, kept to swap back when the SWARM event ends
 let navActive = null;  // menu item of the current page, for re-rendering the nav after a claim
@@ -1547,6 +1551,8 @@ const roles = q => q.classes.filter(c => !c.mapy);
 const OLD_ROLE = { sniper: "recon", spotter: "recon", marksman: "recon", "logistics-ground": "logistics", "logistics-air": "air-logistics" };  // Vybava v3 (D24), Marksman gone (D35)
 const classById = id => { for (const q of D.squads) { const c = classOf(q, id); if (c) return [q, c]; } return []; };
 const classHref = (q, c) => `#/squad/${q.id}/${c.id}`;
+// Pokryti and a player's roles: the clan's roles once, without the Limit Testing copies (same ladders, hub/specs/doktrina-limit-testing)
+const mainSquads = () => D.squads.filter(q => q.id !== "lt");
 
 // APP-6 friendly unit symbols, squad echelon dot above the frame
 function sym(kind, cls = "") {
@@ -2084,8 +2090,8 @@ function viewSwarm(k) {
 // 2026-11-01: CW: Clan War only for the command, SL and Instruktor (seesClanWar, row 'clanwar' 061)
 const seesClanWar = () => !!state.me && canInstruct();
 function viewDoktrina(tab, sub) {
-  const k = D.doktrina, cwar = seesClanWar(), cur = ["builder", "cw", "vycvik"].includes(tab) || cwar && tab === "clanwar" ? tab : "swarm";
-  const tabs = [["swarm", `Fun: ${k.swarm.title}`], ["builder", `Fun: ${k.builder.title}`], ["cw", `PO: ${k.cw.title}`],
+  const k = D.doktrina, cwar = seesClanWar(), cur = ["builder", "cw", "lt", "vycvik"].includes(tab) || cwar && tab === "clanwar" ? tab : "swarm";
+  const tabs = [["swarm", `Fun: ${k.swarm.title}`], ["builder", `Fun: ${k.builder.title}`], ["cw", `PO: ${k.cw.title}`], ["lt", `${k.lt.skupina}: ${k.lt.title}`],
     ...(cwar ? [["clanwar", "CW: Clan War"]] : []), ["vycvik", "Výcvik"]];
   return `
     <div class="narrow">
@@ -2192,7 +2198,7 @@ function viewSquads() {
   return `<header class="unit-head"><div><h1>Výbava</h1><p>Tvůj loadout pro každou roli, podle toho, co máš odemčené</p></div></header>
     ${seesCoverage() ? '<p class="note">Kolik nás co má: <a class="act" href="#/pokryti">Pokrytí rolí</a></p>' : ""}
     ${trackerBox()}
-    <section class="block"><h2>Role</h2><ul class="cls">${D.squads.flatMap(q => roles(q).map(c => `<li><a href="${classHref(q, c)}"><b>${esc(c.name)}</b></a></li>`)).join("")}</ul></section>`;
+    ${D.squads.map(q => `<section class="block"><h2>${esc(q.name)}</h2><ul class="cls">${roles(q).map(c => `<li><a href="${classHref(q, c)}"><b>${esc(c.name)}</b></a></li>`).join("")}</ul></section>`).join("")}`;
 }
 function viewSquadPage(q) {
   return `<p class="crumb"><a href="#/vybava">Výbava</a> / ${esc(q.name)}</p>
@@ -2411,7 +2417,7 @@ function viewCoverage(season, members, all) {
   return `${head}
     <p class="note">Členů s daty: <b>${users.length}</b>. Kdo nemá propojený ${TRK_LINK}, v počtech chybí (propojení je ve <a href="#/vybava">Výbavě</a>).</p>
     <section class="block"><h2>Role</h2><table class="data cov"><thead><tr><th>Role</th><th class="num">Mají <small>z ${users.length}</small></th></tr></thead><tbody>
-    ${D.squads.map(q => roles(q).map(c => { const top = keyLadder(c).steps.at(-1);
+    ${mainSquads().map(q => roles(q).map(c => { const top = keyLadder(c).steps.at(-1);
       return `<tr><td><a href="${classHref(q, c)}">${esc(c.name)}</a></td><td class="num"><b>${top.unlock ? users.filter(h => h.has(top.item)).length : users.length}</b></td></tr>`; }).join("")).join("")}
     </tbody></table></section>
     <section class="block"><h2>Členové</h2><input type="search" class="msearch" placeholder="Hledat člena" aria-label="Hledat člena">
@@ -2424,7 +2430,7 @@ function viewPlayerRoles(pl) {
   const ok = pl.trk && pl.trk.status === "ok";
   return `<p class="crumb"><a href="#/vybava">Výbava</a> / <a href="#/pokryti">Pokrytí</a> / ${esc(pl.name)}</p>
     <header class="unit-head"><div><h1>${esc(pl.name)}</h1><p>${ok ? "Výbava podle WARDOGS Trackeru: vyber roli" : "Nemá propojený WARDOGS Tracker: role ukážou startovní loadout"}</p></div></header>
-    <section class="block"><h2>Role</h2><ul class="cls">${D.squads.flatMap(q => roles(q).map(c => {
+    <section class="block"><h2>Role</h2><ul class="cls">${mainSquads().flatMap(q => roles(q).map(c => {
       const href = `${classHref(q, c)}?hrac=${encodeURIComponent(pl.discord_id)}`;
       return `<li><a href="${href}"><b>${esc(c.name)}</b>${readyChip(pl, c)}</a></li>`; })).join("")}</ul></section>`;
 }
@@ -2475,10 +2481,10 @@ function unlockSection(m, season, have) {
   const own = state.me && state.me.user_id === m.user_id;
   if (!have.size) return `<section class="block"><h2>Odemčeno · ${esc(season.name)}</h2><p class="note">Zatím žádná data z WARDOGS Trackeru.${own ? ' Propoj ho ve <a href="#/vybava">Výbavě</a>.' : ""}</p></section>`;
   // the best step of each sub-class's key ladder this player unlocked (vybava-zebricky v2: everyone can play every class)
-  const rows = D.squads.flatMap(q => roles(q).map(c => { const lad = keyLadder(c), i = lad.steps.map(st => !st.unlock || have.has(st.item)).lastIndexOf(true);
+  const rows = mainSquads().flatMap(q => roles(q).map(c => { const lad = keyLadder(c), i = lad.steps.map(st => !st.unlock || have.has(st.item)).lastIndexOf(true);
     return { q, c, st: lad.steps[i], top: i === lad.steps.length - 1 }; })).filter(x => x.st);
   return `<section class="block"><h2>Odemčeno · ${esc(season.name)}</h2>
-    <p class="lede">Odemčené předměty z klanového seznamu: <b>${have.size}</b> · u ${rows.filter(x => x.top).length} z ${D.squads.reduce((a, q) => a + roles(q).length, 0)} sub-class má cíl hlavního žebříčku</p>
+    <p class="lede">Odemčené předměty z klanového seznamu: <b>${have.size}</b> · u ${rows.filter(x => x.top).length} z ${mainSquads().reduce((a, q) => a + roles(q).length, 0)} sub-class má cíl hlavního žebříčku</p>
     <ul class="cls">${rows.map(x => `<li><a href="${classHref(x.q, x.c)}"><b>${esc(x.c.name)}</b><span>${esc(x.st.item)}${x.top ? " · cíl" : ""}</span></a></li>`).join("")}</ul></section>`;
 }
 
