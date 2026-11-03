@@ -50,8 +50,6 @@
   --gold: oklch(0.80 0.12 85);
   --gold-thread: oklch(0.80 0.12 85 / 0.55);
   --fr: oklch(0.86 0.15 205);
-  --fr-fill: oklch(0.86 0.15 205 / 0.14);
-  --fr-glow: oklch(0.86 0.15 205 / 0.5);
   --ho: oklch(0.72 0.19 25);
   --gr: oklch(0.82 0.16 150);
   --un: oklch(0.91 0.15 100);
@@ -65,8 +63,14 @@
   --ease: cubic-bezier(.16, 1, .3, 1);
   /* a plate: lit from above, lifted off the floor */
   --plate-bg: linear-gradient(180deg, oklch(0.24 0.055 245 / 0.92), oklch(0.17 0.04 252 / 0.9) 46%, oklch(0.15 0.035 254 / 0.92));
-  --plate-lift: inset 0 1px 0 oklch(0.86 0.15 205 / 0.28), inset 0 0 0 1px oklch(0.45 0.08 228 / 0.55), 0 22px 44px -22px oklch(0.05 0.02 255 / 0.95), 0 3px 8px -3px oklch(0.05 0.02 255 / 0.7);
-  --brk: oklch(0.86 0.15 205 / 0.85);
+}
+
+/* tokens that follow --fr and --rule: recomputed wherever a scope changes them (Limit Testing, its operation card) */
+:root, body[data-lt], .opc {
+  --fr-fill: color-mix(in oklch, var(--fr) 14%, transparent);
+  --fr-glow: color-mix(in oklch, var(--fr) 50%, transparent);
+  --plate-lift: inset 0 1px 0 color-mix(in oklch, var(--fr) 28%, transparent), inset 0 0 0 1px color-mix(in oklch, var(--rule) 55%, transparent), 0 22px 44px -22px oklch(0.05 0.02 255 / 0.95), 0 3px 8px -3px oklch(0.05 0.02 255 / 0.7);
+  --brk: color-mix(in oklch, var(--fr) 85%, transparent);
   --brackets: linear-gradient(var(--brk), var(--brk)) top left / 12px 1px no-repeat, linear-gradient(var(--brk), var(--brk)) top left / 1px 12px no-repeat,
     linear-gradient(var(--brk), var(--brk)) top right / 12px 1px no-repeat, linear-gradient(var(--brk), var(--brk)) top right / 1px 12px no-repeat,
     linear-gradient(var(--brk), var(--brk)) bottom left / 12px 1px no-repeat, linear-gradient(var(--brk), var(--brk)) bottom left / 1px 12px no-repeat,
@@ -104,8 +108,8 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .brand-crest path { stroke-width: 2; filter: drop-shadow(0 0 4px var(--fr-glow)); transform-origin: 20px 20px; animation: hud-spin 14s linear infinite; }
 .brand-t { display: grid; gap: 3px; }
 .brand-t b { font: 700 19px/1 Oxanium, var(--cond); letter-spacing: .14em; text-transform: uppercase; white-space: nowrap;
-  background: linear-gradient(180deg, var(--ink) 30%, oklch(0.86 0.15 205)); -webkit-background-clip: text; background-clip: text; color: transparent;
-  filter: drop-shadow(0 0 10px oklch(0.86 0.15 205 / 0.35)); }
+  background: linear-gradient(180deg, var(--ink) 30%, var(--fr)); -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 10px color-mix(in oklch, var(--fr) 35%, transparent)); }
 .brand-t small { font: 600 11px/1 Oxanium, var(--cond); letter-spacing: .42em; text-transform: uppercase; color: var(--fr); }
 /* a phone: the name on two lines next to the crest, so sound and logout still fit the row */
 @media (max-width: 520px) { .brand-t b { font-size: 13px; line-height: 1.05; letter-spacing: .1em; white-space: normal; max-width: 11.5ch; } .brand-t small { font-size: 8px; letter-spacing: .3em; } .brand { gap: 8px; } }
@@ -381,9 +385,9 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .opc > .docmark { grid-column: 2; grid-row: 1; justify-self: end; }
 .opc { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; padding: 16px 18px 14px; color: var(--ink); text-decoration: none;
   background: var(--brackets), var(--plate-bg); box-shadow: var(--plate-lift); transition: box-shadow 260ms var(--ease), transform 260ms var(--ease); }
-.opc:hover { transform: translateY(-2px); box-shadow: var(--plate-lift), 0 0 0 1px oklch(0.86 0.15 205 / 0.45), 0 0 30px -12px var(--fr-glow); }
+.opc:hover { transform: translateY(-2px); box-shadow: var(--plate-lift), 0 0 0 1px color-mix(in oklch, var(--fr) 45%, transparent), 0 0 30px -12px var(--fr-glow); }
 .opc.on { box-shadow: var(--plate-lift), 0 0 0 1px var(--fr), 0 0 36px -10px var(--fr-glow); }
-.opc-k { justify-self: start; font: 700 13px/1 var(--cond); letter-spacing: .12em; text-transform: uppercase; padding: 5px 8px 4px; color: var(--fr); border: 1px solid oklch(0.86 0.15 205 / 0.6); background: var(--fr-fill); }
+.opc-k { justify-self: start; font: 700 13px/1 var(--cond); letter-spacing: .12em; text-transform: uppercase; padding: 5px 8px 4px; color: var(--fr); border: 1px solid color-mix(in oklch, var(--fr) 60%, transparent); background: var(--fr-fill); }
 .opc-t { font: 700 26px/1.05 var(--cond); letter-spacing: .02em; text-transform: uppercase; }
 .opc .tminus { font: 700 20px/1 var(--mono, var(--cond)); letter-spacing: .06em; color: var(--fr); text-shadow: 0 0 16px var(--fr-glow); }
 .opc-m { color: var(--ink-2); }
@@ -466,7 +470,7 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .loadout h3 .bag-n { margin-left: 6px; color: var(--ink-2); letter-spacing: .06em; }
 .bag { --cell: 44px; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; margin-bottom: 12px; }
 .bag-c { display: grid; grid-template-columns: repeat(var(--w), var(--cell)); grid-template-rows: repeat(var(--h), var(--cell)); gap: 2px; padding: 3px;
-  border: 1px solid var(--rule); background: oklch(0.12 0.03 254 / 0.75); box-shadow: inset 0 1px 0 oklch(0.86 0.15 205 / 0.12); }
+  border: 1px solid var(--rule); background: oklch(0.12 0.03 254 / 0.75); box-shadow: inset 0 1px 0 color-mix(in oklch, var(--fr) 12%, transparent); }
 .bag-e { border: 1px solid var(--rule-soft); background: oklch(0.16 0.035 252 / 0.6); }
 .bag-t { position: relative; overflow: hidden; min-width: 0; min-height: 0; border: 1px solid var(--rule); background: linear-gradient(180deg, oklch(0.27 0.06 248), oklch(0.2 0.045 250)); }
 .bag-t img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; padding: 3px; }
@@ -488,7 +492,7 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .lg-add { display: grid; grid-template-rows: 56px auto auto; align-content: start; gap: 4px; width: 100%; aspect-ratio: 1; padding: 10px; overflow: hidden;
   text-align: left; color: var(--ink); background: var(--slot-bg); border: 1px solid var(--rule-soft); cursor: pointer; transition: border-color 160ms var(--ease), background 160ms var(--ease); }
 .lg-add .item { width: 100%; height: 56px; padding: 4px; border: 0; background: none; }
-.lg-add:hover { border-color: oklch(0.86 0.15 205 / 0.6); }
+.lg-add:hover { border-color: color-mix(in oklch, var(--fr) 60%, transparent); }
 .lg-n { font: 600 15px/1.15 var(--sans); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .lg-s { font: 700 13px/1 var(--cond); letter-spacing: .06em; color: var(--ink-3); text-transform: uppercase; padding-right: 52px; }
 .lg-c { position: absolute; top: 8px; right: 10px; font: 700 38px/1 var(--cond); color: var(--fr); text-shadow: 0 0 16px var(--fr-glow); }
@@ -598,14 +602,14 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 @media (prefers-reduced-motion: reduce) { .pf-call { animation: none; } }
 /* the command's right click on a free place: who said Prijdu (Petr 2026-10-30, 051) */
 .pick { position: fixed; z-index: 60; min-width: 220px; max-width: min(320px, calc(100vw - 16px)); max-height: min(420px, calc(100vh - 16px)); overflow: auto;
-  padding: 6px; background: var(--plate-bg, var(--panel)); border: 1px solid var(--rule); box-shadow: 0 22px 44px -22px oklch(0 0 0 / 0.8), 0 2px 6px oklch(0 0 0 / 0.5), inset 0 1px 0 oklch(0.86 0.15 205 / 0.35); }
+  padding: 6px; background: var(--plate-bg, var(--panel)); border: 1px solid var(--rule); box-shadow: 0 22px 44px -22px oklch(0 0 0 / 0.8), 0 2px 6px oklch(0 0 0 / 0.5), inset 0 1px 0 color-mix(in oklch, var(--fr) 35%, transparent); }
 .pick-h { padding: 4px 6px 8px; font: 700 12px/1.2 var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
 .pick-h b { color: var(--ink); }
 .pick button { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 0 8px; align-items: center; width: 100%; min-height: 40px; padding: 6px; text-align: left;
   font: 600 16px/1.2 var(--sans); color: var(--ink); background: none; border: 1px solid transparent; cursor: pointer; }
 .pick button img { width: 24px; height: 24px; border-radius: 50%; grid-row: 1 / 3; }
 .pick button small { grid-column: 2; font: 500 13px/1.2 var(--sans); color: var(--ink-3); }
-.pick button:hover, .pick button:focus-visible { background: var(--fr-fill); border-color: oklch(0.86 0.15 205 / 0.5); }
+.pick button:hover, .pick button:focus-visible { background: var(--fr-fill); border-color: color-mix(in oklch, var(--fr) 50%, transparent); }
 .pick .note { padding: 6px; }
 .lo-store li { display: grid; grid-template-columns: 66px auto; gap: 0 10px; align-items: center; padding: 4px 10px 4px 4px; border: 1px solid var(--rule-soft); }
 .lo-store .item { grid-row: 1 / 3; }
@@ -714,7 +718,7 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 /* home (Petr 2026-10-22): the crest in a slowly turning HUD, then modules on a grid */
 .home-head { grid-template-columns: auto 1fr; }
 .crest-hud { position: relative; grid-row: span 2; width: clamp(110px, 9vw + 60px, 200px); aspect-ratio: 1; display: grid; place-items: center; }
-.crest-hud .crest { width: 62%; height: auto; filter: drop-shadow(0 0 18px oklch(0.86 0.15 205 / 0.35)); }
+.crest-hud .crest { width: 62%; height: auto; filter: drop-shadow(0 0 18px color-mix(in oklch, var(--fr) 35%, transparent)); }
 .hud { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .hud circle, .hud path, .hud line { fill: none; stroke: var(--fr); vector-effect: non-scaling-stroke; }
 .hud .h1 { stroke-opacity: .35; stroke-dasharray: 2 6; }
@@ -755,7 +759,7 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 
 /* the operation's own page (Petr 2026-10-22): a head with when, how long, the doctrine plate and the map; x closes it */
 .evhero { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 14px 24px; align-items: center; margin: 8px 0 22px;
-  padding: 20px 64px 20px 22px; background: var(--brackets), var(--plate-bg); box-shadow: var(--plate-lift), 0 0 0 1px oklch(0.86 0.15 205 / 0.35); }
+  padding: 20px 64px 20px 22px; background: var(--brackets), var(--plate-bg); box-shadow: var(--plate-lift), 0 0 0 1px color-mix(in oklch, var(--fr) 35%, transparent); }
 .evh-k { font: 700 14px/1 Oxanium, var(--cond); letter-spacing: .24em; text-transform: uppercase; color: var(--fr); }
 /* specs/hoste-priznak: the one operation a week that hosts may join, gold like the brand thread */
 .hosts, .draft { display: inline-block; margin-left: 10px; padding: 3px 8px 2px; font: 700 12px/1 var(--cond); letter-spacing: .12em; text-transform: uppercase; color: var(--gold); border: 1px solid var(--gold-thread); vertical-align: middle; }
@@ -850,7 +854,7 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .evrail { display: flex; gap: 10px; margin: 14px 0 4px; padding: 2px 2px 8px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: thin; }
 .evt { flex: 0 0 auto; min-width: 230px; max-width: 300px; display: grid; gap: 4px; padding: 10px 14px 11px; scroll-snap-align: start; color: var(--ink); text-decoration: none;
   background: var(--brackets), var(--plate-bg); box-shadow: var(--plate-lift); transition: box-shadow 220ms var(--ease), transform 220ms var(--ease); }
-.evt:hover { transform: translateY(-1px); box-shadow: var(--plate-lift), 0 0 0 1px oklch(0.86 0.15 205 / 0.45); }
+.evt:hover { transform: translateY(-1px); box-shadow: var(--plate-lift), 0 0 0 1px color-mix(in oklch, var(--fr) 45%, transparent); }
 .evt.next { box-shadow: var(--plate-lift), 0 0 0 1px var(--fr), 0 0 26px -12px var(--fr-glow); }
 .evt-k { font: 700 12px/1.1 var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--fr); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .evt-w { display: flex; align-items: baseline; gap: 10px; }
@@ -928,9 +932,9 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .st .have, .st-tag { grid-area: tag; justify-self: end; }
 .st-tag { font: 700 12px/1 var(--cond); letter-spacing: .1em; text-transform: uppercase; padding: 4px 7px; color: var(--ground); background: var(--fr); box-shadow: 0 0 14px -4px var(--fr-glow); }
 .st.mine { border-color: var(--fr); background: var(--fr-fill); box-shadow: 0 0 22px -10px var(--fr-glow); }
-.st.can { border-color: oklch(0.86 0.15 205 / 0.35); }
+.st.can { border-color: color-mix(in oklch, var(--fr) 35%, transparent); }
 .st-tag.can { color: var(--fr); background: none; box-shadow: inset 0 0 0 1px var(--fr); }
-.st.next { border-style: dashed; border-color: oklch(0.86 0.15 205 / 0.55); }
+.st.next { border-style: dashed; border-color: color-mix(in oklch, var(--fr) 55%, transparent); }
 .st.locked:not(.next) { opacity: .55; }
 
 /* WARDOGS Tracker import (specs/odemceno v2): one lit plate on Výbava, role levels as a read-out row */
@@ -1036,8 +1040,8 @@ body {
   background:
     radial-gradient(120% 70% at 50% -12%, oklch(0.34 0.09 228 / 0.42), transparent 62%),
     radial-gradient(80% 60% at 100% 110%, oklch(0.30 0.08 250 / 0.35), transparent 70%),
-    repeating-linear-gradient(0deg, oklch(0.86 0.15 205 / 0.04) 0 1px, transparent 1px 56px),
-    repeating-linear-gradient(90deg, oklch(0.86 0.15 205 / 0.04) 0 1px, transparent 1px 56px),
+    repeating-linear-gradient(0deg, color-mix(in oklch, var(--fr) 4%, transparent) 0 1px, transparent 1px 56px),
+    repeating-linear-gradient(90deg, color-mix(in oklch, var(--fr) 4%, transparent) 0 1px, transparent 1px 56px),
     url(contours.svg) 0 0 / 1200px 900px,
     var(--ground);
   background-attachment: fixed;
@@ -1046,14 +1050,14 @@ body::after {
   content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
   background: radial-gradient(ellipse at center, transparent 55%, oklch(0.08 0.02 255 / 0.65));
 }
-:focus-visible { outline: 2px solid var(--fr); outline-offset: 2px; box-shadow: 0 0 0 4px oklch(0.86 0.15 205 / 0.2); }
+:focus-visible { outline: 2px solid var(--fr); outline-offset: 2px; box-shadow: 0 0 0 4px color-mix(in oklch, var(--fr) 20%, transparent); }
 
 /* the battle behind everything (Petr 2026-10-22, specs/pozadi-bitva): docs/battle.js draws it on the canvas; one slow
    scan band over it; decoration only */
 .ops { position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: .42; overflow: hidden; }
 .ops canvas { width: 100%; height: 100%; display: block; }
 .ops::after { content: ""; position: absolute; left: 0; right: 0; top: -30%; height: 30%;
-  background: linear-gradient(180deg, transparent, oklch(0.86 0.15 205 / 0.07) 70%, oklch(0.86 0.15 205 / 0.16) 98%, transparent);
+  background: linear-gradient(180deg, transparent, color-mix(in oklch, var(--fr) 7%, transparent) 70%, color-mix(in oklch, var(--fr) 16%, transparent) 98%, transparent);
   animation: ops-scan 13s linear infinite; }
 @keyframes ops-scan { to { transform: translateY(440%); } }
 @media (max-width: 720px) { .ops { opacity: .38; } }
@@ -1061,12 +1065,12 @@ body::after {
 
 /* bar: a console strip, gold seam below, a cyan light line under it */
 .bar { background: linear-gradient(180deg, oklch(0.16 0.04 252 / 0.92), var(--bar-bg)); backdrop-filter: blur(10px) saturate(1.3);
-  box-shadow: 0 1px 0 var(--gold-thread), 0 2px 0 oklch(0.86 0.15 205 / 0.18), 0 18px 30px -20px oklch(0.05 0.02 255 / 0.9); border-bottom: 0; }
+  box-shadow: 0 1px 0 var(--gold-thread), 0 2px 0 color-mix(in oklch, var(--fr) 18%, transparent), 0 18px 30px -20px oklch(0.05 0.02 255 / 0.9); border-bottom: 0; }
 .bar nav a { position: relative; transition: color var(--step), background-color var(--step); }
 .bar nav a::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 2px; height: 2px; background: var(--fr);
   box-shadow: 0 0 10px var(--fr-glow); transform: scaleX(0); transform-origin: left; transition: transform 260ms var(--ease); }
 .bar nav a:hover::after, .bar nav a[aria-current]::after { transform: scaleX(1); }
-.bar nav a:hover, .bar nav a[aria-current] { background: oklch(0.86 0.15 205 / 0.08); }
+.bar nav a:hover, .bar nav a[aria-current] { background: color-mix(in oklch, var(--fr) 8%, transparent); }
 .snd { display: grid; place-items: center; width: 40px; height: 40px; flex: none; color: var(--ink-3); border: 1px solid var(--rule-soft);
   transition: color var(--step), border-color var(--step), box-shadow var(--step); }
 .snd:hover { color: var(--fr); border-color: var(--fr); box-shadow: 0 0 14px -2px var(--fr-glow); }
@@ -1086,16 +1090,16 @@ body::after {
 .vbar button[aria-pressed="true"] { box-shadow: var(--plate-lift), inset 0 -3px 0 var(--fr), 0 0 22px -8px var(--fr-glow); }
 .cont { box-shadow: var(--plate-lift), 0 0 0 1px var(--fr), 0 0 34px -10px var(--fr-glow); }
 .cont .big { text-shadow: 0 0 18px var(--fr-glow); }
-h1 { text-shadow: 0 0 28px oklch(0.86 0.15 205 / 0.18); }
+h1 { text-shadow: 0 0 28px color-mix(in oklch, var(--fr) 18%, transparent); }
 .role-head .code { text-shadow: 0 0 22px var(--fr-glow); }
 .matrix thead th, .matrix tbody th { background: oklch(0.21 0.05 248 / 0.95); }
-.tabs a[aria-current] { background: oklch(0.86 0.15 205 / 0.1); box-shadow: inset 0 -2px 0 var(--fr), 0 6px 16px -10px var(--fr-glow); }
+.tabs a[aria-current] { background: color-mix(in oklch, var(--fr) 10%, transparent); box-shadow: inset 0 -2px 0 var(--fr), 0 6px 16px -10px var(--fr-glow); }
 
 /* controls: lit edge, glow on approach, a press you can feel */
 .act, .rid, .ref, .evclose summary, .evmap summary, .evcancel summary, .kitl {
   transition: border-color var(--step), box-shadow var(--step), background-color var(--step), transform 120ms var(--ease); }
-.act { background: linear-gradient(180deg, oklch(0.25 0.05 245 / 0.9), oklch(0.18 0.04 252 / 0.9)); box-shadow: inset 0 1px 0 oklch(0.86 0.15 205 / 0.18); }
-.act:hover, .evclose summary:hover, .evmap summary:hover { border-color: var(--fr); box-shadow: inset 0 1px 0 oklch(0.86 0.15 205 / 0.3), 0 0 18px -4px var(--fr-glow); }
+.act { background: linear-gradient(180deg, oklch(0.25 0.05 245 / 0.9), oklch(0.18 0.04 252 / 0.9)); box-shadow: inset 0 1px 0 color-mix(in oklch, var(--fr) 18%, transparent); }
+.act:hover, .evclose summary:hover, .evmap summary:hover { border-color: var(--fr); box-shadow: inset 0 1px 0 color-mix(in oklch, var(--fr) 30%, transparent), 0 0 18px -4px var(--fr-glow); }
 .act:active, .rslot:active, .rid:active { transform: translateY(1px) scale(0.985); }
 .act.big { color: var(--ground); background: linear-gradient(180deg, oklch(0.9 0.14 205), oklch(0.78 0.15 210)); box-shadow: 0 0 0 1px var(--fr), 0 10px 30px -10px var(--fr-glow); }
 .act.big:hover { background: linear-gradient(180deg, oklch(0.94 0.12 205), oklch(0.82 0.15 210)); box-shadow: 0 0 0 1px var(--fr), 0 0 36px -6px var(--fr-glow); }
@@ -1106,18 +1110,18 @@ h1 { text-shadow: 0 0 28px oklch(0.86 0.15 205 / 0.18); }
 /* roster: every squad, Podpora and vehicle is its own plate on the floor */
 .ros { gap: 14px; padding: 0; }
 .ros .rg { border: 0; background: var(--brackets), var(--plate-bg); box-shadow: var(--plate-lift); transition: box-shadow 260ms var(--ease); }
-.ros .rg:hover { box-shadow: var(--plate-lift), 0 0 0 1px oklch(0.86 0.15 205 / 0.45), 0 0 30px -12px var(--fr-glow); }
+.ros .rg:hover { box-shadow: var(--plate-lift), 0 0 0 1px color-mix(in oklch, var(--fr) 45%, transparent), 0 0 30px -12px var(--fr-glow); }
 .ros.swarm { background: none; box-shadow: none; padding: 0; }
-.rg .pg-head b { letter-spacing: .04em; text-shadow: 0 0 16px oklch(0.86 0.15 205 / 0.25); }
+.rg .pg-head b { letter-spacing: .04em; text-shadow: 0 0 16px color-mix(in oklch, var(--fr) 25%, transparent); }
 .rg .pg-head .num, .ros-head .num { color: var(--fr); text-shadow: 0 0 14px var(--fr-glow); }
-.sqc ul { border-left-color: oklch(0.86 0.15 205 / 0.55); }
-.sqc ul.body { border-left-color: oklch(0.86 0.15 205 / 0.35); }
-.veh { border: 0; background: oklch(0.13 0.03 254 / 0.6); box-shadow: inset 0 0 0 1px var(--rule-soft), inset 0 1px 0 oklch(0.86 0.15 205 / 0.2); }
+.sqc ul { border-left-color: color-mix(in oklch, var(--fr) 55%, transparent); }
+.sqc ul.body { border-left-color: color-mix(in oklch, var(--fr) 35%, transparent); }
+.veh { border: 0; background: oklch(0.13 0.03 254 / 0.6); box-shadow: inset 0 0 0 1px var(--rule-soft), inset 0 1px 0 color-mix(in oklch, var(--fr) 20%, transparent); }
 .rslot { position: relative; transition: background-color var(--step), box-shadow var(--step); }
-.rslot:not([disabled]):hover { background: linear-gradient(90deg, oklch(0.86 0.15 205 / 0.16), oklch(0.86 0.15 205 / 0.03) 70%); box-shadow: inset 0 0 0 1px oklch(0.86 0.15 205 / 0.45); }
+.rslot:not([disabled]):hover { background: linear-gradient(90deg, color-mix(in oklch, var(--fr) 16%, transparent), color-mix(in oklch, var(--fr) 3%, transparent) 70%); box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--fr) 45%, transparent); }
 .rslot .free { transition: color var(--step), border-color var(--step); }
 .rslot:not([disabled]):hover .free { color: var(--fr); border-color: var(--fr); }
-.rg li.is-me .rslot, .sqc li.is-me .rslot { background: linear-gradient(90deg, oklch(0.86 0.15 205 / 0.22), oklch(0.86 0.15 205 / 0.06)); box-shadow: inset 0 0 0 1px var(--fr), 0 0 22px -8px var(--fr-glow); }
+.rg li.is-me .rslot, .sqc li.is-me .rslot { background: linear-gradient(90deg, color-mix(in oklch, var(--fr) 22%, transparent), color-mix(in oklch, var(--fr) 6%, transparent)); box-shadow: inset 0 0 0 1px var(--fr), 0 0 22px -8px var(--fr-glow); }
 .slb { background: var(--ink); color: var(--ground); box-shadow: 0 0 0 1px var(--fr), 0 0 14px -2px var(--fr-glow); }
 .miss.warn { box-shadow: 0 0 24px -12px oklch(0.72 0.19 25 / 0.6); }
 
@@ -1125,14 +1129,14 @@ h1 { text-shadow: 0 0 28px oklch(0.86 0.15 205 / 0.18); }
 .opcon { position: relative; margin: 0 0 16px; padding: 16px 18px 14px; background: var(--brackets), var(--plate-bg); box-shadow: var(--plate-lift); }
 .opcon .ros-head { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px 28px; margin: 0 0 12px; padding-bottom: 12px; border-bottom: 1px solid var(--rule-soft); }
 .op-id { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; min-width: 0; }
-.op-id h2 { margin: 0; font-size: 26px; letter-spacing: .08em; text-shadow: 0 0 18px oklch(0.86 0.15 205 / 0.3); }
-.op-lamp { width: 10px; height: 10px; border-radius: 50%; background: var(--fr); box-shadow: 0 0 0 3px oklch(0.86 0.15 205 / 0.2), 0 0 14px var(--fr-glow); animation: op-lamp 2s ease-in-out infinite; }
-@keyframes op-lamp { 50% { box-shadow: 0 0 0 6px oklch(0.86 0.15 205 / 0.08), 0 0 22px var(--fr-glow); } }
+.op-id h2 { margin: 0; font-size: 26px; letter-spacing: .08em; text-shadow: 0 0 18px color-mix(in oklch, var(--fr) 30%, transparent); }
+.op-lamp { width: 10px; height: 10px; border-radius: 50%; background: var(--fr); box-shadow: 0 0 0 3px color-mix(in oklch, var(--fr) 20%, transparent), 0 0 14px var(--fr-glow); animation: op-lamp 2s ease-in-out infinite; }
+@keyframes op-lamp { 50% { box-shadow: 0 0 0 6px color-mix(in oklch, var(--fr) 8%, transparent), 0 0 22px var(--fr-glow); } }
 .op-fill { display: grid; grid-template-columns: auto; justify-items: end; gap: 4px; min-width: 120px; }
 .op-fill .num { font: 700 30px/1 var(--cond); }
 .op-fill .num small { font-size: 16px; color: var(--ink-3); }
 .op-fill > small { font: 600 12px/1 var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
-.gauge { display: block; width: 120px; height: 4px; background: oklch(0.86 0.15 205 / 0.15); position: relative; overflow: hidden; }
+.gauge { display: block; width: 120px; height: 4px; background: color-mix(in oklch, var(--fr) 15%, transparent); position: relative; overflow: hidden; }
 .gauge::before { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--p); background: var(--fr); box-shadow: 0 0 10px var(--fr-glow); transition: width 600ms var(--ease); }
 /* the alert strip: a lamp and one line, red when something blocks the plan, cyan when all is set */
 /* sticky flash (.ros-msg) sits outside the console, so it follows the roster down; the warn strip keeps a solid edge and
@@ -1156,7 +1160,7 @@ h1 { text-shadow: 0 0 28px oklch(0.86 0.15 205 / 0.18); }
 .op-cmd { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--rule-soft); }
 .op-cmd > details, .op-cmd > .act { margin: 0; }
 .op-cmd summary, .op-cmd > .act { display: inline-flex; align-items: center; min-height: 40px; padding: 10px 14px 9px; font: 600 14px/1 var(--cond); letter-spacing: .06em; text-transform: uppercase;
-  border: 1px solid var(--rule); background: linear-gradient(180deg, oklch(0.25 0.05 245 / 0.9), oklch(0.18 0.04 252 / 0.9)); box-shadow: inset 0 1px 0 oklch(0.86 0.15 205 / 0.18); }
+  border: 1px solid var(--rule); background: linear-gradient(180deg, oklch(0.25 0.05 245 / 0.9), oklch(0.18 0.04 252 / 0.9)); box-shadow: inset 0 1px 0 color-mix(in oklch, var(--fr) 18%, transparent); }
 .op-cmd > details[open] { flex-basis: 100%; order: 9; padding: 12px; background: oklch(0.13 0.03 254 / 0.6); box-shadow: inset 0 0 0 1px var(--rule-soft); }
 .op-cmd > details[open] summary { border-color: var(--fr); color: var(--fr); }
 .op-cmd .evcancel { margin-left: auto; }
@@ -1176,14 +1180,14 @@ h1 { text-shadow: 0 0 28px oklch(0.86 0.15 205 / 0.18); }
 /* trainings and courses (specs/typy-akci) in the war room: a plate each, side by side on a wide screen */
 .trl { border-top: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 14px; margin-top: 12px; }
 .tr { padding: 16px 18px; border-bottom: 0; background: var(--brackets), var(--plate-bg); box-shadow: var(--plate-lift); transition: box-shadow 260ms var(--ease); }
-.tr:hover { box-shadow: var(--plate-lift), 0 0 0 1px oklch(0.86 0.15 205 / 0.45), 0 0 30px -12px var(--fr-glow); }
-.tr-k .ref { color: var(--fr); border-color: oklch(0.86 0.15 205 / 0.6); background: var(--fr-fill); box-shadow: 0 0 12px -6px var(--fr-glow); }
-.tr h3 { text-shadow: 0 0 18px oklch(0.86 0.15 205 / 0.25); }
+.tr:hover { box-shadow: var(--plate-lift), 0 0 0 1px color-mix(in oklch, var(--fr) 45%, transparent), 0 0 30px -12px var(--fr-glow); }
+.tr-k .ref { color: var(--fr); border-color: color-mix(in oklch, var(--fr) 60%, transparent); background: var(--fr-fill); box-shadow: 0 0 12px -6px var(--fr-glow); }
+.tr h3 { text-shadow: 0 0 18px color-mix(in oklch, var(--fr) 25%, transparent); }
 .tr .rsvp { gap: 0; }
 .tr .rsvp .act { margin-left: -1px; min-height: 40px; }
 .tr .rsvp .act[aria-pressed="true"] { position: relative; z-index: 1; color: var(--ground); background: linear-gradient(180deg, oklch(0.92 0.13 205), oklch(0.8 0.15 210)); box-shadow: 0 0 0 1px var(--fr), 0 0 20px -4px var(--fr-glow); }
 .tr details summary { display: inline-flex; align-items: center; min-height: 40px; margin-top: 10px; padding: 10px 14px 9px; font: 600 14px/1 var(--cond); letter-spacing: .06em; text-transform: uppercase; cursor: pointer;
-  border: 1px solid var(--rule); background: linear-gradient(180deg, oklch(0.25 0.05 245 / 0.9), oklch(0.18 0.04 252 / 0.9)); box-shadow: inset 0 1px 0 oklch(0.86 0.15 205 / 0.18); }
+  border: 1px solid var(--rule); background: linear-gradient(180deg, oklch(0.25 0.05 245 / 0.9), oklch(0.18 0.04 252 / 0.9)); box-shadow: inset 0 1px 0 color-mix(in oklch, var(--fr) 18%, transparent); }
 .tr details summary { color: var(--ink-3); }
 /* specs/bct-rolling (054): the BCT floor, two small cards a day; the time form under "Povedu jako instruktor" */
 .bctl { grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
@@ -1191,8 +1195,8 @@ h1 { text-shadow: 0 0 28px oklch(0.86 0.15 205 / 0.18); }
 .bctl .tr h3 { margin: 6px 0 4px; font-size: 18px; }
 .bctl .tr-m { font: 600 17px/1.3 var(--cond); }
 /* Petr 2026-11-01: the instructor's own slot on a BCT card, lit when taken, dashed red when missing */
-.bct-in { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 10px; padding: 8px 10px; border: 1px solid oklch(0.86 0.15 205 / 0.7);
-  background: linear-gradient(90deg, oklch(0.86 0.15 205 / 0.2), oklch(0.86 0.15 205 / 0.04)); box-shadow: inset 3px 0 0 var(--fr), 0 0 22px -8px var(--fr-glow); }
+.bct-in { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 10px; padding: 8px 10px; border: 1px solid color-mix(in oklch, var(--fr) 70%, transparent);
+  background: linear-gradient(90deg, color-mix(in oklch, var(--fr) 20%, transparent), color-mix(in oklch, var(--fr) 4%, transparent)); box-shadow: inset 3px 0 0 var(--fr), 0 0 22px -8px var(--fr-glow); }
 .bct-in .bct-l { flex: 0 0 100%; font: 700 12px/1 var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--fr); }
 .bct-in img { width: 28px; height: 28px; border-radius: 50%; }
 .bct-in > b { font: 700 19px/1.15 var(--cond); overflow-wrap: anywhere; }
@@ -1210,7 +1214,7 @@ h1 { text-shadow: 0 0 28px oklch(0.86 0.15 205 / 0.18); }
 .rg li, .veh { position: relative; }
 li.fx-claim .rslot { animation: fx-lock 900ms var(--ease); }
 li.fx-claim::after, .veh.fx-new::after { content: ""; position: absolute; inset: 0; pointer-events: none;
-  background: linear-gradient(100deg, transparent 20%, oklch(0.86 0.15 205 / 0.45) 50%, transparent 80%); background-size: 250% 100%;
+  background: linear-gradient(100deg, transparent 20%, color-mix(in oklch, var(--fr) 45%, transparent) 50%, transparent 80%); background-size: 250% 100%;
   animation: fx-scan 700ms var(--ease) forwards; }
 @keyframes fx-lock { 0% { box-shadow: inset 0 0 0 2px var(--fr), 0 0 34px 2px var(--fr-glow); } 100% { box-shadow: inset 0 0 0 1px transparent; } }
 @keyframes fx-scan { from { background-position: 120% 0; opacity: 1; } to { background-position: -30% 0; opacity: 0; } }
@@ -1224,7 +1228,7 @@ li.fx-new { animation: fx-unfold 520ms var(--ease) both; }
 @keyframes fx-deploy { from { transform: scale(0.94); filter: brightness(1.9); box-shadow: inset 0 0 0 2px var(--fr), 0 0 40px 4px var(--fr-glow); } to { transform: none; filter: none; } }
 .slb.fx-lead { animation: fx-stamp 650ms var(--ease) both; }
 @keyframes fx-stamp { 0% { transform: scale(2.4) rotate(-10deg); opacity: 0; }
-  55% { transform: scale(0.9); opacity: 1; box-shadow: 0 0 0 6px oklch(0.86 0.15 205 / 0.35), 0 0 30px var(--fr-glow); } 100% { transform: none; } }
+  55% { transform: scale(0.9); opacity: 1; box-shadow: 0 0 0 6px color-mix(in oklch, var(--fr) 35%, transparent), 0 0 30px var(--fr-glow); } 100% { transform: none; } }
 
 /* every page arrives once: the content rises off the floor */
 #app > * { animation: rise 420ms var(--ease) both; }
@@ -1251,7 +1255,7 @@ li.fx-new { animation: fx-unfold 520ms var(--ease) both; }
 .ros .swctl { align-items: center; gap: 2px; }
 .ros .swctl b { min-width: 2.2ch; text-align: center; font: 700 16px/1 var(--cond); color: var(--ink); }
 .ib { display: inline-grid; place-items: center; flex: none; width: 32px; height: 32px; color: var(--ink-2); border: 1px solid transparent; }
-.ib:hover:not(:disabled) { color: var(--fr); border-color: oklch(0.86 0.15 205 / 0.5); background: var(--fr-fill); }
+.ib:hover:not(:disabled) { color: var(--fr); border-color: color-mix(in oklch, var(--fr) 50%, transparent); background: var(--fr-fill); }
 .ib:disabled { opacity: .35; cursor: default; }
 /* 044 (Petr 2026-10-30): the padlock in a lobby card's corner, gold like the command's strip; a locked card gets a gold edge */
 .lockb { display: inline-grid; place-items: center; flex: none; width: 32px; height: 32px; color: var(--ink-3); }
@@ -1270,12 +1274,12 @@ li.fx-new { animation: fx-unfold 520ms var(--ease) both; }
 .slplate .who-none { flex: 1; min-width: 0; font: 600 13px/1.2 var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
 .slplate.need { border-color: oklch(0.72 0.19 25 / 0.7); background: oklch(0.72 0.19 25 / 0.07); }
 .slplate.need .slp-k, .slplate.need .who-none { color: var(--ho); border-color: var(--ho); }
-.slplate.on { border: 1px solid oklch(0.86 0.15 205 / 0.55); background: linear-gradient(90deg, oklch(0.86 0.15 205 / 0.16), oklch(0.86 0.15 205 / 0.03)); }
+.slplate.on { border: 1px solid color-mix(in oklch, var(--fr) 55%, transparent); background: linear-gradient(90deg, color-mix(in oklch, var(--fr) 16%, transparent), color-mix(in oklch, var(--fr) 3%, transparent)); }
 .slplate.on .slp-k { color: var(--ground); background: var(--ink); border: 1px solid var(--ink); }
 .slplate img { width: 24px; height: 24px; border-radius: 50%; flex: none; }
 .slplate .who { flex: 1; min-width: 0; font: 700 17px/1.1 var(--cond); letter-spacing: .03em; color: var(--ink); overflow-wrap: anywhere; }
 .slplate .lead { flex: none; margin: 0; min-height: 32px; padding: 6px 8px 5px; font-size: 12px; }
-.slpick { flex: none; max-width: 11em; min-height: 32px; font: 700 13px/1 var(--cond); letter-spacing: .06em; text-transform: uppercase; color: var(--fr); background: transparent; border: 1px solid oklch(0.86 0.15 205 / 0.5); padding: 0 6px; }
+.slpick { flex: none; max-width: 11em; min-height: 32px; font: 700 13px/1 var(--cond); letter-spacing: .06em; text-transform: uppercase; color: var(--fr); background: transparent; border: 1px solid color-mix(in oklch, var(--fr) 50%, transparent); padding: 0 6px; }
 .slplate.fx-lead { animation: sl-seat 900ms var(--ease) both; }
 .slplate.fx-lead .slp-k { animation: fx-stamp 650ms var(--ease) both; }
 .slplate.fx-lead .who { animation: sl-name 700ms var(--ease) 120ms both; }
@@ -1293,7 +1297,7 @@ li.fx-new { animation: fx-unfold 520ms var(--ease) both; }
 .sqx:hover:not(:disabled) { color: var(--ho); border-color: var(--ho); background: oklch(0.72 0.19 25 / 0.12); }
 .act.sqx.armed { flex: none; color: var(--ho); border-color: var(--ho); font-size: 12px; padding: 7px 8px 6px; white-space: nowrap; }
 .addrole { display: inline-block; min-height: 32px; margin: 12px 0 2px; padding: 0 6px; font: 700 13px/1 var(--cond); letter-spacing: .06em; text-transform: uppercase;
-  color: var(--fr); background: transparent; border: 1px solid oklch(0.86 0.15 205 / 0.5); }
+  color: var(--fr); background: transparent; border: 1px solid color-mix(in oklch, var(--fr) 50%, transparent); }
 .vh .seatt { margin-left: 2px; border-color: var(--rule-soft); }
 .podc .sqp { flex-wrap: nowrap; }
 .sqnew { display: grid; align-content: center; gap: 10px; background: none !important; box-shadow: none !important; outline: 1px dashed var(--rule); outline-offset: -1px; }
@@ -1316,10 +1320,10 @@ body.carrying, body.carrying * { cursor: grabbing !important; user-select: none;
 .carry-ghost img { width: 24px; height: 24px; border-radius: 50%; flex: none; }
 .carry-ghost .nm { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .carry-ghost.landing { transition: transform 200ms var(--ease), width 200ms var(--ease), opacity 200ms; opacity: 0; }
-.ros li.lifted .rslot { opacity: .45; background: none !important; box-shadow: inset 0 0 0 1px oklch(0.86 0.15 205 / 0.6) !important; outline: 1px dashed var(--fr); outline-offset: -4px; }
-.ros li.drop-ok .rslot { background: oklch(0.86 0.15 205 / 0.05); box-shadow: inset 0 0 0 1px oklch(0.86 0.15 205 / 0.35); transition: background 120ms, box-shadow 120ms; }
-.ros li.drop-ok .free { border-color: oklch(0.86 0.15 205 / 0.7); color: var(--fr); }
-.ros li.drop-hot .rslot { background: oklch(0.86 0.15 205 / 0.2); box-shadow: inset 0 0 0 2px var(--fr), 0 0 26px -6px var(--fr-glow); }
+.ros li.lifted .rslot { opacity: .45; background: none !important; box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--fr) 60%, transparent) !important; outline: 1px dashed var(--fr); outline-offset: -4px; }
+.ros li.drop-ok .rslot { background: color-mix(in oklch, var(--fr) 5%, transparent); box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--fr) 35%, transparent); transition: background 120ms, box-shadow 120ms; }
+.ros li.drop-ok .free { border-color: color-mix(in oklch, var(--fr) 70%, transparent); color: var(--fr); }
+.ros li.drop-hot .rslot { background: color-mix(in oklch, var(--fr) 20%, transparent); box-shadow: inset 0 0 0 2px var(--fr), 0 0 26px -6px var(--fr-glow); }
 .ros li.drop-hot .free { color: var(--ground); background: var(--fr); border-style: solid; }
 @media (prefers-reduced-motion: reduce) { .carry-ghost.landing { transition: none; } }
 
@@ -1334,8 +1338,8 @@ body.carrying, body.carrying * { cursor: grabbing !important; user-select: none;
   .addrole::picker(select), .slpick::picker(select), .rg li .moveto::picker(select), .addrole option, .slpick option, .rg li .moveto option { border-radius: 0; }
   .addrole:hover, .slpick:hover { background: var(--fr-fill); }
   .addrole::picker(select), .slpick::picker(select), .rg li .moveto::picker(select) { min-width: 14em; margin: 4px 0; padding: 4px; color: var(--ink);
-    border: 1px solid oklch(0.86 0.15 205 / 0.6); background: linear-gradient(180deg, oklch(0.25 0.055 245 / 0.98), oklch(0.17 0.045 252 / 0.98));
-    box-shadow: 0 0 0 1px oklch(0.86 0.15 205 / 0.12), 0 22px 44px -16px rgba(0, 0, 0, .85), 0 0 30px -12px var(--fr-glow); }
+    border: 1px solid color-mix(in oklch, var(--fr) 60%, transparent); background: linear-gradient(180deg, oklch(0.25 0.055 245 / 0.98), oklch(0.17 0.045 252 / 0.98));
+    box-shadow: 0 0 0 1px color-mix(in oklch, var(--fr) 12%, transparent), 0 22px 44px -16px rgba(0, 0, 0, .85), 0 0 30px -12px var(--fr-glow); }
   .addrole option, .slpick option, .rg li .moveto option { display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 6px 10px; cursor: pointer;
     background: transparent; color: var(--rc, var(--ink)); font: 700 14px/1.1 var(--cond); letter-spacing: .06em; text-transform: uppercase; }
   .slpick option, .rg li .moveto option { font: 600 15px/1.2 var(--sans); letter-spacing: 0; text-transform: none; color: var(--ink); }
@@ -1352,7 +1356,7 @@ body.carrying, body.carrying * { cursor: grabbing !important; user-select: none;
 .dws { position: fixed; inset: 0; z-index: 800; overflow: hidden; pointer-events: none; }  /* clips a closed panel: no sideways scroll */
 .dws .dw, .dws .dw-shade.open { pointer-events: auto; }
 .dw { position: absolute; top: 0; right: 0; bottom: 0; z-index: 1; width: min(460px, 100vw); overflow-y: auto; overscroll-behavior: contain; padding: 0 20px 40px;
-  background: linear-gradient(180deg, oklch(0.21 0.05 248 / 0.985), oklch(0.15 0.035 252 / 0.985)); border-left: 1px solid oklch(0.86 0.15 205 / 0.55);
+  background: linear-gradient(180deg, oklch(0.21 0.05 248 / 0.985), oklch(0.15 0.035 252 / 0.985)); border-left: 1px solid color-mix(in oklch, var(--fr) 55%, transparent);
   box-shadow: -30px 0 60px -24px rgba(0, 0, 0, .85); transform: translateX(105%); transition: transform 320ms var(--ease); }
 .dw.open { transform: none; }
 .dw-shade { position: absolute; inset: 0; background: oklch(0.1 0.03 255 / 0.55); opacity: 0; pointer-events: none; transition: opacity 240ms var(--ease); }
@@ -1396,7 +1400,7 @@ body.carrying, body.carrying * { cursor: grabbing !important; user-select: none;
 .unlock { position: fixed; inset: 0; z-index: 900; display: grid; place-items: center; padding: 16px; cursor: pointer;
   background: radial-gradient(circle at 50% 45%, oklch(0.22 0.06 235 / 0.97), oklch(0.12 0.03 255 / 0.985) 62%), var(--ground); }
 .unlock::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
-  background: repeating-linear-gradient(0deg, oklch(0.86 0.15 205 / 0.05) 0 1px, transparent 1px 4px); }
+  background: repeating-linear-gradient(0deg, color-mix(in oklch, var(--fr) 5%, transparent) 0 1px, transparent 1px 4px); }
 .ul-core { position: relative; display: grid; justify-items: center; text-align: center; }
 .ul-dial { position: relative; display: grid; place-items: center; width: min(62vmin, 360px); aspect-ratio: 1; }
 .ul-rings { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
@@ -1410,7 +1414,7 @@ body.carrying, body.carrying * { cursor: grabbing !important; user-select: none;
 .ul-rings .half { stroke-width: 3; stroke-opacity: .85; filter: drop-shadow(0 0 6px var(--fr-glow)); }
 .ul-rings .ring.locked line, .ul-rings .ring.locked circle { stroke-opacity: 1; filter: drop-shadow(0 0 5px var(--fr-glow)); }
 .ul-rings .ring.locked .mark, .ul-rings .ring.locked .pin { opacity: 1; }
-.ul-crest { position: relative; width: 44%; height: auto; filter: drop-shadow(0 0 26px oklch(0.86 0.15 205 / 0.45)); }
+.ul-crest { position: relative; width: 44%; height: auto; filter: drop-shadow(0 0 26px color-mix(in oklch, var(--fr) 45%, transparent)); }
 .ul-k { margin: 22px 0 0; font: 700 14px/1 var(--cond); letter-spacing: .32em; text-transform: uppercase; color: var(--fr); }
 .ul-t { margin: 8px 0 0; font: 700 clamp(28px, 3vw + 14px, 46px)/1 var(--cond); letter-spacing: .02em; text-transform: uppercase; color: var(--ink); }
 .ul-s { margin: 12px 0 0; font: 600 13px/1 var(--cond); letter-spacing: .18em; text-transform: uppercase; color: var(--ink-3); }
@@ -1488,6 +1492,101 @@ body.carrying, body.carrying * { cursor: grabbing !important; user-select: none;
   .tk-dec .tk-act { max-width: none; }
   .tk-own input { min-height: 44px; }
 }
+
+/* ---------- Limit Testing (Petr 2026-11-03: "uplne hardcore styl krvave, vstup na vlastni nebezpeci, o pricky vys nez
+   Public Ops, musi to ten interface rikat vizualne"; DESIGN.md Limit Testing exception): its operation and its doctrine
+   turn the whole War Room into a blood alert (body[data-lt], set by render); its card is blood in any list (.opc-lt) */
+body[data-lt], .opc-lt {
+  --fr: oklch(0.70 0.23 27);
+  --ho: oklch(0.84 0.15 70);
+  --ground: oklch(0.105 0.03 22);
+  --panel: oklch(0.16 0.05 20);
+  --panel-2: oklch(0.20 0.065 20);
+  --rule: oklch(0.47 0.17 25);
+  --rule-soft: oklch(0.30 0.09 22);
+  --ink-2: oklch(0.88 0.03 35);
+  --ink-3: oklch(0.74 0.05 30);
+  --acetate: oklch(0.15 0.05 20 / 0.82);
+  --slot-bg: oklch(0.13 0.045 20 / 0.84);
+  --bar-bg: oklch(0.10 0.035 20 / 0.86);
+  --plate-bg: linear-gradient(180deg, oklch(0.23 0.085 24 / 0.94), oklch(0.15 0.05 21 / 0.92) 46%, oklch(0.115 0.035 20 / 0.95));
+}
+body[data-lt] .opc:not(.opc-lt) {  /* the other operations keep their cyan in the list */
+  --fr: oklch(0.86 0.15 205); --rule: oklch(0.45 0.08 228); --rule-soft: oklch(0.31 0.055 242);
+  --ink-2: oklch(0.85 0.03 232); --ink-3: oklch(0.71 0.045 238);
+  --plate-bg: linear-gradient(180deg, oklch(0.24 0.055 245 / 0.92), oklch(0.17 0.04 252 / 0.9) 46%, oklch(0.15 0.035 254 / 0.92));
+}
+body[data-lt] {
+  background:
+    radial-gradient(120% 70% at 50% -12%, oklch(0.36 0.16 25 / 0.5), transparent 62%),
+    radial-gradient(80% 60% at 100% 110%, oklch(0.28 0.12 18 / 0.45), transparent 70%),
+    repeating-linear-gradient(0deg, color-mix(in oklch, var(--fr) 5%, transparent) 0 1px, transparent 1px 56px),
+    repeating-linear-gradient(90deg, color-mix(in oklch, var(--fr) 5%, transparent) 0 1px, transparent 1px 56px),
+    url(contours.svg) 0 0 / 1200px 900px,
+    var(--ground);
+  background-attachment: fixed;
+}
+body[data-lt]::after { background: radial-gradient(ellipse at center, transparent 42%, oklch(0.24 0.13 24 / 0.45) 78%, oklch(0.07 0.03 20 / 0.9)); }
+body[data-lt] .ops { filter: grayscale(1) sepia(1) saturate(5) hue-rotate(-38deg) brightness(.9); opacity: .5; }
+body[data-lt] .bar { background: linear-gradient(180deg, oklch(0.15 0.06 22 / 0.94), var(--bar-bg)); }
+body[data-lt] ::selection { background: var(--fr); color: oklch(0.1 0.03 20); }
+
+/* the hazard tape over the operation's head and the doctrine (Petr: "vstup na vlastni nebezpeci"), blood running off it */
+.lt-tape { position: absolute; left: 0; right: 0; top: 0; height: 32px; display: grid; place-items: center; z-index: 1;
+  background: repeating-linear-gradient(-45deg, oklch(0.56 0.22 25) 0 15px, oklch(0.08 0.025 20) 15px 30px) 0 0 / 42.43px 32px;
+  border-bottom: 1px solid oklch(0.30 0.12 22); animation: lt-march 2.8s linear infinite; }
+.lt-tape::after { content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 30px; pointer-events: none;
+  background: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="320" height="30" viewBox="0 0 320 30"%3E%3Cg fill="%23a50f18"%3E%3Crect width="320" height="3"/%3E%3Cpath d="M13.5 0C13.5 7.7 15 10.0 18 14.0C21 10.0 22.5 7.7 22.5 0Z"/%3E%3Ccircle cx="18" cy="11.4" r="3.4"/%3E%3Cpath d="M47.5 0C47.5 3.9 49 3.0 52 7.0C55 3.0 56.5 3.9 56.5 0Z"/%3E%3Ccircle cx="52" cy="4.4" r="3.4"/%3E%3Cpath d="M91.5 0C91.5 12.1 93 18.0 96 22.0C99 18.0 100.5 12.1 100.5 0Z"/%3E%3Ccircle cx="96" cy="19.4" r="3.4"/%3E%3Cpath d="M126.5 0C126.5 5.5 128 6.0 131 10.0C134 6.0 135.5 5.5 135.5 0Z"/%3E%3Ccircle cx="131" cy="7.4" r="3.4"/%3E%3Cpath d="M173.5 0C173.5 9.4 175 13.0 178 17.0C181 13.0 182.5 9.4 182.5 0Z"/%3E%3Ccircle cx="178" cy="14.4" r="3.4"/%3E%3Cpath d="M209.5 0C209.5 3.3 211 2.0 214 6.0C217 2.0 218.5 3.3 218.5 0Z"/%3E%3Ccircle cx="214" cy="3.4" r="3.4"/%3E%3Cpath d="M246.5 0C246.5 13.8 248 21.0 251 25.0C254 21.0 255.5 13.8 255.5 0Z"/%3E%3Ccircle cx="251" cy="22.4" r="3.4"/%3E%3Cpath d="M287.5 0C287.5 6.1 289 7.0 292 11.0C295 7.0 296.5 6.1 296.5 0Z"/%3E%3Ccircle cx="292" cy="8.4" r="3.4"/%3E%3C/g%3E%3Cg fill="%23ff4a4a" opacity=".5"%3E%3Crect x="16.4" y="2" width="1.4" height="7.0"/%3E%3Crect x="50.4" y="2" width="1.4" height="3.5"/%3E%3Crect x="94.4" y="2" width="1.4" height="11.0"/%3E%3Crect x="129.4" y="2" width="1.4" height="5.0"/%3E%3Crect x="176.4" y="2" width="1.4" height="8.5"/%3E%3Crect x="212.4" y="2" width="1.4" height="3.0"/%3E%3Crect x="249.4" y="2" width="1.4" height="12.5"/%3E%3Crect x="290.4" y="2" width="1.4" height="5.5"/%3E%3C/g%3E%3C/svg%3E') 0 0 / 320px 30px repeat-x; filter: drop-shadow(0 2px 3px oklch(0.05 0.02 20 / 0.6)); }
+.lt-tape span { padding: 6px 14px 5px; font: 700 13px/1 Oxanium, var(--cond); letter-spacing: .34em; text-transform: uppercase;
+  color: oklch(0.96 0.02 40); background: oklch(0.07 0.025 20); box-shadow: 0 0 0 1px oklch(0.56 0.22 25), 0 4px 14px -4px oklch(0.03 0.01 20 / 0.9); }
+@keyframes lt-march { to { background-position: 42.43px 0; } }
+
+.evhero.lt { padding-top: 70px; box-shadow: var(--plate-lift), 0 0 0 1px oklch(0.56 0.22 25 / 0.7), 0 26px 60px -30px oklch(0.45 0.24 25 / 0.8); overflow: hidden; }
+.evhero.lt .evx { top: 44px; }
+.evhero.lt h1 { text-shadow: 0 2px 22px oklch(0.45 0.22 25 / 0.55); }
+.docplate.lt-plate { gap: 10px; padding: 18px 34px 16px; border-color: oklch(0.62 0.24 25);
+  background: radial-gradient(120% 95% at 50% 0%, oklch(0.42 0.19 25 / 0.6), oklch(0.12 0.045 20 / 0.92) 72%);
+  box-shadow: inset 0 1px 0 oklch(0.78 0.18 30 / 0.45), 0 18px 40px -18px oklch(0.42 0.22 25 / 0.95); }
+.docplate.lt-plate .docmark { width: 136px; height: 136px; }
+.docplate.lt-plate b { font-size: 27px; letter-spacing: .12em; line-height: 1.05; color: oklch(0.97 0.02 40); text-shadow: 0 2px 18px oklch(0.6 0.25 27 / 0.85); }
+.docplate.lt-plate small { font: 700 12px/1 Oxanium, var(--cond); letter-spacing: .42em; text-transform: uppercase; color: var(--fr); }
+.docmark.doc-lt .hx { animation: lt-beat 1.6s var(--ease) infinite; }
+.docmark.doc-lt .dm .f { filter: drop-shadow(0 0 5px oklch(0.70 0.26 29)); }
+@keyframes lt-beat {
+  0%, 40%, 100% { filter: drop-shadow(0 0 8px oklch(0.62 0.26 27 / 0.55)); }
+  10% { filter: drop-shadow(0 0 22px oklch(0.66 0.27 29 / 0.95)); }
+  22% { filter: drop-shadow(0 0 10px oklch(0.62 0.26 27 / 0.6)); }
+  30% { filter: drop-shadow(0 0 18px oklch(0.66 0.27 29 / 0.85)); }
+}
+
+/* its card among the operations: blood plate, the tape along the top */
+.opc.opc-lt { padding-top: 28px; overflow: hidden; box-shadow: var(--plate-lift), 0 0 0 1px oklch(0.56 0.22 25 / 0.65), 0 18px 36px -20px oklch(0.45 0.24 25 / 0.8); }
+.opc.opc-lt::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 10px;
+  background: repeating-linear-gradient(-45deg, oklch(0.56 0.22 25) 0 9px, oklch(0.08 0.025 20) 9px 18px); }
+.opc.opc-lt .opc-k { color: oklch(0.97 0.02 40); background: oklch(0.45 0.2 25 / 0.55); border-color: oklch(0.62 0.24 25); }
+.opc.opc-lt .opc-g i { background: linear-gradient(90deg, oklch(0.5 0.21 25), var(--fr)); }
+.opc.opc-lt:hover, .opc.opc-lt.on { box-shadow: var(--plate-lift), 0 0 0 1px var(--fr), 0 20px 44px -18px oklch(0.5 0.26 27 / 0.95); }
+
+/* the doctrine tab: the same tape and the skull over the text */
+.lt-head { position: relative; display: flex; align-items: center; gap: 22px; margin: 0 0 22px; padding: 70px 24px 22px; overflow: hidden;
+  background: var(--brackets), var(--plate-bg); box-shadow: var(--plate-lift), 0 0 0 1px oklch(0.56 0.22 25 / 0.7), 0 26px 60px -30px oklch(0.45 0.24 25 / 0.8); }
+.lt-head .docmark { width: 120px; height: 120px; }
+.lt-head b { display: block; font: 700 clamp(28px, 2.4vw + 18px, 46px)/1 Oxanium, var(--cond); letter-spacing: .08em; text-transform: uppercase; color: oklch(0.97 0.02 40); text-shadow: 0 2px 22px oklch(0.6 0.25 27 / 0.8); }
+.lt-head small { display: block; margin-top: 10px; font: 700 13px/1 Oxanium, var(--cond); letter-spacing: .38em; text-transform: uppercase; color: var(--fr); }
+@media (max-width: 640px) {
+  .lt-tape span { letter-spacing: .2em; font-size: 12px; padding: 6px 10px 5px; }
+  .docplate.lt-plate { flex-direction: column; justify-content: center; padding: 16px 18px 14px; }
+  .docplate.lt-plate .docmark { width: 108px; height: 108px; }
+  .docplate.lt-plate b { font-size: 22px; }
+  .lt-head { flex-direction: column; align-items: flex-start; gap: 12px; padding-top: 64px; }
+  .lt-head .docmark { width: 96px; height: 96px; }
+}
+/* the lobby's own buttons and trays wear the blood plate too (their navy is literal) */
+body[data-lt] .act, body[data-lt] .op-cmd summary, body[data-lt] .tr details summary {
+  background: linear-gradient(180deg, oklch(0.26 0.09 24 / 0.92), oklch(0.17 0.05 21 / 0.92)); }
+body[data-lt] .veh, body[data-lt] .op-cmd > details[open] { background: oklch(0.12 0.04 20 / 0.6); }
+.opc-lt .opc-g { background: oklch(0.2 0.06 22); }
+@media (prefers-reduced-motion: reduce) { .lt-tape, .docmark.doc-lt .hx { animation: none; } }
 </style>
 </head>
 <body>

@@ -540,6 +540,8 @@ const DOC_ICON = {
   // Limit Testing (Petr 2026-11-03: "hardcore symbol powa, dominance, smrt, 1337, owning"): the skull
   lt: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M13 31C4 27 4 10 15 5c6-3 12-3 18 0 11 5 11 22 2 26v6H13z"/><circle class="f" cx="18" cy="19.5" r="4.6"/><circle class="f" cx="30" cy="19.5" r="4.6"/><path class="f" d="M24 25l-3 5.5h6z"/><path d="M13 37v6h22v-6M19.5 37v6M24 37v6M28.5 37v6"/></svg>',
 };
+// Limit Testing (Petr 2026-11-03: "hardcore styl krvave, vstup na vlastni nebezpeci"): the hazard tape over its head
+const LT_TAPE = '<div class="lt-tape"><span>Vstup na vlastní nebezpečí</span></div>';
 // the doctrine's emblem (Petr 2026-10-28: "v tom logu public ops neni potreba ten text na druhem radku ... radsi hezke a
 // krasne to logo typu akce"): its mark in a hexagonal badge, big in the event's head, small on the operation cards
 const docEmblem = (d, cls = "") => `<span class="docmark doc-${d}${cls ? " " + cls : ""}" aria-hidden="true"><svg viewBox="0 0 100 100">
@@ -547,10 +549,11 @@ const docEmblem = (d, cls = "") => `<span class="docmark doc-${d}${cls ? " " + c
   <svg class="dm" x="27" y="27" width="46" height="46" viewBox="0 0 48 48">${DOC_ICON[d].replace(/^<svg[^>]*>|<\/svg>$/g, "")}</svg></svg></span>`;
 function eventHero(ev, s) {
   const sw = isSq(ev), d = sw ? ev.doctrine : "defence", v = !sw && s && ev.variant && vById(s, ev.variant);
-  return `<header class="evhero"><a class="evx" href="#/akce" aria-label="Zavřít detail akce" title="Zavřít">${cross()}</a>
+  const lt = d === "lt", pl = lt ? " lt-plate" : "", sub = lt ? `<small>${esc(docOf(d).title)}</small>` : "";
+  return `<header class="evhero${lt ? " lt" : ""}">${lt ? LT_TAPE : ""}<a class="evx" href="#/akce" aria-label="Zavřít detail akce" title="Zavřít">${cross()}</a>
     <div class="evh-when"><p class="evh-k">Operace${ev.open_to_hosts ? ' <b class="hosts">Otevřená hostům</b>' : ""}</p><h1>${esc(fmtWhen(ev.starts_at))}</h1><b class="tminus" data-t0="${esc(ev.starts_at)}">${tminus(ev.starts_at)}</b></div>
-    ${isRaid() ? `<span class="docplate doc-${d}">${docEmblem(d)}<b>${esc(docName(d))}</b></span>`
-      : `<a class="docplate doc-${d}" href="${sw ? `#/doktrina/${d}` : "#/doktrina"}" title="${esc(docOf(d).short)}">${docEmblem(d)}<b>${esc(docName(d))}</b></a>`}
+    ${isRaid() ? `<span class="docplate doc-${d}${pl}">${docEmblem(d)}<b>${esc(docName(d))}</b>${sub}</span>`
+      : `<a class="docplate doc-${d}${pl}" href="${sw ? `#/doktrina/${d}` : "#/doktrina"}" title="${esc(docOf(d).short)}">${docEmblem(d)}<b>${esc(docName(d))}</b>${sub}</a>`}
     ${state.me ? rsvpTally() : ""}<p class="evh-m">${!ev.strategy_id ? NOPICK
       : !sw && s && !s.nomap && !isRaid() ? `<a href="${planHref(s)}">${sideOf(ev.strategy_id)}</a>${v ? ` · zóna ${esc(v.name)}` : ""}` : sideOf(ev.strategy_id)}${ev.leader ? ` · vede <b>${esc(ev.leader.name)}</b>` : ""}</p></header>`;
 }
@@ -563,7 +566,7 @@ function opCards() {
     const s = planOf(ev), total = s ? s.roster.reduce((n, g) => n + g.max, 0) : 0, n = ev.claims.length;
     const mine = myPlace(ev.claims), said = (ev.rsvps.find(r => r.user_id === state.me.user_id) || {}).status;
     const on = state.focusId === ev.id;
-    return `<a class="opc${on ? " on" : ""}" href="#/akce/${ev.id}"${on ? ' aria-current="true"' : ""}>
+    return `<a class="opc${ev.doctrine === "lt" ? " opc-lt" : ""}${on ? " on" : ""}" href="#/akce/${ev.id}"${on ? ' aria-current="true"' : ""}>
       <span class="opc-k">${esc(docName(ev.doctrine))}${ev.open_to_hosts ? " · otevřená hostům" : ""}</span>${docEmblem(isSq(ev) ? ev.doctrine : "defence", "sm")}
       <b class="opc-t">${esc(fmtWhen(ev.starts_at))}</b><span class="tminus" data-t0="${esc(ev.starts_at)}">${tminus(ev.starts_at)}</span>
       <span class="opc-m">${sideOf(ev.strategy_id, NOPICK)}</span>
@@ -714,7 +717,14 @@ function keepForms() {
   };
 }
 
+// Limit Testing: its operation and its doctrine turn the War Room into a blood alert (index.html body[data-lt]); the
+// operations load after the first render, so the roster's redraw asks again
+function ltMode() {
+  const p = location.hash.replace(/^#/, "").split("?")[0].split("/").filter(Boolean);
+  document.body.toggleAttribute("data-lt", p[0] === "akce" && (state.ops || []).some(e => e.id === +p[1] && e.doctrine === "lt") || p[0] === "doktrina" && p[1] === "lt");
+}
 function renderRoster() {
+  ltMode();
   renderEvBar();
   const home = document.getElementById("home-ev");
   if (home) home.innerHTML = homeEvent();
@@ -2097,6 +2107,7 @@ function viewDoktrina(tab, sub) {
     <div class="narrow">
     <header class="unit-head"><div><h1>Doktrína</h1><p>Platí pro všechny mapy a barvy. Kterou hrajeme, rozhodne Commander před zápasem.</p></div></header>
     <nav class="tabs" aria-label="Doktrína">${tabs.map(([path, label]) => `<a href="#/doktrina${path && "/" + path}"${path === cur ? ' aria-current="page"' : ""}>${esc(label)}</a>`).join("")}</nav>
+    ${cur === "lt" ? `<header class="lt-head">${LT_TAPE}${docEmblem("lt")}<div><b>${esc(k.lt.akce)}</b><small>Doktrína ${esc(k.lt.title)}</small></div></header>` : ""}
     ${vybDoc(cur) ? viewCw(k[cur]) : cur === "vycvik" ? viewVycvik(sub) : cur === "clanwar" ? '<section class="block" id="clanwar"><p class="note">Načítám…</p></section>' : viewSwarm(k)}
     </div>`;
 }
@@ -3248,6 +3259,7 @@ function render() {
   }
   const [h, qs = ""] = location.hash.replace(/^#/, "").split("?");
   const p = h.split("/").filter(Boolean);
+  ltMode();
   if (p[0] === "historie") { location.replace("#/akce"); return; }  // links in Discord debrief threads
   if (isGuest() && !(p[0] === "akce" && !p[1])) { location.replace("#/akce"); return; }  // 055 (D47): a guest sees only the BCT list
   if (isRaid() && p[0] !== "akce") { location.replace("#/akce"); return; }  // 059: RAID, the operations and their lobbies only
