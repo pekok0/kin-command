@@ -569,8 +569,10 @@ function opCards() {
     const s = planOf(ev), total = s ? s.roster.reduce((n, g) => n + g.max, 0) : 0, n = ev.claims.length;
     const mine = myPlace(ev.claims), said = (ev.rsvps.find(r => r.user_id === state.me.user_id) || {}).status;
     const on = state.focusId === ev.id;
-    return `<a class="opc${ev.doctrine === "lt" ? " opc-lt" : ""}${on ? " on" : ""}" href="#/akce/${ev.id}"${on ? ' aria-current="true"' : ""}>
-      <span class="opc-k">${esc(docName(ev.doctrine))}${ev.open_to_hosts ? " · otevřená hostům" : ""}</span>${docEmblem(isSq(ev) ? ev.doctrine : "defence", "sm")}${ev.doctrine === "lt" ? `<span class="opc-d">${esc(docOf("lt").title)}</span>` : ""}
+    // Limit Testing: a pro-only invitation among the cards (Petr 2026-11-03: "vic ivy league, vic pro-only, nadstandartni")
+    const lt = ev.doctrine === "lt" ? `<span class="opc-tape"><span>Vstup na vlastní nebezpečí</span></span><span class="opc-wm" aria-hidden="true">${DOC_ICON.lt}</span><span class="opc-seal" aria-hidden="true"><b>Pro</b><b>only</b></span>` : "";
+    return `<a class="opc${ev.doctrine === "lt" ? " opc-lt" : ""}${on ? " on" : ""}" href="#/akce/${ev.id}"${on ? ' aria-current="true"' : ""}>${lt}
+      <span class="opc-k">${esc(docName(ev.doctrine))}</span>${docEmblem(isSq(ev) ? ev.doctrine : "defence", "sm")}${ev.doctrine === "lt" ? `<span class="opc-d">${esc(docOf("lt").title)}</span>` : ""}${ev.open_to_hosts ? '<b class="hosts opc-h">Otevřená hostům</b>' : ""}
       <b class="opc-t">${esc(fmtWhen(ev.starts_at))}</b><span class="tminus" data-t0="${esc(ev.starts_at)}">${tminus(ev.starts_at)}</span>
       <span class="opc-m">${sideOf(ev.strategy_id, NOPICK)}</span>
       <span class="opc-g"><i style="width:${total ? Math.min(100, Math.round(100 * n / total)) : 0}%"></i></span><span class="opc-f"><b>${n}</b> / ${total} míst</span>
@@ -694,7 +696,7 @@ function renderEvBar() {
     const mine = op && myPlace(ev.claims), said = (ev.rsvps.find(r => r.user_id === state.me.user_id) || {}).status;
     const st = mine ? `Máš místo: ${esc(mine.slot_label)}` : said ? esc((RSVP.find(x => x[0] === said) || [, said])[1]) : "Odpověz, jestli přijdeš";
     return `<a class="evt${i ? "" : " next"}${mine || said ? "" : " need"}" href="${op ? `#/akce/${ev.id}` : "#/akce"}">
-      <span class="evt-k">${op ? `Operace · ${esc(docName(ev.doctrine))}${ev.open_to_hosts ? " · otevřená hostům" : ""}` : `${esc(label(KINDS, ev.kind))} · ${esc(ev.title)}`}</span>
+      <span class="evt-k">${op ? `Operace · ${esc(docName(ev.doctrine))}` : `${esc(label(KINDS, ev.kind))} · ${esc(ev.title)}`}</span>${op && ev.open_to_hosts ? '<b class="hosts evt-h">Otevřená hostům</b>' : ""}
       <span class="evt-w">${!op && isTbd(ev) ? "<b>Dnes</b><span>čas určí instruktor</span>" : `<b>${esc(fmtWhen(ev.starts_at))}</b><span class="tminus" data-t0="${esc(ev.starts_at)}">${tminus(ev.starts_at)}</span>`}</span>
       <span class="evt-s">${st}</span></a>`; }).join("")}</nav>`;
 }
