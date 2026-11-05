@@ -14,7 +14,7 @@ const hadSession = (() => { try { return Object.keys(localStorage).some(k => /^s
 let state = { me: null, error: urlQs.has("error") ? "Přihlášení přes Discord selhalo." : null, event: null, claims: [], rsvps: [], trainings: [], ops: [], focusId: null, opsLoaded: false, flash: null, trFlash: null, tadd: {}, novaFlash: null, checking: !!sb && (hadSession || FRESH),
   logi: { orders: [], have: new Map(), local: null, timer: null, pick: null, flash: null, err: false, loaded: null, chan: null, html: null, node: null },
   fire: { games: [], slots: [], missions: [], flash: null, err: false, loaded: false, asked: false, chan: null, tgt: "", note: "", salvos: 1,
-    gunXY: "", pickWeapon: null, edit: false, newName: "", newMap: null, endAsk: null } };
+    gunXY: "", pickWeapon: null, edit: false, newName: "", newMap: null, endAsk: null, own: "", logi: [], cart: new Map(), cartPer: new Map() } };
 if (urlQs.has("error")) history.replaceState(null, "", location.pathname + location.hash);
 
 const LOGIN_ERR = "Přihlášení se nepovedlo. Zkus to znovu.";
@@ -131,7 +131,7 @@ async function loadEvent() {
     const ops = await Promise.all((op.data || []).map(async ev => {
       const [cl, rs] = await Promise.all([
         sb.from("claims").select("slot_key, slot_label, user_id, lead, no_cash, members(name, avatar_url, discord_id, is_raid)").eq("event_id", ev.id),
-        sb.from("rsvps").select("user_id, status, members(name, avatar_url, discord_id)").eq("event_id", ev.id),
+        sb.from("rsvps").select("user_id, status, draft, members(name, avatar_url, discord_id)").eq("event_id", ev.id),
       ]);
       if (cl.error) throw cl.error;
       if (rs.error) throw rs.error;
@@ -187,6 +187,30 @@ async function setRsvp(status) {
   await loadEvent();
 }
 
+// the Draft (Juro 2026-11-04, Petr 2026-11-05; specs/akce-draft, 072): who does not care about the squad and the role says
+// Prijdu into it and waits; the command carries him onto a place (051) and he leaves it by having one
+async function setDraft(on) {
+  const { error } = await sb.from("rsvps").upsert({ event_id: state.event.id, user_id: state.me.user_id, status: "yes", draft: on, updated_at: new Date().toISOString() },
+    { onConflict: "event_id,user_id" });
+  state.flash = !error ? null : error.code === "42501" ? "Akce už je uzavřená." : saveErr(error);
+  await loadEvent();
+}
+const draftees = () => state.rsvps.filter(r => r.status === "yes" && r.draft && r.members && !state.claims.some(c => c.user_id === r.user_id && !isCmd(c.slot_key)));
+const inDraft = uid => draftees().some(r => r.user_id === uid);
+function draftCard() {
+  const me = state.me.user_id, xs = draftees(), lift = (leadsLobby() || state.me.is_officer) && isSq(state.event);
+  const row = r => { const mine = r.user_id === me, who = `<img src="${esc(r.members.avatar_url)}" alt="" loading="lazy"><span class="nm">${esc(r.members.name)}</span>`;
+    const act = lift ? `data-lift="${esc(r.user_id)}" aria-label="Dosadit ${esc(r.members.name)}" title="Dosadit: táhni na volné místo, nebo klikni a pak klikni na místo"` : "disabled";
+    return `<li data-key="draft:${esc(r.user_id)}"${lift ? ` data-drag="${esc(r.user_id)}"` : ""}${mine ? ' class="is-me"' : ""}><button type="button" class="rslot" ${act}>${who}</button>${mine
+      ? `<button type="button" class="kick" data-draft="0" aria-label="Z draftu pryč" title="Z draftu pryč">${cross()}</button>` : ""}</li>`; };
+  const join = !leadsLobby() && !inDraft(me) && !myPlace(state.claims.filter(c => !isCmd(c.slot_key))) ? '<button type="button" class="act" data-draft="1">Je mi jedno kam: do Draftu</button>' : "";
+  if (!xs.length && !join) return "";  // nobody waits and I have a place: the lobby stays as it was
+  return `<div class="rg draftc"><div class="pg-head"><div><b>Draft</b></div><span class="num">${xs.length}</span></div>
+    <p class="note">${lift ? "Čekají na místo: přetáhni je do squadu." : "Je ti jedno, kam tě dáme? Dej se sem, velení tě dosadí."}</p>${xs.length ? `<ul>${xs.map(row).join("")}</ul>` : ""}${join}</div>`;
+}
+// right after the Veleni strip, so the command sees it before the squads (and drags it upward less)
+const withDraft = (cards, s) => { if (!isSq(state.event) || isRaid()) return cards.join(""); const i = s.roster.findIndex(g => g.cmdg) + 1; cards.splice(i, 0, draftCard()); return cards.join(""); };
+
 const RSVP = [["yes", "Přijdu"], ["maybe", "Možná"], ["no", "Nemůžu"]];
 // a slot counts as "yes"; an explicit "no" wins over a forgotten slot, so the Commander's head count is not inflated
 function rsvpGroups() {
@@ -201,7 +225,7 @@ function rsvpBar() {
   const mine = said[meId] || (claimed.has(meId) ? "yes" : null);
   // saying "no" while holding a slot shows a hint to free it
   const hint = said[meId] === "no" && claimed.has(meId) ? "Máš místo v sestavě: uvolni ho, ať ho vezme někdo jiný."
-    : said[meId] === "yes" && !claimed.has(meId) ? "Vyber si místo v sestavě níže." : "";
+    : said[meId] === "yes" && !claimed.has(meId) && !(isSq(state.event) && inDraft(meId)) ? `Vyber si místo v sestavě níže${isSq(state.event) ? ", nebo se dej do Draftu" : ""}.` : "";
   return `<div class="rsvp" role="group" aria-label="Přijdeš?"><span class="rl" aria-hidden="true">Přijdeš?</span>${RSVP.map(([k, l]) => `<button type="button" class="act" data-rsvp="${k}" aria-pressed="${mine === k}">${l}</button>`).join("")}</div>
     ${hint ? `<p class="note rsvp-hint">${hint}</p>` : ""}`;
 }
@@ -502,7 +526,7 @@ function viewRoster(s) {
     <div class="op-me">${mine || (s.swarm && !isRaid() ? `<p class="mine-kit">${KIT_BTN}</p>` : "")}${rsvpBar()}</div>
     ${leadsLobby() ? `<div class="op-cmd" role="group" aria-label="Příkazy velení">${mapTeamForm(ev)}${closeEventForm(s)}<button type="button" class="act" data-briefwin title="Otevře se ve vlastním okně, mimo stream">Protokol briefingu</button>${cancel}</div>` : ""}</div>
     ${msg}
-    <div class="ros${s.swarm ? " swarm" : ""}">${s.roster.map(g => g.cmdg ? cmdCard(g, by) : g.sq ? squadCard(g, by) : g.vehicles ? podporaCard(g, by) : rosterGroup(g, by)).join("")}${s.swarm ? addPlate() : ""}</div>
+    <div class="ros${s.swarm ? " swarm" : ""}">${withDraft(s.roster.map(g => g.cmdg ? cmdCard(g, by) : g.sq ? squadCard(g, by) : g.vehicles ? podporaCard(g, by) : rosterGroup(g, by)), s)}${s.swarm ? addPlate() : ""}</div>
     ${s.base && leadsLobby() && s.base.length > s.roster.length ? `<div class="sqtools hidden-g">Skryté: ${s.base.filter(b => !s.roster.some(g => g.id === b.id)).map(b =>
       `<button type="button" class="act sqadd" data-fx="${b.id}:hide:0">+ ${esc(b.name)}</button>`).join("")}</div>` : ""}
     ${isRaid() ? "" : nakupBlock(s)}`;
@@ -890,11 +914,11 @@ function openPick(key, x, y) {
   if (!slot) return;
   const placeOf = uid => state.claims.find(c => c.user_id === uid && isCmd(c.slot_key) === isCmd(key));
   const yes = state.rsvps.filter(r => r.status === "yes" && r.members).map(r => ({ r, at: placeOf(r.user_id) }))
-    .sort((a, b) => !!a.at - !!b.at || a.r.members.name.localeCompare(b.r.members.name, "cs"));
+    .sort((a, b) => !!a.at - !!b.at || !!b.r.draft - !!a.r.draft || a.r.members.name.localeCompare(b.r.members.name, "cs"));
   const el = document.createElement("div");
   el.className = "pick"; el.setAttribute("role", "menu"); el.setAttribute("aria-label", `Dosadit na ${g.name} · ${slot.label}`);
   el.innerHTML = `<p class="pick-h">Dosadit na <b>${esc(g.name)} · ${esc(slot.label)}</b></p>${yes.length ? yes.map(({ r, at }) =>
-    `<button type="button" role="menuitem" data-pick="${esc(r.user_id)}" data-key="${esc(key)}"><img src="${esc(r.members.avatar_url)}" alt="">${esc(r.members.name)}${at ? `<small>má ${esc(at.slot_label)}</small>` : ""}</button>`).join("")
+    `<button type="button" role="menuitem" data-pick="${esc(r.user_id)}" data-key="${esc(key)}"><img src="${esc(r.members.avatar_url)}" alt="">${esc(r.members.name)}${at ? `<small>má ${esc(at.slot_label)}</small>` : r.draft ? "<small>draft</small>" : ""}</button>`).join("")
     : '<p class="note">Nikdo další nedal Přijdu.</p>'}`;
   document.body.append(el);
   const w = el.offsetWidth, h = el.offsetHeight;
@@ -1367,7 +1391,7 @@ function putDown(target) {
   c.ghost.classList.add("landing");
   if (to) { c.ghost.style.transform = `translate(${to.left}px, ${to.top}px)`; c.ghost.style.width = `${to.width}px`; }
   setTimeout(() => c.ghost.remove(), 220);
-  if (target) { pinY = { y: scrollY, until: Date.now() + 2500 }; moveTo(c.uid, target.dataset.key, c.from); } else sound("back");
+  if (target) { pinY = { y: scrollY, until: Date.now() + 2500 }; c.from.startsWith("draft:") ? pickPlace(c.uid, target.dataset.key) : moveTo(c.uid, target.dataset.key, c.from); } else sound("back");
 }
 document.addEventListener("pointerdown", e => {
   if (carry || e.button !== 0 || e.pointerType === "touch") return;
@@ -1929,6 +1953,19 @@ const ordinaryMag = mags => { const own = mags.filter(m => !m.unlock || owned(m.
 const attOf = st => !st ? [] : (D.doplnky || []).filter(b => b.weapons.includes(st.item)).flatMap(b => b.slots).map(s => {
   const i = s.items.findIndex(x => !x.unlock || !!(haveSet && haveSet.has(x.item))); return { s, x: s.items[Math.max(i, 0)], have: i >= 0 }; });
 const attCost = st => attOf(st).reduce((n, a) => n + (a.have && a.x.price || 0), 0);
+// the loadout's weight like the game's inventory (Petr 2026-11-05 "celkovou vahu loadoutu jako ma hra ... light, medium,
+// heavy a super heavy"): the sum of the pieces the card lists, the magazine in each gun and my attachments. Loose rounds
+// weigh nothing in the game, only magazines (Petr 2026-11-05); what has no weight in the data (some magazines, supplies)
+// counts 0 and the card names it. The classes by kg from WarDogs.News "Weight Classes" (EA build 2026-09-10, read again
+// 2026-11-05; S2 has no official table): the inventory names four, Lightest (0-10) shows as Light
+const WEIGHT_CLASSES = [[17, "Light", "w-l"], [27, "Medium", "w-m"], [40, "Heavy", "w-h"], [Infinity, "Super Heavy", "w-s"]];
+const weightOf = kg => WEIGHT_CLASSES.find(([top]) => kg < top);
+const kgText = kg => `${(Math.round(kg * 10) / 10).toFixed(1).replace(".", ",")} kg`;
+function weightHtml(k) {  // the class of the number shown: 16.96 reads "17,0 kg" and is Medium there too
+  const [, name, cls] = weightOf(Math.round(k.kg * 10) / 10), lit = WEIGHT_CLASSES.findIndex(w => w[1] === name);
+  return `<span>Váha</span><b>${kgText(k.kg)}</b><span class="wcl ${cls}">${name}</span><span class="wmeter ${cls}" aria-hidden="true">${WEIGHT_CLASSES.map((_, i) => `<i${i <= lit ? ' class="on"' : ""}></i>`).join("")}</span>
+    ${k.noKg.length || k.kgFree ? `<small class="wmiss">${[k.noKg.length && `Bez váhy v datech hry: ${esc(k.noKg.join(", "))}.`, k.kgFree && "Bez libovolné zbraně."].filter(Boolean).join(" ")}</small>` : ""}`;
+}
 function myKit(c) {
   const lads = c.ladders || [], entry = lad => { const i = mineIdx(lad); return { lad, st: lad.steps[i] || null, i, g: grade(lad, i), top: lad.steps.at(-1) }; };
   const slots = Object.fromEntries(Object.keys(SLOT_LABEL).map(k => [k, (l => l && entry(l))(lads.find(l => l.slot === k))]));
@@ -1962,11 +1999,16 @@ function myKit(c) {
   }
   const all = [...Object.values(slots).filter(Boolean), ...store];
   const have = all.filter(e => e.st);
+  // the weight's pieces: what the card lists, my attachments of both guns, and the magazine in each gun (1 + the spares)
+  const pieces = [...have.map(e => e.st), ...[gun, gun2].flatMap(g => attOf(g).filter(a => a.have).map(a => a.x))];
+  const inGun = [gun, gun2].map(g => g && g.mags && ordinaryMag(g.mags)).filter(Boolean);
   // a verdict only on real data: without the Tracker every slot would look red for nothing
   const judged = !!(trk && trk.status === "ok");
   // pool = also what I have nothing of yet: the logi heli buys it for me (Logistika)
   return { slots, slingOk, store: store.filter(e => e.st), pool: store, grid, judged, graded: judged ? all.filter(e => e.g) : [],
-    names: new Set(have.map(e => e.st.item)), cost: have.reduce((a, e) => a + (e.st.cost || 0), 0) + attCost(gun) + attCost(gun2) };
+    names: new Set(have.map(e => e.st.item)), cost: have.reduce((a, e) => a + (e.st.cost || 0), 0) + attCost(gun) + attCost(gun2),
+    kg: [...pieces, ...inGun].reduce((a, st) => a + (st.kg || 0) * (st.qty || 1), 0),
+    noKg: [...new Set(pieces.concat(inGun).filter(st => st.kg == null).map(st => st.item))], kgFree: Object.values(slots).some(e => e && e.lad.free) };
 }
 const loadoutCost = c => myKit(c).cost;
 // readiness (Petr 2026-10-30: "vyhodnocovat tu pripravenost vybavy jako procenta"): each graded slot weighs by what it is
@@ -2028,7 +2070,7 @@ function loadoutCard(q, c, h = "h2") {
         ${k.grid || k.store.length ? `<h3>V batohu${k.grid ? ` <span class="bag-n">· ${esc(k.grid.name)}</span>` : ""}</h3>${k.grid ? bagGrid(k.grid) : ""}${k.store.length ? `<ul class="lo-store">${k.store.map(e => `<li${judged && e.g ? ` class="g-${e.g}" title="${GRADE[e.g]}"` : ""}>${itemIcon(e.st.icon, "sm")}<span class="q">${e.st.qty}${e.st.cost ? `<span class="pr">${usd(e.st.cost)}</span>` : ""}</span><span class="n">${esc(e.st.item)}${e.over ? '<span class="cut">Nevejde se: kup větší batoh</span>' : e.cut ? '<span class="cut">Víc se nevejde, větší batoh unese víc</span>' : ""}</span></li>`).join("")}</ul>` : ""}` : ""}
         ${quick.length ? `<h3>Rychlé sloty</h3><ol class="lo-quick">${quick.map((n, i) => `<li><span class="kb">${(i + 4) % 10}</span>${esc(n)}</li>`).join("")}</ol>` : ""}</div>
     </div>
-    <footer class="lo-sum"><span>Za život</span><b>${usd(k.cost)}</b></footer></article>`;
+    <footer class="lo-sum"><span>Za život</span><b>${usd(k.cost)}</b>${weightHtml(k)}</footer></article>`;
 }
 
 function roleBlock(s, r) {
@@ -2657,14 +2699,7 @@ function squadItems(op, card) {
     const x = slots.find(s => s.key === c.slot_key), rc = x && slotClass(x);
     if (!rc) continue;
     const have = state.logi.have.get(c.user_id) || (state.lobbyHave && state.lobbyHave.get(c.user_id)) || new Set();
-    const k = asPlayer({ name: c.members.name, have, trk: (state.lobbyTrk && state.lobbyTrk.get(c.user_id)) || null }, () => myKit(rc[1]));
-    for (const e of [...Object.values(k.slots), ...k.pool]) {
-      // magazines (no ladder) and pistol magazines are not flown in (Petr 2026-10-31)
-      const g = e && e.lad && (e.lad.slot === "storage" ? e.lad.group : e.lad.slot);
-      if (g && g !== "Zásobník pistole" && !LOGI_SKIP.test(g)) add(LOGI_BEST.test(g) ? e.top || e.st : e.st, logiRank(g), LOGI_RARE.test(g) ? 2 : 0);
-    }
-    const bag = k.slots.slot3 && k.slots.slot3.lad.steps.find(st => st.item === "Medical Bag");  // the [3] slot only for it
-    if (bag) add(bag, logiRank("Medical Bag"));
+    kitTiles(asPlayer({ name: c.members.name, have, trk: (state.lobbyTrk && state.lobbyTrk.get(c.user_id)) || null }, () => myKit(rc[1])), add);
   }
   for (const st of D.signaly || []) add(st, 0, 1);
   if (logiCar(card)) {  // the vehicle's own load first (doktrina.toml [[swarm.slot]] gear: shells, belts, smokes), never the vehicle itself
@@ -2672,6 +2707,16 @@ function squadItems(op, card) {
     for (const g of (v && v.gear) || []) if (g.item && !g.seat && !out.has(g.item)) out.set(g.item, { item: g.item, icon: g.icon, per: g.stack || 1, rank: -1, row: 0 });
   }
   return [...out.values()].sort((a, b) => a.row - b.row || a.rank - b.rank);
+}
+// one place's kit as tiles: rounds and armor at the clan's best step, the rest as unlocked, the Medical Bag from [3]
+function kitTiles(k, add) {
+  for (const e of [...Object.values(k.slots), ...k.pool]) {
+    // magazines (no ladder) and pistol magazines are not flown in (Petr 2026-10-31)
+    const g = e && e.lad && (e.lad.slot === "storage" ? e.lad.group : e.lad.slot);
+    if (g && g !== "Zásobník pistole" && !LOGI_SKIP.test(g)) add(LOGI_BEST.test(g) ? e.top || e.st : e.st, logiRank(g), LOGI_RARE.test(g) ? 2 : 0);
+  }
+  const bag = k.slots.slot3 && k.slots.slot3.lad.steps.find(st => st.item === "Medical Bag");  // the [3] slot only for it
+  if (bag) add(bag, logiRank("Medical Bag"));
 }
 let logiIcons = null;  // item -> icon from the whole Vybava, for the crew's view of any squad
 const logiIcon = n => { if (!logiIcons) { logiIcons = new Map(); for (const q of D.squads || []) for (const c of q.classes) for (const l of c.ladders) for (const st of l.steps)
@@ -2828,7 +2873,7 @@ const fireLabel = (list, k) => (list.find(([v]) => v === k) || [k, k])[1];
 // Palba v2 (Petr 2026-11-01 night, specs/palba, 065): no operation. Any clan member (no guest, no RAID) founds a game
 // with a name and a map and takes one of 30 caller or 10 gun places; a game ends by its founder or the command, or by
 // itself 6 h after the last write in it
-const FIRE_CAP = { caller: 30, gun: 10 };
+const FIRE_CAP = { caller: 30, gun: 10, logi: 4 };  // logi = the game's Logi heli (071)
 const FIRE_QUIET_MS = 6 * 3600e3;
 const fireMember = () => !!state.me && !isGuest() && !isRaid();
 const fireGame = id => state.fire.games.find(g => g.id === id) || null;
@@ -2838,8 +2883,8 @@ const fireRoleIn = id => (fireMine(id) || {}).role || null;
 const fireMyGun = id => { const s = fireMine(id); return s && s.role === "gun" && s.x != null ? s : null; };
 const fireCalls = id => state.fire.missions.filter(x => x.game_id === id);
 // the open calls of the games where I shoot: the menu and the tab title (P11)
-const fireCount = () => state.fire.missions.filter(x => x.state === "open" && fireRoleIn(x.game_id) === "gun").length;
-const navFire = () => fireMember() ? [["palba", "Palba", fireCount()]] : [];
+const fireCount = () => state.fire.missions.filter(x => x.state === "open" && fireRoleIn(x.game_id) === "gun").length + glTodo().length;
+const navFire = () => fireMember() ? [["palba", "Palba a logistika", fireCount()]] : [];
 const fireRoute = () => { const m = location.hash.match(/^#\/palba(?:\/(\d+))?/); return m ? (m[1] ? +m[1] : 0) : null; };
 const fireCanEnd = g => g.created_by === state.me.user_id || leadsOps();
 // the radio call on screen with the spoken line under it, and the recorded voice (Petr 2026-11-01 evening: "Fire
@@ -2854,11 +2899,24 @@ const FIRE_LINES = {
 };
 // one voice at a time: a newer call cuts the older one; the sound switch in the bar mutes it too
 function fireVoice(kind) {
-  if (!soundOn()) return;
+  if (!soundOn() || fireQuiet().has(kind)) return;
   if (state.fire.voice) state.fire.voice.pause();
   state.fire.voice = new Audio(`audio/palba-${kind}.mp3`);
   state.fire.voice.play().catch(e => console.error(e));  // no click on the page yet: the browser keeps it silent
 }
+// each sound on its own (Juro 2026-11-04 "mute/unmute jednotlivych zvukov"): the switch in the bar still mutes all; the
+// callout stays on screen. Per browser (localStorage), a convenience, not a setting the clan shares
+const FIRE_SOUNDS = [["incoming", "Nová palba"], ["sent", "Odesláno"], ["taken", "Převzato"], ["done", "Hotovo"], ["logi", "Logistika"]];
+const fireQuiet = () => { try { return new Set(JSON.parse(localStorage.getItem("kin-palba-ticho") || "[]")); } catch { return new Set(); } };
+function fireMute(kind) {
+  const q = fireQuiet();
+  q.has(kind) ? q.delete(kind) : q.add(kind);
+  try { localStorage.setItem("kin-palba-ticho", JSON.stringify([...q])); } catch { /* blocked storage: this page only */ }
+  document.querySelectorAll(`[data-fire-mute="${kind}"]`).forEach(b => b.setAttribute("aria-pressed", !q.has(kind)));
+}
+const fireSoundsHtml = () => { const q = fireQuiet();
+  return `<div class="pf-snd" role="group" aria-label="Zvuky"><span>Zvuky</span>${FIRE_SOUNDS.map(([k, l]) => `<button type="button" class="act" data-fire-mute="${k}" aria-pressed="${!q.has(k)}">${l}</button>`).join("")}</div>`; };
+const glBeep = () => { if (!fireQuiet().has("logi")) sound("lead"); };
 function fireCallout(kind) {
   const cmd = FIRE_LINES[kind];
   let el = document.getElementById("pf-call");
@@ -2879,6 +2937,15 @@ function fireNotify(prev) {
     else if (was && was !== x.state && (x.state === "taken" || x.state === "done") && x.created_by === me) fireCallout(x.state);
   }
 }
+// the logistics of the games (071): a new call rings for the game's commander, a confirmed flight for its Logi heli and
+// the author, the delivery for the author
+function glNotify(prev) {
+  const me = state.me.user_id;
+  const ring = state.fire.logi.some(o => { const was = prev.get(o.id), g = fireGame(o.game_id);
+    return !was ? o.state === "open" && !!g && fireCanEnd(g) && o.created_by !== me
+      : was !== o.state && (o.state === "approved" ? fireRoleIn(o.game_id) === "logi" || o.created_by === me : o.state === "delivered" && o.created_by === me); });
+  if (ring) glBeep();
+}
 let fireSeq = 0;
 // every live game with its places and calls: after login and on every change, so a gun hears a call on any page (P11)
 async function loadFire() {
@@ -2887,17 +2954,19 @@ async function loadFire() {
   const g = await sb.from("fire_games").select("id, name, map, created_by, created_at, founder:members!fire_games_created_by_fkey(name)")
     .is("ended_at", null).gt("active_at", new Date(Date.now() - FIRE_QUIET_MS).toISOString());
   const ids = g.error ? [] : g.data.map(x => x.id);
-  const [s, m] = ids.length ? await Promise.all([
+  const [s, m, l] = ids.length ? await Promise.all([
     sb.from("fire_slots").select("game_id, user_id, role, weapon, x, y, who:members!fire_slots_user_id_fkey(name)").in("game_id", ids),
-    sb.from("fire_missions").select("id, game_id, x, y, salvos, note, state, created_by, created_at, taken_by, taken_at, done_at, author:members!fire_missions_created_by_fkey(name), gunner:members!fire_missions_taken_by_fkey(name)").in("game_id", ids).order("id")])
-    : [{ data: [] }, { data: [] }];
+    sb.from("fire_missions").select("id, game_id, x, y, salvos, note, state, created_by, created_at, taken_by, taken_at, done_at, author:members!fire_missions_created_by_fkey(name), gunner:members!fire_missions_taken_by_fkey(name)").in("game_id", ids).order("id"),
+    sb.from("logi_orders").select("id, game_id, state, items, created_by, sent_at, approved_at, delivered_at, author:members!logi_orders_created_by_fkey(name), boss:members!logi_orders_approved_by_fkey(name), courier:members!logi_orders_delivered_by_fkey(name)").in("game_id", ids).order("id")])
+    : [{ data: [] }, { data: [] }, { data: [] }];
   if (seq !== fireSeq) return;  // a newer load is on its way
-  const err = g.error || s.error || m.error;
+  const err = g.error || s.error || m.error || l.error;
   if (err) { console.error(err); F.err = true; return renderFire(); }
   const prev = F.loaded ? new Map(F.missions.map(x => [x.id, x.state])) : null;  // the first load stays quiet
-  Object.assign(F, { games: g.data.slice().sort((a, b) => b.id - a.id), slots: s.data, missions: m.data, err: false, loaded: true });
-  if (prev) fireNotify(prev);
-  if (!F.chan) F.chan = ["fire_games", "fire_slots", "fire_missions"].reduce((c, t) => c.on("postgres_changes", { event: "*", schema: "public", table: t }, () => loadFire()), sb.channel("fire")).subscribe();
+  const prevL = F.loaded ? new Map(F.logi.map(x => [x.id, x.state])) : null;
+  Object.assign(F, { games: g.data.slice().sort((a, b) => b.id - a.id), slots: s.data, missions: m.data, logi: l.data, err: false, loaded: true });
+  if (prev) { fireNotify(prev); glNotify(prevL); }
+  if (!F.chan) F.chan = ["fire_games", "fire_slots", "fire_missions", "logi_orders"].reduce((c, t) => c.on("postgres_changes", { event: "*", schema: "public", table: t }, () => loadFire()), sb.channel("fire")).subscribe();
   renderFire();
 }
 async function fireWrite(req, failed) {
@@ -2969,6 +3038,14 @@ function fireMineHtml(id) {
   return mine.length ? `<ul class="pf-mine">${mine.map(x => `<li class="${x.state}"><span class="pf-st">${fireState(x)}</span>${x.state === "open" ? `<span class="pf-mcv">${fireCoverHead(id, x)}</span>` : ""}<span class="pf-sum">${fireTarget(x)}</span>
     <button type="button" class="act" data-fire-again="${x.id}">Znovu</button>${x.state === "open" || x.state === "taken" ? `<button type="button" class="act" data-fire-cancel="${x.id}">Zrušit</button>` : ""}</li>`).join("")}</ul>` : "";
 }
+// the gun's own target (Juro 2026-11-04 "aby si aj strelec vedel nahodit rychlo sam sebe koordinaty"): he types a grid he
+// got by voice or spotted himself and sees the two numbers at once, nothing is sent
+function fireOwnHtml(id) {
+  const g = fireMyGun(id), t = parseXY(state.fire.own);
+  if (!g || !t) return "";
+  const s = fireSolve(g, t), warn = fireWarn(g.weapon, fireReach(g.weapon, s.m));
+  return `<div class="pf-nums${warn ? " warn" : ""}"><div><small>Azimut</small><b class="pf-az">${s.az}°</b></div><div><small>Range</small><b class="pf-m">${s.m} m</b></div></div>${warn ? `<p class="pf-warn">${warn}</p>` : ""}`;
+}
 function fireGunHtml(id) {
   const g = fireMyGun(id);
   return g ? `<p class="pf-gunline"><b>${fireLabel(FIRE_WEAPONS, g.weapon)}</b> · x${g.x}, y${g.y}</p>
@@ -2984,11 +3061,72 @@ function fireListHtml(id) {
       : x.state === "taken" && x.taken_by === me ? `<button type="button" class="pf-go" data-fire-done="${x.id}">Hotovo</button>` : `<p class="pf-st">${fireState(x)}</p>`}</article>`;
   return list.length ? list.map(card).join("") : '<p class="note">Žádná palba.</p>';
 }
+// ---------- the logistics of a Palba game (Juro 2026-11-04, Petr 2026-11-05; specs/logistika-objednavky "Hry mimo
+// akci", 071): no operation and no squad. Any clan member picks his role, clicks what he needs from its kit (whole stacks)
+// and calls; the game's commander (its founder or the command, like ending the game) confirms the flight or turns it
+// down; its Logi heli delivers. The list being clicked lives on this page only: a game has no draft in the database
+const glRoles = () => mainSquads().flatMap(q => roles(q));
+const glClass = () => { let id = null; try { id = localStorage.getItem("kin-palba-role"); } catch { /* blocked storage */ } return glRoles().find(c => c.id === (state.fire.role || id)) || null; };
+function gameItems(c) {
+  const out = new Map(), add = (st, rank, row = 0) => { if (st && st.item && !out.has(st.item)) out.set(st.item, { item: st.item, icon: st.icon, per: st.stack || 1, rank, row }); };
+  if (c) kitTiles(myKit(c), add);
+  for (const st of D.signaly || []) add(st, 0, 1);
+  return [...out.values()].sort((a, b) => a.row - b.row || a.rank - b.rank);
+}
+// what waits for me: the calls of the games I command, the confirmed flights of the games where I fly the Logi heli
+const glTodo = () => state.fire.logi.filter(o => { const g = fireGame(o.game_id);
+  return !!g && (o.state === "open" && fireCanEnd(g) || o.state === "approved" && fireRoleIn(o.game_id) === "logi"); });
+const glState = o => o.state === "open" ? `Čeká na potvrzení letu · ${ago(o.sent_at)}` : o.state === "approved" ? `Let potvrdil ${esc(o.boss ? o.boss.name : "?")} · ${ago(o.approved_at)}`
+  : o.state === "delivered" ? `Doručeno${o.courier ? ` · ${esc(o.courier.name)}` : ""} · ${ago(o.delivered_at)}` : "Zrušeno";
+const glCard = (o, act) => `<article class="lg-o"><header><b class="lg-sq">${esc(o.author ? o.author.name : "?")}</b><span>${glState(o)}</span></header>
+  <ul class="lg-items">${o.items.map(i => `<li>${itemIcon(logiIcon(i.item), "sm")}<b>${i.stacks}×</b><span>${esc(i.item)}</span><small>${i.stacks * i.per} ks</small></li>`).join("")}</ul>${act}</article>`;
+function glInbox(id) {
+  const boss = fireCanEnd(fireGame(id)), crew = fireRoleIn(id) === "logi", all = state.fire.logi.filter(o => o.game_id === id);
+  if (!boss && !crew) return "";
+  const open = all.filter(o => o.state === "open"), go = all.filter(o => o.state === "approved");
+  const ok = o => boss ? `<div class="pf-gl-act"><button type="button" class="lg-done" data-gl-ok="${o.id}">Potvrdit let</button><button type="button" class="act" data-gl-no="${o.id}">Zamítnout</button></div>` : "";
+  return `<div class="pf-gl-in"><h3>${boss ? "Ke schválení" : "Čeká na velitele"} <span class="num">${open.length}</span></h3>${open.map(o => glCard(o, ok(o))).join("") || '<p class="note">Nic nečeká.</p>'}
+    <h3>Pro logi heli <span class="num">${go.length}</span></h3>${go.map(o => glCard(o, `<button type="button" class="lg-done" data-gl-done="${o.id}">Doručeno</button>`)).join("") || '<p class="note">Žádný potvrzený let.</p>'}</div>`;
+}
+function glOrder(id) {
+  const F = state.fire, c = glClass(), me = state.me.user_id, n = [...F.cart.values()].reduce((a, b) => a + b, 0);
+  const pick = `<label class="pf-f">Moje role<select id="pf-gl-role"><option value="">Vyber roli</option>${glRoles().map(r => `<option value="${esc(r.id)}"${c && c.id === r.id ? " selected" : ""}>${esc(r.name)}</option>`).join("")}</select></label>`;
+  const tile = x => { const k = F.cart.get(x.item) || 0;
+    return `<div class="lg-t${k ? " on" : ""}"><button type="button" class="lg-add" data-gl-add="${esc(x.item)}" aria-label="Přidat ${esc(x.item)}">${itemIcon(x.icon)}<span class="lg-n">${esc(x.item)}</span>
+      <span class="lg-s">${x.per > 1 ? `stack ${x.per} ks` : "1 ks"}</span>${k ? `<b class="lg-c">${k}×</b>` : ""}</button>${k ? `<button type="button" class="lg-sub" data-gl-sub="${esc(x.item)}" aria-label="Ubrat ${esc(x.item)}">−</button>` : ""}</div>`; };
+  const all = gameItems(c), mine = F.logi.filter(o => o.game_id === id && o.created_by === me).slice().reverse().slice(0, 3);
+  const hist = mine.length ? `<ul class="lg-hist">${mine.map(o => `<li class="${o.state}"><span class="lg-st">${glState(o)}</span><span class="lg-sum">${esc(logiSum(o.items))}</span>
+      <button type="button" class="act" data-gl-again="${o.id}">Objednat znovu</button>${o.state === "open" || o.state === "approved" ? `<button type="button" class="act" data-gl-no="${o.id}">Zrušit</button>` : ""}</li>`).join("")}</ul>` : "";
+  return `<div class="pf-gl-order"><h3>Objednat</h3>${pick}${hist}${c ? "" : '<p class="note">Vyber svoji roli, ukážu výbavu, kterou nosíš.</p>'}
+    ${[0, 1, 2].map(r => all.filter(x => x.row === r)).filter(r => r.length).map(r => `<div class="lg-tiles">${r.map(tile).join("")}</div>`).join("")}
+    <div class="lg-bar"><button type="button" class="lg-call" data-gl-call${n ? "" : " disabled"}>Zavolat logistiku${n ? ` · ${plural(n, "stack", "stacky", "stacků")}` : ""}</button></div></div>`;
+}
+const glHtml = id => glInbox(id) + glOrder(id);
+function glBump(item, d) {
+  const F = state.fire, n = Math.max(0, (F.cart.get(item) || 0) + d), x = gameItems(glClass()).find(t => t.item === item);
+  if (n) F.cart.set(item, n); else F.cart.delete(item);
+  if (x) F.cartPer.set(item, x.per);
+  sound(d > 0 ? "add" : "remove");
+  renderFire();
+}
+async function glCall(id) {
+  const F = state.fire, items = [...F.cart].map(([item, stacks]) => ({ item, stacks, per: F.cartPer.get(item) || 1 }));
+  if (!items.length) return;
+  if (await fireWrite(sb.from("logi_orders").insert({ game_id: id, state: "open", items }))) { F.cart = new Map(); sound("unlock"); renderFire(); }
+}
+const glSet = (oid, st) => fireWrite(sb.from("logi_orders").update({ state: st }).eq("id", oid));
+const glAgain = oid => { const o = state.fire.logi.find(x => x.id === oid); return o && fireWrite(sb.from("logi_orders").insert({ game_id: o.game_id, state: "open", items: o.items })); };
+document.addEventListener("change", e => {
+  if (e.target.id !== "pf-gl-role") return;
+  state.fire.role = e.target.value || null;
+  try { localStorage.setItem("kin-palba-role", e.target.value); } catch { /* blocked storage: this page keeps it */ }
+  renderFire();
+});
 function fireGamesHtml() {
   const F = state.fire;
   return F.games.length ? F.games.map(g => { const n = r => F.slots.filter(s => s.game_id === g.id && s.role === r).length;
     return `<a class="pf-game" href="#/palba/${g.id}"><b>${esc(g.name)}</b><span>${fireLabel(FIRE_MAPS, g.map)} · ${esc(g.founder ? g.founder.name : "?")}</span>
-      <span>Objednávači ${n("caller")}/${FIRE_CAP.caller} · Střelci ${n("gun")}/${FIRE_CAP.gun}</span>${fireMine(g.id) ? "<em>jsi v ní</em>" : ""}</a>`; }).join("")
+      <span>Objednávači ${n("caller")}/${FIRE_CAP.caller} · Střelci ${n("gun")}/${FIRE_CAP.gun} · Logi heli ${n("logi")}/${FIRE_CAP.logi}</span>${fireMine(g.id) ? "<em>jsi v ní</em>" : ""}</a>`; }).join("")
     : '<p class="note">Teď neběží žádná hra. Založ první.</p>';
 }
 // the two sides of a game: who is in, my way in, out or across (one place a member, P3)
@@ -2998,7 +3136,7 @@ function fireSlotsHtml(id) {
     const btn = mine === role ? "" : ss.length >= FIRE_CAP[role] ? '<span class="pf-full">Plno</span>' : `<button type="button" class="act" data-fire-join="${role}">${go}</button>`;
     const who = s => `<li>${esc(s.who ? s.who.name : "?")}${role === "gun" ? ` · ${s.x != null ? fireLabel(FIRE_WEAPONS, s.weapon) : "bez postavení"}` : ""}</li>`;
     return `<div class="pf-place"><h3>${head} ${ss.length}/${FIRE_CAP[role]}</h3>${btn}${ss.length ? `<ul>${ss.map(who).join("")}</ul>` : ""}</div>`; };
-  return `<div class="pf-places">${side("caller", "Objednávači", "Objednávat")}${side("gun", "Střelci", "Střílet")}</div>${mine ? '<button type="button" class="act" data-fire-leave>Odejít ze hry</button>' : ""}`;
+  return `<div class="pf-places">${side("caller", "Objednávači", "Objednávat")}${side("gun", "Střelci", "Střílet")}${side("logi", "Logi heli", "Létat logi")}</div>${mine ? '<button type="button" class="act" data-fire-leave>Odejít ze hry</button>' : ""}`;
 }
 const fireKey = id => { const F = state.fire, g = id && fireGame(id);
   return !F.loaded ? "wait" : !id ? "list" : !g ? `gone|${id}` : `${id}|${fireRoleIn(id)}|${!!fireMyGun(id)}|${F.edit}|${F.endAsk === id}`; };
@@ -3007,7 +3145,7 @@ function viewPalba(id) {
   const F = state.fire, head = (h, sub) => `<header class="unit-head"><div><h1>${h}</h1>${sub ? `<p>${sub}</p>` : ""}</div></header>`;
   if (!fireMember()) return head("Palba") + '<p class="note">Palba je pro členy klanu.</p>';
   if (!F.loaded) return head("Palba") + `<p class="note">${F.err ? "Palba se nenačetla, zkus stránku načíst znovu." : "Načítám…"}</p>`;
-  if (!id) return `${head("Palba", "Mortar a artilerie na souřadnice. Založ hru a pošli odkaz do Discordu.")}<div id="pf-root" data-key="list"><div id="pf-msg">${fireMsg()}</div>
+  if (!id) return `${head("Palba a logistika", "Mortar, artilerie a logi heli i mimo akce. Založ hru a pošli odkaz do Discordu.")}<div id="pf-root" data-key="list"><div id="pf-msg">${fireMsg()}</div>
     <section class="pf-sec"><h2>Hry</h2><div id="pf-games" class="pf-games">${fireGamesHtml()}</div></section>
     <section class="pf-sec"><h2>Založit hru</h2><label class="pf-f">Název<input id="pf-name" maxlength="40" autocomplete="off" value="${esc(F.newName)}"></label>
       <div class="pf-seg vbar seg" role="group" aria-label="Mapa">${FIRE_MAPS.map(([k, l]) => `<button type="button" data-fire-newmap="${k}" aria-pressed="${F.newMap === k}">${l}</button>`).join("")}</div>
@@ -3026,11 +3164,14 @@ function viewPalba(id) {
   const editor = editing ? `<div class="pf-edit"><div class="pf-seg vbar seg" role="group" aria-label="Zbraň">${FIRE_WEAPONS.map(([k, l]) => `<button type="button" data-fire-weapon="${k}" aria-pressed="${F.pickWeapon === k}">${l}</button>`).join("")}</div>
       <label class="pf-f">Moje souřadnice<input id="pf-gun-xy" autocomplete="off" spellcheck="false" placeholder="x103.52, y74.99" value="${esc(F.gunXY)}"></label>
       <button type="button" class="pf-go" data-fire-gun-save${parseXY(F.gunXY) && F.pickWeapon ? "" : " disabled"}>Uložit postavení</button></div>` : "";
-  const gunSec = role === "gun" ? `<section class="pf-sec" id="pf-gun-sec"><h2>Moje zbraň</h2>${editor}<div id="pf-gun">${editing ? "" : fireGunHtml(id)}</div></section>` : "";
+  const own = role === "gun" && gun && !editing ? `<label class="pf-f">Vlastní cíl<input id="pf-own" autocomplete="off" spellcheck="false" placeholder="x103.52, y74.99" value="${esc(F.own)}"></label><div id="pf-own-out">${fireOwnHtml(id)}</div>` : "";
+  const gunSec = role === "gun" ? `<section class="pf-sec" id="pf-gun-sec"><h2>Moje zbraň</h2>${editor}<div id="pf-gun">${editing ? "" : fireGunHtml(id)}</div>${own}</section>` : "";
   const list = role !== "caller" ? `<section class="pf-sec" id="pf-list-sec"><h2>Objednávky palby</h2><div id="pf-list">${fireListHtml(id)}</div></section>` : "";
+  // one page for both (Juro 2026-11-04 "idealne ... na jednej stranke ... aj palba aj logistika"): the Logi heli sees it first
+  const logi = `<section class="pf-sec" id="pf-logi-sec"><h2>Logistika</h2><div id="pf-logi">${glHtml(id)}</div></section>`;
   const end = fireCanEnd(g) ? `<button type="button" class="act" data-fire-end>${F.endAsk === id ? "Opravdu ukončit hru?" : "Ukončit hru"}</button>` : "";
   return `${head(esc(g.name), `${fireLabel(FIRE_MAPS, g.map)} · založil ${esc(g.founder ? g.founder.name : "?")}`)}<div id="pf-root" data-key="${esc(fireKey(id))}"><div id="pf-msg">${fireMsg()}</div>
-    <section class="pf-sec"><h2>Místa</h2><div id="pf-slots">${fireSlotsHtml(id)}</div>${end}</section>${call}${gunSec}${list}<p><a href="#/palba">Všechny hry</a></p></div>`;
+    <section class="pf-sec"><h2>Místa</h2><div id="pf-slots">${fireSlotsHtml(id)}</div>${end}${fireSoundsHtml()}</section>${role === "logi" ? logi + call + gunSec + list : call + gunSec + list + logi}<p><a href="#/palba">Všechny hry</a></p></div>`;
 }
 // a realtime change redraws only the live parts: the caller may be typing the target (the text and the cursor stay)
 function renderFire() {
@@ -3045,7 +3186,7 @@ function renderFire() {
     else {
       set("pf-slots", fireSlotsHtml(id)); set("pf-cover", fireCoverHtml(id, parseXY(F.tgt))); set("pf-mine", fireMineHtml(id));
       if (!F.edit) set("pf-gun", fireGunHtml(id));
-      set("pf-list", fireListHtml(id));
+      set("pf-list", fireListHtml(id)); set("pf-own-out", fireOwnHtml(id)); set("pf-logi", glHtml(id));
     }
   }
   const n = fireCount();
@@ -3059,12 +3200,13 @@ document.addEventListener("input", e => {
     document.getElementById("pf-cover").innerHTML = fireCoverHtml(fireRoute(), t); }
   else if (id === "pf-note") F.note = e.target.value;
   else if (id === "pf-gun-xy") { F.gunXY = e.target.value; fireGunReady(); }
+  else if (id === "pf-own") { F.own = e.target.value; document.getElementById("pf-own-out").innerHTML = fireOwnHtml(fireRoute()); }
   else if (id === "pf-name") { F.newName = e.target.value; fireNewReady(); }
 });
 const fireGunReady = () => { const F = state.fire, b = document.querySelector("[data-fire-gun-save]"); if (b) b.disabled = !(parseXY(F.gunXY) && F.pickWeapon); };
 const fireNewReady = () => { const F = state.fire, b = document.querySelector("[data-fire-new]"); if (b) b.disabled = !(F.newName.trim() && F.newMap); };
 document.addEventListener("click", e => {
-  const b = e.target.closest?.("[data-fire-send],[data-fire-salvo],[data-fire-take],[data-fire-done],[data-fire-again],[data-fire-cancel],[data-fire-weapon],[data-fire-gun-save],[data-fire-gun-edit],[data-fire-gun-drop],[data-fire-new],[data-fire-newmap],[data-fire-join],[data-fire-leave],[data-fire-end]");
+  const b = e.target.closest?.("[data-fire-send],[data-fire-salvo],[data-fire-take],[data-fire-done],[data-fire-again],[data-fire-cancel],[data-fire-weapon],[data-fire-gun-save],[data-fire-gun-edit],[data-fire-gun-drop],[data-fire-new],[data-fire-newmap],[data-fire-join],[data-fire-leave],[data-fire-end],[data-fire-mute],[data-gl-add],[data-gl-sub],[data-gl-call],[data-gl-ok],[data-gl-no],[data-gl-done],[data-gl-again]");
   if (!b || b.disabled) return;
   const d = b.dataset, F = state.fire, id = fireRoute();
   if (d.fireSend !== undefined) fireSend(id);
@@ -3073,6 +3215,14 @@ document.addEventListener("click", e => {
   else if (d.fireDone) fireSet(+d.fireDone, "done");
   else if (d.fireAgain) fireSet(+d.fireAgain, "again");
   else if (d.fireCancel) fireSet(+d.fireCancel, "cancelled");
+  else if (d.fireMute) fireMute(d.fireMute);
+  else if (d.glAdd !== undefined) glBump(d.glAdd, 1);
+  else if (d.glSub !== undefined) glBump(d.glSub, -1);
+  else if (d.glCall !== undefined) glCall(id);
+  else if (d.glOk) glSet(+d.glOk, "approved");
+  else if (d.glNo) glSet(+d.glNo, "cancelled");
+  else if (d.glDone) glSet(+d.glDone, "delivered");
+  else if (d.glAgain) glAgain(+d.glAgain);
   else if (d.fireWeapon || d.fireNewmap) {
     if (d.fireWeapon) F.pickWeapon = d.fireWeapon; else F.newMap = d.fireNewmap;
     b.parentElement.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
@@ -3351,7 +3501,7 @@ function render() {
 // the list of everyone loads the first time a closing form opens (the list a private training invites from)
 $app.addEventListener("toggle", e => { if (e.target.open && /^t\d+$/.test(e.target.className) && state.clan === undefined) loadClan(); }, true);
 $app.addEventListener("click", e => {
-  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-cancel],[data-drawer],[data-role],[data-squad],[data-lock],[data-briefwin],[data-sqdrop],[data-cmd],[data-seat],[data-fx],[data-leadfor],[data-nocash],[data-merit-del],[data-support],[data-lead],[data-trsvp],[data-tlead],[data-tclose],[data-tadd],[data-tracker],[data-nova],[data-ctask],[data-cans]");
+  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-draft],[data-cancel],[data-drawer],[data-role],[data-squad],[data-lock],[data-briefwin],[data-sqdrop],[data-cmd],[data-seat],[data-fx],[data-leadfor],[data-nocash],[data-merit-del],[data-support],[data-lead],[data-trsvp],[data-tlead],[data-tclose],[data-tadd],[data-tracker],[data-nova],[data-ctask],[data-cans]");
   if (state.sqArm != null && !(t && t.dataset.sqdrop)) { state.sqArm = null; renderRoster(); }  // a click elsewhere: no drop
   if (!t) return;
   if (t.dataset.ctask) { const [id, st] = t.dataset.ctask.split(":"); setTask(id, st); return; }
@@ -3383,6 +3533,7 @@ $app.addEventListener("click", e => {
   }
   if (t.dataset.drawer) { setDrawer(t.dataset.drawer); return; }
   if (t.dataset.rsvp) { setRsvp(t.dataset.rsvp); return; }
+  if (t.dataset.draft) { setDraft(t.dataset.draft === "1"); return; }
   if (t.dataset.cancel !== undefined) { cancelEvent(t); return; }
   if (t.dataset.tracker !== undefined) { syncTracker().catch(e => console.error(e)); return; }
   if (t.dataset.nova) { novaKind = t.dataset.nova; rerenderKeep(); return; }

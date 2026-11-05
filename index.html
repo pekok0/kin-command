@@ -532,7 +532,7 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .pf-game:hover { border-color: var(--fr); }
 .pf-game b { font: 700 clamp(24px, 1vw + 18px, 32px)/1.1 var(--cond); letter-spacing: .04em; color: var(--ink); overflow-wrap: anywhere; }
 .pf-game em { font: 700 15px/1 var(--cond); font-style: normal; letter-spacing: .1em; text-transform: uppercase; color: var(--fr); }
-.pf-places { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.pf-places { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }  /* callers, guns, the Logi heli (071) */
 .pf-place { display: grid; align-content: start; gap: 8px; padding: 12px 14px; border: 1px solid var(--rule-soft); background: var(--slot-bg); }
 .pf-place h3 { font: 700 20px/1 var(--cond); letter-spacing: .08em; text-transform: uppercase; }
 .pf-place ul { list-style: none; display: grid; gap: 2px; font-size: 16px; color: var(--ink-2); overflow-wrap: anywhere; }
@@ -568,6 +568,18 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .pf-sum { flex: 1 1 220px; color: var(--ink-2); overflow-wrap: anywhere; }
 .pf-edit { display: grid; gap: 12px; }
 .pf-seg { margin: 0; }
+/* each sound on its own (Juro 2026-11-04): pressed = it plays */
+.pf-snd { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.pf-snd span { font: 700 15px/1 var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin-right: 4px; }
+.pf-snd .act { min-height: 40px; }
+.pf-snd .act[aria-pressed="false"] { color: var(--ink-3); text-decoration: line-through; }
+/* the logistics of a game (071): the order and the inbox reuse the Logistika tiles and cards */
+#pf-logi { display: grid; gap: 28px; }
+#pf-logi h3 { font: 700 20px/1 var(--cond); letter-spacing: .08em; text-transform: uppercase; margin-bottom: 10px; }
+#pf-logi h3 .num { color: var(--fr); }
+.pf-gl-in, .pf-gl-order { display: grid; gap: 12px; }
+.pf-gl-act { display: flex; flex-wrap: wrap; gap: 8px; }
+.pf-f select { min-height: 56px; width: 100%; padding: 8px 14px; font: 600 20px/1.1 var(--cond); color: var(--ink); background: var(--slot-bg); border: 1px solid var(--rule); }
 .pf-seg button { min-height: 52px; font-size: 18px; }
 .pf-gunline { font-size: 20px; color: var(--ink-2); }
 .pf-gunline b { color: var(--ink); }
@@ -621,6 +633,13 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .lo-sum { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--rule); }
 .lo-sum > span { color: var(--ink-2); font-size: 15px; }
 .lo-sum b { font: 700 26px/1 var(--cond); margin-right: 8px; }
+/* the weight class like the game's inventory (Petr 2026-11-05): a word and four bars, lit up to the class */
+.wcl { font: 700 15px/1 var(--cond); letter-spacing: .1em; text-transform: uppercase; padding: 4px 8px; border: 1px solid currentColor; }
+.lo-sum .w-l { color: var(--gr); } .lo-sum .w-m { color: var(--un); } .lo-sum .w-h { color: oklch(0.80 0.16 60); } .lo-sum .w-s { color: var(--ho); }  /* over .lo-sum > span */
+.wmeter { display: inline-flex; gap: 3px; align-self: center; }
+.wmeter i { width: 14px; height: 8px; background: var(--rule-soft); }
+.wmeter i.on { background: currentColor; }
+.wmiss { flex-basis: 100%; color: var(--ink-3); font-size: 13px; }
 .cls { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 8px; margin-top: 14px; }
 .cls a { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--rule-soft); background: var(--acetate); text-decoration: none; }
 .cls a:hover { border-color: var(--fr); }
@@ -1303,6 +1322,12 @@ li.fx-new { animation: fx-unfold 520ms var(--ease) both; }
   color: var(--fr); background: transparent; border: 1px solid color-mix(in oklch, var(--fr) 50%, transparent); }
 .vh .seatt { margin-left: 2px; border-color: var(--rule-soft); }
 .podc .sqp { flex-wrap: nowrap; }
+/* the Draft (specs/akce-draft): a waiting room, dashed like the add plate; its players in a row of chips */
+.draftc { outline: 1px dashed var(--rule); outline-offset: -1px; }
+.draftc .note { margin: 4px 0 8px; }
+.draftc ul { display: flex; flex-wrap: wrap; gap: 6px; padding: 0; border: 0; list-style: none; }
+.draftc li { flex: 0 1 auto; }
+.draftc .act[data-draft] { min-height: 40px; color: var(--fr); border-color: var(--fr); }
 .sqnew { display: grid; align-content: center; gap: 10px; background: none !important; box-shadow: none !important; outline: 1px dashed var(--rule); outline-offset: -1px; }
 .sqnew-k { margin: 0; font: 700 13px/1 var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
 .sqnew-b { display: flex; flex-wrap: wrap; gap: 6px; }
