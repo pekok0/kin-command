@@ -195,21 +195,34 @@ async function setDraft(on) {
   state.flash = !error ? null : error.code === "42501" ? "Akce už je uzavřená." : saveErr(error);
   await loadEvent();
 }
-const draftees = () => state.rsvps.filter(r => r.status === "yes" && r.draft && r.members && !state.claims.some(c => c.user_id === r.user_id && !isCmd(c.slot_key)));
+// BSHB (Limit Testing, Petr 2026-11-05 evening, 074): the organizer picks his players. One button "Mam zajem" (no maybe,
+// no no) puts a member into the Draft; only the organizer (leadsLobby) gives places; one who was picked may still leave
+const ltPick = () => !!state.event && state.event.doctrine === "lt";
+async function ltOut() {
+  const ev = state.event.id, me = state.me.user_id;
+  const a = await sb.from("claims").delete().eq("event_id", ev).eq("user_id", me);
+  const b = a.error ? a : await sb.from("rsvps").delete().eq("event_id", ev).eq("user_id", me);
+  state.flash = b.error ? saveErr(b.error) : null;
+  await loadEvent();
+}
+const draftees = () => state.rsvps.filter(r => r.status === "yes" && (r.draft || ltPick()) && r.members && !state.claims.some(c => c.user_id === r.user_id && !isCmd(c.slot_key)));
 const inDraft = uid => draftees().some(r => r.user_id === uid);
 function draftCard() {
   const me = state.me.user_id, xs = draftees(), lift = (leadsLobby() || state.me.is_officer) && isSq(state.event);
   const row = r => { const mine = r.user_id === me, who = `<img src="${esc(r.members.avatar_url)}" alt="" loading="lazy"><span class="nm">${esc(r.members.name)}</span>`;
     const act = lift ? `data-lift="${esc(r.user_id)}" aria-label="Dosadit ${esc(r.members.name)}" title="Dosadit: táhni na volné místo, nebo klikni a pak klikni na místo"` : "disabled";
     return `<li data-key="draft:${esc(r.user_id)}"${lift ? ` data-drag="${esc(r.user_id)}"` : ""}${mine ? ' class="is-me"' : ""}><button type="button" class="rslot" ${act}>${who}</button>${mine
-      ? `<button type="button" class="kick" data-draft="0" aria-label="Z draftu pryč" title="Z draftu pryč">${cross()}</button>` : ""}</li>`; };
-  const join = !leadsLobby() && !inDraft(me) && !myPlace(state.claims.filter(c => !isCmd(c.slot_key))) ? '<button type="button" class="act" data-draft="1">Je mi jedno kam: do Draftu</button>' : "";
-  if (!xs.length && !join) return "";  // nobody waits and I have a place: the lobby stays as it was
+      ? `<button type="button" class="kick" ${ltPick() ? 'data-ltin="0"' : 'data-draft="0"'} aria-label="Z draftu pryč" title="Z draftu pryč">${cross()}</button>` : ""}</li>`; };
+  const join = !ltPick() && !leadsLobby() && !inDraft(me) && !myPlace(state.claims.filter(c => !isCmd(c.slot_key))) ? '<button type="button" class="act" data-draft="1">Je mi jedno kam: do Draftu</button>' : "";
+  if (!xs.length && !join && !ltPick()) return "";  // nobody waits and I have a place: the lobby stays as it was
+  const note = ltPick() ? (lift ? "Zájemci o místo: vybrané přetáhni do squadu." : "Zájemci o místo. Pořadatel si odsud vybírá, koho dá do squadu.")
+    : lift ? "Čekají na místo: přetáhni je do squadu." : "Je ti jedno, kam tě dáme? Dej se sem, velení tě dosadí.";
   return `<div class="rg draftc"><div class="pg-head"><div><b>Draft</b></div><span class="num">${xs.length}</span></div>
-    <p class="note">${lift ? "Čekají na místo: přetáhni je do squadu." : "Je ti jedno, kam tě dáme? Dej se sem, velení tě dosadí."}</p>${xs.length ? `<ul>${xs.map(row).join("")}</ul>` : ""}${join}</div>`;
+    <p class="note">${note}</p>${xs.length ? `<ul>${xs.map(row).join("")}</ul>` : ""}${join}</div>`;
 }
 // right after the Veleni strip, so the command sees it before the squads (and drags it upward less)
-const withDraft = (cards, s) => { if (!isSq(state.event) || isRaid()) return cards.join(""); const i = s.roster.findIndex(g => g.cmdg) + 1; cards.splice(i, 0, draftCard()); return cards.join(""); };
+// BSHB players (RAID) wait in it too (074)
+const withDraft = (cards, s) => { if (!isSq(state.event) || isRaid() && !ltPick()) return cards.join(""); const i = s.roster.findIndex(g => g.cmdg) + 1; cards.splice(i, 0, draftCard()); return cards.join(""); };
 
 const RSVP = [["yes", "Přijdu"], ["maybe", "Možná"], ["no", "Nemůžu"]];
 // a slot counts as "yes"; an explicit "no" wins over a forgotten slot, so the Commander's head count is not inflated
@@ -222,6 +235,11 @@ function rsvpGroups() {
 }
 function rsvpBar() {
   const meId = state.me.user_id, { said, claimed } = rsvpGroups();
+  if (ltPick()) {
+    const inIt = said[meId] === "yes" || claimed.has(meId);
+    return `<div class="rsvp" role="group" aria-label="Zájem o místo"><button type="button" class="act" data-ltin="${inIt ? 0 : 1}" aria-pressed="${inIt}">${inIt ? "Odhlásit zájem" : "Mám zájem"}</button></div>
+      ${inIt && !claimed.has(meId) ? '<p class="note rsvp-hint">Jsi v Draftu. Pořadatel si z něj vybere, koho dá do squadu.</p>' : ""}`;
+  }
   const mine = said[meId] || (claimed.has(meId) ? "yes" : null);
   // saying "no" while holding a slot shows a hint to free it
   const hint = said[meId] === "no" && claimed.has(meId) ? "Máš místo v sestavě: uvolni ho, ať ho vezme někdo jiný."
@@ -231,12 +249,14 @@ function rsvpBar() {
 }
 // Petr 2026-10-28: "vysledky prijdu, mozna a neprijdu by mely byt jinde": the tally in the event's head opens the names
 function rsvpTally() {
-  const { group } = rsvpGroups();
+  const { group, claimed } = rsvpGroups();
+  if (ltPick()) return `<button type="button" class="evh-rsvp" data-drawer="rsvp" aria-label="Zájem o místo ${group.yes.length}, vybráno ${claimed.size}">
+    <span>zájem <b>${group.yes.length}</b></span><span>vybráno <b>${claimed.size}</b></span></button>`;
   return `<button type="button" class="evh-rsvp" data-drawer="rsvp" aria-label="Kdo se ozval: přijde ${group.yes.length}, možná ${group.maybe.length}, nemůže ${group.no.length}">
     <span>přijde <b>${group.yes.length}</b></span><span>možná <b>${group.maybe.length}</b></span><span>nemůže <b>${group.no.length}</b></span></button>`;
 }
 const rsvpWho = () => { const { group } = rsvpGroups();
-  return RSVP.map(([k, l]) => `<section class="bf"><h3>${l} <span class="num">${group[k].length}</span></h3>${group[k].length ? `<p class="who-list">${group[k].map(memberLink).join(" ")}</p>` : '<p class="note">Nikdo.</p>'}</section>`).join(""); };
+  return (ltPick() ? [["yes", "Mají zájem"]] : RSVP).map(([k, l]) => `<section class="bf"><h3>${l} <span class="num">${group[k].length}</span></h3>${group[k].length ? `<p class="who-list">${group[k].map(memberLink).join(" ")}</p>` : '<p class="note">Nikdo.</p>'}</section>`).join(""); };
 
 function subscribe() {
   if (chan) return;
@@ -884,6 +904,7 @@ document.getElementById("bgd")?.addEventListener("click", () => {
 renderBg();
 
 async function claim(key) {
+  if (ltPick() && !leadsLobby()) { state.flash = "Na BSHB místa rozdává pořadatel: dej Mám zájem a počkej v Draftu."; return renderRoster(); }
   const s = plan;  // the page may change while saving (render() resets plan off roster pages, Viktor #029)
   const g = s.roster.find(g => g.slots.some(x => x.key === key)), slot = g.slots.find(x => x.key === key);
   // SWARM: the role, not "Squad 2 · Raketomet" (stats count labels as roles, Viktor #005)
@@ -3574,7 +3595,7 @@ function render() {
 // the list of everyone loads the first time a closing form opens (the list a private training invites from)
 $app.addEventListener("toggle", e => { if (e.target.open && /^t\d+$/.test(e.target.className) && state.clan === undefined) loadClan(); }, true);
 $app.addEventListener("click", e => {
-  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-draft],[data-cancel],[data-drawer],[data-role],[data-squad],[data-lock],[data-briefwin],[data-sqdrop],[data-cmd],[data-seat],[data-fx],[data-leadfor],[data-nocash],[data-merit-del],[data-support],[data-lead],[data-trsvp],[data-tlead],[data-tclose],[data-tadd],[data-tracker],[data-nova],[data-ctask],[data-cans]");
+  const t = e.target.closest("[data-trace],[data-untrace],[data-variant],[data-claim],[data-unclaim],[data-rsvp],[data-draft],[data-ltin],[data-cancel],[data-drawer],[data-role],[data-squad],[data-lock],[data-briefwin],[data-sqdrop],[data-cmd],[data-seat],[data-fx],[data-leadfor],[data-nocash],[data-merit-del],[data-support],[data-lead],[data-trsvp],[data-tlead],[data-tclose],[data-tadd],[data-tracker],[data-nova],[data-ctask],[data-cans]");
   if (state.sqArm != null && !(t && t.dataset.sqdrop)) { state.sqArm = null; renderRoster(); }  // a click elsewhere: no drop
   if (!t) return;
   if (t.dataset.ctask) { const [id, st] = t.dataset.ctask.split(":"); setTask(id, st); return; }
@@ -3606,6 +3627,7 @@ $app.addEventListener("click", e => {
   }
   if (t.dataset.drawer) { setDrawer(t.dataset.drawer); return; }
   if (t.dataset.rsvp) { setRsvp(t.dataset.rsvp); return; }
+  if (t.dataset.ltin) { t.dataset.ltin === "1" ? setDraft(true) : ltOut(); return; }
   if (t.dataset.draft) { setDraft(t.dataset.draft === "1"); return; }
   if (t.dataset.cancel !== undefined) { cancelEvent(t); return; }
   if (t.dataset.tracker !== undefined) { syncTracker().catch(e => console.error(e)); return; }
