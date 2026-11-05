@@ -14,7 +14,7 @@ const hadSession = (() => { try { return Object.keys(localStorage).some(k => /^s
 let state = { me: null, error: urlQs.has("error") ? "Přihlášení přes Discord selhalo." : null, event: null, claims: [], rsvps: [], trainings: [], ops: [], focusId: null, opsLoaded: false, flash: null, trFlash: null, tadd: {}, novaFlash: null, checking: !!sb && (hadSession || FRESH),
   logi: { orders: [], have: new Map(), local: null, timer: null, pick: null, flash: null, err: false, loaded: null, chan: null, html: null, node: null },
   fire: { games: [], slots: [], missions: [], flash: null, err: false, loaded: false, asked: false, chan: null, tgt: "", note: "", salvos: 1,
-    gunXY: "", pickWeapon: null, edit: false, newName: "", newMap: null, endAsk: null, own: "", logi: [], cart: new Map(), cartPer: new Map() } };
+    gunXY: "", pickWeapon: null, edit: false, newName: "", newMap: null, endAsk: null, own: "", logi: [], local: null, timer: null, newOp: null } };
 if (urlQs.has("error")) history.replaceState(null, "", location.pathname + location.hash);
 
 const LOGIN_ERR = "Přihlášení se nepovedlo. Zkus to znovu.";
@@ -2667,7 +2667,9 @@ document.addEventListener("keydown", () => { if (unlocking) unlocking(200); });
 // logistics helicopter with one big button; its crew sees what to buy, for which squad and from whom, and clicks it
 // delivered. Everything big: it sits on a second monitor or behind an alt-tab during the game. The operation being played
 // = the earliest still open one; the members' unlocks are frozen at its start (logi_have, ceo/logistika_snimek.py)
-const logiOp = () => (state.ops || [])[0] || null;
+// the nearest open operation; on the page of a Palba game of an operation, that one (073)
+const logiOp = () => { const g = fireRoute() ? fireGame(fireRoute()) : null, ops = state.ops || [];
+  return g && g.event_id ? ops.find(o => o.id === g.event_id) || null : ops[0] || null; };
 // no group headings (Petr 2026-10-31 evening: "ty predmety jsou velmi zname"); the order (Petr 2026-10-31 night): rounds and
 // rockets, armor, the tactical rest (""), healing with the Medical Bag first; then rows of their own: every colored signal
 // smoke (D.signaly, always) and the rarest last (monocular, parachute, detonator). Weapons, the backpack and the vest are
@@ -2683,7 +2685,9 @@ function logiRole(op) {
   // a vehicle crew orders for its vehicle (Petr 2026-10-31 evening: tanks, Humvee and artillery want their shells): any
   // seat, a vehicle has no badge; the logi heli is the courier, not a customer (058)
   const car = mine.map(c => slotCard(c.slot_key)).find(logiCar);
-  return { cmd: !!op && leadsLobby(op), crew: mine.some(c => /^SW-LP\d+$/.test(c.slot_key)), squad: lead ? slotCard(lead.slot_key) : car || null };
+  // a plain member of a squad clicks his own list too (Petr 2026-11-05, 073); only the SL (or a vehicle seat) sends
+  const place = mine.map(c => slotCard(c.slot_key)).find(k => /^Q\d+$/.test(k || ""));
+  return { cmd: !!op && leadsLobby(op), crew: mine.some(c => /^SW-LP\d+$/.test(c.slot_key)), squad: lead ? slotCard(lead.slot_key) : car || place || null, sl: !!lead || !!car };
 }
 const logiCar = k => !!k && k.startsWith("POD-") && k !== "POD-LP";
 const seesLogi = () => { const op = logiOp(), r = logiRole(op); return !!op && isSq(op) && (r.cmd || r.crew || !!r.squad); };
@@ -2722,11 +2726,24 @@ let logiIcons = null;  // item -> icon from the whole Vybava, for the crew's vie
 const logiIcon = n => { if (!logiIcons) { logiIcons = new Map(); for (const q of D.squads || []) for (const c of q.classes) for (const l of c.ladders) for (const st of l.steps)
   for (const x of [st, ...(st.mags || []), ...(st.ammo || []), ...(st.rockets || [])]) if (x.icon && !logiIcons.has(x.item)) logiIcons.set(x.item, x.icon);
   for (const g of [...(D.doktrina.swarm.slots || []).flatMap(s => s.gear || []), ...(D.signaly || [])]) if (g.icon && !logiIcons.has(g.item)) logiIcons.set(g.item, g.icon); } return logiIcons.get(n); };
-// the list being clicked: my clicks win until they are saved, else the squad's draft in the database
+// my own list (073: each member of the squad has his, he sees only his counts): my clicks win until they are saved,
+// else my draft in the database
+const logiMine = sq => state.logi.orders.find(x => x.squad === sq && x.state === "draft" && x.created_by === state.me.user_id);
 function logiDraft(sq) {
   if (state.logi.local && state.logi.local.sq === sq) return state.logi.local.items;
-  const row = state.logi.orders.find(x => x.squad === sq && x.state === "draft");
+  const row = logiMine(sq);
   return new Map((row ? row.items : []).map(x => [x.item, x.stacks]));
+}
+// the squad's whole shipment: the other members' drafts and my list as I see it now, summed per item
+const listSum = (rows, mine) => { const t = new Map();
+  for (const m of [...rows.map(x => new Map(x.items.map(i => [i.item, i.stacks]))), mine]) for (const [k, n] of m) if (n > 0) t.set(k, (t.get(k) || 0) + n);
+  return t; };
+const stacks = m => [...m.values()].reduce((a, b) => a + b, 0);
+// what the SL confirms and sends, in the tiles' order (Petr 2026-11-05 "SL vidi celkovou zasilku s celkovymi pocty")
+function shipHtml(all, total) {
+  const keys = [...all.map(x => x.item).filter(i => total.has(i)), ...[...total.keys()].filter(i => !all.some(x => x.item === i))];
+  return `<div class="lg-ship"><h3>Zásilka squadu</h3>${keys.length ? `<ul class="lg-items">${keys.map(i => `<li>${itemIcon(logiIcon(i), "sm")}<b>${total.get(i)}×</b><span>${esc(i)}</span></li>`).join("")}</ul>`
+    : '<p class="note">Zatím nikdo ze squadu nic nenaklikal.</p>'}</div>`;
 }
 function logiItems(op, sq, items) {
   const per = new Map([...state.logi.orders.filter(x => x.squad === sq).flatMap(x => x.items.map(i => [i.item, i.per])), ...squadItems(op, sq).map(x => [x.item, x.per])]);
@@ -2744,19 +2761,19 @@ function logiBump(item, d) {
 async function logiSave() {
   const L = state.logi.local, op = logiOp();
   if (!L || !op) return;
-  const row = state.logi.orders.find(x => x.squad === L.sq && x.state === "draft"), items = logiItems(op, L.sq, L.items);
+  const row = logiMine(L.sq), items = logiItems(op, L.sq, L.items);
   const { error } = row ? await sb.from("logi_orders").update({ items }).eq("id", row.id)
     : await sb.from("logi_orders").insert({ event_id: op.id, squad: L.sq, items });
   state.logi.flash = error ? (console.error(error), "Seznam se nepodařilo uložit, zkus to znovu.") : null;
   await loadLogi();
   if (!error && state.logi.local === L) { state.logi.local = null; renderLogi(); }
 }
+// the SL sends every member's list as one shipment (logi_send, 073); my last clicks are saved first
 async function logiCall() {
   clearTimeout(state.logi.timer);
-  const op = logiOp(), sq = logiSquad(op), row = state.logi.orders.find(x => x.squad === sq && x.state === "draft"), items = logiItems(op, sq, logiDraft(sq));
-  if (!items.length) return;
-  const { error } = row ? await sb.from("logi_orders").update({ state: "open", items }).eq("id", row.id)
-    : await sb.from("logi_orders").insert({ event_id: op.id, squad: sq, state: "open", items });
+  if (state.logi.local) await logiSave();
+  const op = logiOp(), sq = logiSquad(op);
+  const { error } = await sb.rpc("logi_send", { p_event: op.id, p_game: null, p_squad: sq });
   state.logi.flash = error ? (console.error(error), "Logistiku se nepodařilo zavolat, zkus to znovu.") : null;
   if (!error) { state.logi.local = null; sound("unlock"); }
   await loadLogi();
@@ -2786,7 +2803,9 @@ async function loadLogi() {
 }
 const logiSum = items => items.map(i => `${i.item} ${i.stacks}×`).join(", ");
 function logiOrderBlock(op, sq) {
-  const all = squadItems(op, sq), draft = logiDraft(sq), n = [...draft.values()].reduce((a, b) => a + b, 0);
+  const all = squadItems(op, sq), draft = logiDraft(sq), n = stacks(draft), r = logiRole(op), send = r.sl || r.cmd;
+  const total = listSum(state.logi.orders.filter(x => x.squad === sq && x.state === "draft" && x.created_by !== state.me.user_id), draft), tot = stacks(total);
+  const sl = op.claims.find(c => c.lead && slotCard(c.slot_key) === sq);
   const tile = x => { const c = draft.get(x.item) || 0;
     return `<div class="lg-t${c ? " on" : ""}"><button type="button" class="lg-add" data-logi-add="${esc(x.item)}" aria-label="Přidat ${esc(x.item)}">${itemIcon(x.icon)}<span class="lg-n">${esc(x.item)}</span>
       <span class="lg-s">${x.per > 1 ? `stack ${x.per} ks` : "1 ks"}</span>${c ? `<b class="lg-c">${c}×</b>` : ""}</button>${c ? `<button type="button" class="lg-sub" data-logi-sub="${esc(x.item)}" aria-label="Ubrat ${esc(x.item)}">−</button>` : ""}</div>`; };
@@ -2796,10 +2815,12 @@ function logiOrderBlock(op, sq) {
   // the squad's orders first, right under its name: what is on the way and what came (the vision run 2026-10-31: at the
   // bottom the SL had to scroll past all tiles to see "Doruceno")
   const histBlock = hist.length ? `<ul class="lg-hist">${hist.slice(0, 2).map(x => `<li class="${x.state}"><span class="lg-st">${label(x)}</span><span class="lg-sum">${esc(logiSum(x.items))}</span>
-      <button type="button" class="act" data-logi-again="${x.id}">Objednat znovu</button>${x.state === "open" ? `<button type="button" class="act" data-logi-cancel="${x.id}">Zrušit</button>` : ""}</li>`).join("")}</ul>` : "";
+      ${send ? `<button type="button" class="act" data-logi-again="${x.id}">Objednat znovu</button>${x.state === "open" ? `<button type="button" class="act" data-logi-cancel="${x.id}">Zrušit</button>` : ""}` : ""}</li>`).join("")}</ul>` : "";
   return `<section class="lg-sec" id="lg-order"><header class="lg-h"><h2>Objednávka · ${esc(squadName(op, sq))}</h2>${cmd}</header>${histBlock}
     ${[0, 1, 2].map(r => all.filter(x => x.row === r)).filter(r => r.length).map(r => `<div class="lg-tiles">${r.map(tile).join("")}</div>`).join("")}
-    <div class="lg-bar">${hist.length ? `<p class="lg-last ${hist[0].state}">Poslední: ${label(hist[0])}</p>` : ""}<button type="button" class="lg-call" data-logi-call${n ? "" : " disabled"}>Zavolat logistiku${n ? ` · ${plural(n, "stack", "stacky", "stacků")}` : ""}</button></div></section>`;
+    ${send ? shipHtml(all, total) : ""}<div class="lg-bar">${hist.length ? `<p class="lg-last ${hist[0].state}">Poslední: ${label(hist[0])}</p>` : ""}${send
+      ? `<button type="button" class="lg-call" data-logi-call${tot ? "" : " disabled"}>Potvrdit a odeslat logistice${tot ? ` · ${plural(tot, "stack", "stacky", "stacků")}` : ""}</button>`
+      : `<p class="lg-last">Tvůj seznam: ${plural(n, "stack", "stacky", "stacků")}. Celou zásilku squadu odešle ${sl ? `SL ${esc(sl.members.name)}` : "SL squadu"}.</p>`}</div></section>`;
 }
 function logiInbox(op) {
   const open = state.logi.orders.filter(x => x.state === "open"), done = state.logi.orders.filter(x => x.state === "delivered").slice(-5).reverse();
@@ -2814,13 +2835,13 @@ function viewLogistika() {
   const op = logiOp(), head = '<header class="unit-head"><div><h1>Logistika</h1></div></header>';  // a glance page: no lede
   if (!op) return head + `<p class="note">${state.opsLoaded ? "Teď není otevřená žádná operace." : "Načítám…"}</p>`;
   const r = logiRole(op), sq = logiSquad(op);
-  if (!(r.cmd || r.crew || r.squad)) return head + '<p class="note">Logistika je pro velení, squad leadery (odznak SL) a posádku logi heli téhle operace.</p>';
+  if (!(r.cmd || r.crew || r.squad)) return head + '<p class="note">Logistika je pro velení, členy squadů a posádku logi heli téhle operace.</p>';
   const msg = state.logi.flash ? `<p class="err" role="alert">${esc(state.logi.flash)}</p>` : state.logi.err ? '<p class="err" role="alert">Objednávky se nenačetly, zkus stránku načíst znovu.</p>' : "";
   const order = sq ? logiOrderBlock(op, sq) : "", inbox = r.crew || r.cmd ? logiInbox(op) : "";
   return `${head}${msg}<div class="lg-wrap">${r.crew && !r.squad ? inbox + order : order + inbox}</div>`;
 }
 function renderLogi() {
-  if (!/^#\/logistika/.test(location.hash)) return renderNav(navActive);
+  if (!/^#\/logistika/.test(location.hash)) return fireRoute() ? renderFire() : renderNav(navActive);  // a game of an operation shows it too
   const html = viewLogistika();
   // the same page again (the save after a click, the end of the local draft, the realtime echo of the own write) leaves
   // the DOM alone: rebuilt from the same HTML, the tiles flashed and their icons loaded twice (Petr 2026-10-31)
@@ -2873,7 +2894,7 @@ const fireLabel = (list, k) => (list.find(([v]) => v === k) || [k, k])[1];
 // Palba v2 (Petr 2026-11-01 night, specs/palba, 065): no operation. Any clan member (no guest, no RAID) founds a game
 // with a name and a map and takes one of 30 caller or 10 gun places; a game ends by its founder or the command, or by
 // itself 6 h after the last write in it
-const FIRE_CAP = { caller: 30, gun: 10, logi: 4 };  // logi = the game's Logi heli (071)
+const FIRE_CAP = { caller: 35, gun: 10, logi: 4 };  // logi = the game's Logi heli (071); callers = 5 squads of 7 (073)
 const FIRE_QUIET_MS = 6 * 3600e3;
 const fireMember = () => !!state.me && !isGuest() && !isRaid();
 const fireGame = id => state.fire.games.find(g => g.id === id) || null;
@@ -2937,13 +2958,11 @@ function fireNotify(prev) {
     else if (was && was !== x.state && (x.state === "taken" || x.state === "done") && x.created_by === me) fireCallout(x.state);
   }
 }
-// the logistics of the games (071): a new call rings for the game's commander, a confirmed flight for its Logi heli and
-// the author, the delivery for the author
+// the logistics of the games (073): a shipment rings for the game's Logi heli, its delivery for the SL who sent it
 function glNotify(prev) {
   const me = state.me.user_id;
-  const ring = state.fire.logi.some(o => { const was = prev.get(o.id), g = fireGame(o.game_id);
-    return !was ? o.state === "open" && !!g && fireCanEnd(g) && o.created_by !== me
-      : was !== o.state && (o.state === "approved" ? fireRoleIn(o.game_id) === "logi" || o.created_by === me : o.state === "delivered" && o.created_by === me); });
+  const ring = state.fire.logi.some(o => { const was = prev.get(o.id);
+    return !was ? o.state === "open" && fireRoleIn(o.game_id) === "logi" : was !== o.state && o.state === "delivered" && o.created_by === me; });
   if (ring) glBeep();
 }
 let fireSeq = 0;
@@ -2951,13 +2970,13 @@ let fireSeq = 0;
 async function loadFire() {
   if (!sb || !fireMember()) return renderFire();
   const seq = ++fireSeq, F = state.fire;
-  const g = await sb.from("fire_games").select("id, name, map, created_by, created_at, founder:members!fire_games_created_by_fkey(name)")
+  const g = await sb.from("fire_games").select("id, name, map, event_id, created_by, created_at, founder:members!fire_games_created_by_fkey(name)")
     .is("ended_at", null).gt("active_at", new Date(Date.now() - FIRE_QUIET_MS).toISOString());
   const ids = g.error ? [] : g.data.map(x => x.id);
   const [s, m, l] = ids.length ? await Promise.all([
-    sb.from("fire_slots").select("game_id, user_id, role, weapon, x, y, who:members!fire_slots_user_id_fkey(name)").in("game_id", ids),
+    sb.from("fire_slots").select("game_id, user_id, role, squad, lead, weapon, x, y, who:members!fire_slots_user_id_fkey(name)").in("game_id", ids),
     sb.from("fire_missions").select("id, game_id, x, y, salvos, note, state, created_by, created_at, taken_by, taken_at, done_at, author:members!fire_missions_created_by_fkey(name), gunner:members!fire_missions_taken_by_fkey(name)").in("game_id", ids).order("id"),
-    sb.from("logi_orders").select("id, game_id, state, items, created_by, sent_at, approved_at, delivered_at, author:members!logi_orders_created_by_fkey(name), boss:members!logi_orders_approved_by_fkey(name), courier:members!logi_orders_delivered_by_fkey(name)").in("game_id", ids).order("id")])
+    sb.from("logi_orders").select("id, game_id, squad, state, items, created_by, sent_at, delivered_at, author:members!logi_orders_created_by_fkey(name), courier:members!logi_orders_delivered_by_fkey(name)").in("game_id", ids).order("id")])
     : [{ data: [] }, { data: [] }, { data: [] }];
   if (seq !== fireSeq) return;  // a newer load is on its way
   const err = g.error || s.error || m.error || l.error;
@@ -2968,25 +2987,32 @@ async function loadFire() {
   if (prev) { fireNotify(prev); glNotify(prevL); }
   if (!F.chan) F.chan = ["fire_games", "fire_slots", "fire_missions", "logi_orders"].reduce((c, t) => c.on("postgres_changes", { event: "*", schema: "public", table: t }, () => loadFire()), sb.channel("fire")).subscribe();
   renderFire();
+  const on = fireGame(fireRoute());  // a game of an operation shows the operation's logistics (073)
+  if (on && on.event_id && state.logi.loaded !== on.event_id) setTimeout(loadLogi);
 }
 async function fireWrite(req, failed) {
   const { error } = await req;
   state.fire.flash = !error ? null : (console.error(error), error.code === "42501" && failed === "take" ? "Už to převzal někdo jiný."
-    : /fire_full/.test(error.message || "") ? "Tahle místa jsou plná." : "Nepodařilo se uložit, zkus to znovu.");
+    : /fire_full/.test(error.message || "") ? "Tahle místa jsou plná." : error.code === "23505" ? "Squad už SL má." : "Nepodařilo se uložit, zkus to znovu.");
   await loadFire();
   return !error;
 }
 async function fireGameNew() {
   const F = state.fire, name = F.newName.trim();
   if (!name || !F.newMap) return;
-  const { data, error } = await sb.rpc("fire_game_new", { p_name: name, p_map: F.newMap });
+  const { data, error } = await sb.rpc("fire_game_new", { p_name: name, p_map: F.newMap, ...(F.newOp && { p_event: F.newOp }) });
   if (error) { console.error(error); F.flash = "Hru se nepodařilo založit, zkus to znovu."; return renderFire(); }
-  Object.assign(F, { newName: "", newMap: null, flash: null });
+  Object.assign(F, { newName: "", newMap: null, newOp: null, flash: null });
   await loadFire();
   location.hash = `#/palba/${data}`;
 }
 const fireGameEnd = id => fireWrite(sb.rpc("fire_game_end", { g: id }));
-const fireJoin = (id, role) => (state.fire.edit = false, fireWrite(sb.from("fire_slots").upsert({ game_id: id, user_id: state.me.user_id, role, weapon: null, x: null, y: null })));
+// a gun or a caller keeps his squad, the Logi heli has none (073)
+const fireJoin = (id, role) => (state.fire.edit = false, fireWrite(sb.from("fire_slots").upsert({ game_id: id, user_id: state.me.user_id, role, weapon: null, x: null, y: null,
+  ...(role === "logi" && { squad: null, lead: false }) })));
+// a squad of an own game: a caller there (a gun stays a gun), never the SL of the squad he left
+const fireSquad = (id, n) => { const s = fireMine(id);
+  return fireWrite(sb.from("fire_slots").upsert({ game_id: id, user_id: state.me.user_id, squad: n, lead: false, ...(!s || s.role === "logi" ? { role: "caller" } : {}) })); };
 const fireLeave = id => fireWrite(sb.from("fire_slots").delete().eq("game_id", id).eq("user_id", state.me.user_id));
 const fireMySlot = (id, row) => sb.from("fire_slots").update(row).eq("game_id", id).eq("user_id", state.me.user_id);
 async function fireGunSave(id) {
@@ -2995,6 +3021,7 @@ async function fireGunSave(id) {
   if (await fireWrite(fireMySlot(id, { weapon: F.pickWeapon, x: xy.x, y: xy.y }))) { F.edit = false; renderFire(); }
 }
 const fireGunDrop = id => fireWrite(fireMySlot(id, { weapon: null, x: null, y: null }));
+const fireLead = (id, on) => fireWrite(fireMySlot(id, { lead: on }));
 async function fireSend(id) {
   const F = state.fire, t = parseXY(F.tgt);
   if (!t) return;
@@ -3062,85 +3089,126 @@ function fireListHtml(id) {
   return list.length ? list.map(card).join("") : '<p class="note">Žádná palba.</p>';
 }
 // ---------- the logistics of a Palba game (Juro 2026-11-04, Petr 2026-11-05; specs/logistika-objednavky "Hry mimo
-// akci", 071): no operation and no squad. Any clan member picks his role, clicks what he needs from its kit (whole stacks)
-// and calls; the game's commander (its founder or the command, like ending the game) confirms the flight or turns it
-// down; its Logi heli delivers. The list being clicked lives on this page only: a game has no draft in the database
-const glRoles = () => mainSquads().flatMap(q => roles(q));
-const glClass = () => { let id = null; try { id = localStorage.getItem("kin-palba-role"); } catch { /* blocked storage */ } return glRoles().find(c => c.id === (state.fire.role || id)) || null; };
-function gameItems(c) {
+// akci" and "Squady", 071, 073). A game of an operation has the operation's squads and logistics (the Logistika page's
+// blocks). An own game has five squads of 5 places (up to 7, a squad member calls fire or shoots): each member clicks
+// his own list and sees only his counts, the squad's SL sees the whole shipment and sends it (logi_send); its Logi heli
+// or the game's commander delivers
+const GL_SQUADS = [1, 2, 3, 4, 5], GL_SHOWN = 5, GL_MAX = 7;
+const glOp = g => g && g.event_id ? (state.ops || []).find(o => o.id === g.event_id) || null : null;
+const glSq = id => { const s = fireMine(id); return s && s.squad ? `Q${s.squad}` : null; };
+const glSqName = sq => `Squad ${sq.slice(1)}`;
+const glLeadOf = (id, sq) => state.fire.slots.find(s => s.game_id === id && s.lead && `Q${s.squad}` === sq) || null;
+// every role's kit once (Petr 2026-11-05 "by default jde objednavat vsechno"): an own game knows no roles
+function glItems() {
   const out = new Map(), add = (st, rank, row = 0) => { if (st && st.item && !out.has(st.item)) out.set(st.item, { item: st.item, icon: st.icon, per: st.stack || 1, rank, row }); };
-  if (c) kitTiles(myKit(c), add);
+  for (const c of mainSquads().flatMap(q => roles(q))) kitTiles(myKit(c), add);
   for (const st of D.signaly || []) add(st, 0, 1);
   return [...out.values()].sort((a, b) => a.row - b.row || a.rank - b.rank);
 }
-// what waits for me: the calls of the games I command, the confirmed flights of the games where I fly the Logi heli
-const glTodo = () => state.fire.logi.filter(o => { const g = fireGame(o.game_id);
-  return !!g && (o.state === "open" && fireCanEnd(g) || o.state === "approved" && fireRoleIn(o.game_id) === "logi"); });
-const glState = o => o.state === "open" ? `Čeká na potvrzení letu · ${ago(o.sent_at)}` : o.state === "approved" ? `Let potvrdil ${esc(o.boss ? o.boss.name : "?")} · ${ago(o.approved_at)}`
+const glDrafts = (id, sq) => state.fire.logi.filter(o => o.game_id === id && o.squad === sq && o.state === "draft");
+const glOwn = (id, sq) => glDrafts(id, sq).find(o => o.created_by === state.me.user_id) || null;
+function glList(id, sq) {  // my list: my clicks until they are saved, else my draft
+  const L = state.fire.local;
+  if (L && L.id === id && L.sq === sq) return L.items;
+  const row = glOwn(id, sq);
+  return new Map((row ? row.items : []).map(x => [x.item, x.stacks]));
+}
+// what waits for me: the shipments of the games where I fly the Logi heli
+const glTodo = () => state.fire.logi.filter(o => o.state === "open" && fireRoleIn(o.game_id) === "logi");
+const glState = o => o.state === "open" ? `Čeká na logistiku · ${ago(o.sent_at)}`
   : o.state === "delivered" ? `Doručeno${o.courier ? ` · ${esc(o.courier.name)}` : ""} · ${ago(o.delivered_at)}` : "Zrušeno";
-const glCard = (o, act) => `<article class="lg-o"><header><b class="lg-sq">${esc(o.author ? o.author.name : "?")}</b><span>${glState(o)}</span></header>
+const glCard = (o, act) => `<article class="lg-o"><header><b class="lg-sq">${glSqName(o.squad)}</b><span>SL ${esc(o.author ? o.author.name : "?")} · ${glState(o)}</span></header>
   <ul class="lg-items">${o.items.map(i => `<li>${itemIcon(logiIcon(i.item), "sm")}<b>${i.stacks}×</b><span>${esc(i.item)}</span><small>${i.stacks * i.per} ks</small></li>`).join("")}</ul>${act}</article>`;
 function glInbox(id) {
-  const boss = fireCanEnd(fireGame(id)), crew = fireRoleIn(id) === "logi", all = state.fire.logi.filter(o => o.game_id === id);
-  if (!boss && !crew) return "";
-  const open = all.filter(o => o.state === "open"), go = all.filter(o => o.state === "approved");
-  const ok = o => boss ? `<div class="pf-gl-act"><button type="button" class="lg-done" data-gl-ok="${o.id}">Potvrdit let</button><button type="button" class="act" data-gl-no="${o.id}">Zamítnout</button></div>` : "";
-  return `<div class="pf-gl-in"><h3>${boss ? "Ke schválení" : "Čeká na velitele"} <span class="num">${open.length}</span></h3>${open.map(o => glCard(o, ok(o))).join("") || '<p class="note">Nic nečeká.</p>'}
-    <h3>Pro logi heli <span class="num">${go.length}</span></h3>${go.map(o => glCard(o, `<button type="button" class="lg-done" data-gl-done="${o.id}">Doručeno</button>`)).join("") || '<p class="note">Žádný potvrzený let.</p>'}</div>`;
+  if (!fireCanEnd(fireGame(id)) && fireRoleIn(id) !== "logi") return "";
+  const open = state.fire.logi.filter(o => o.game_id === id && o.state === "open");
+  return `<div class="pf-gl-in"><h3>Pro logi heli <span class="num">${open.length}</span></h3>${open.map(o => glCard(o, `<button type="button" class="lg-done" data-gl-done="${o.id}">Doručeno</button>`)).join("")
+    || '<p class="note">Nic nečeká.</p>'}</div>`;
 }
 function glOrder(id) {
-  const F = state.fire, c = glClass(), me = state.me.user_id, n = [...F.cart.values()].reduce((a, b) => a + b, 0);
-  const pick = `<label class="pf-f">Moje role<select id="pf-gl-role"><option value="">Vyber roli</option>${glRoles().map(r => `<option value="${esc(r.id)}"${c && c.id === r.id ? " selected" : ""}>${esc(r.name)}</option>`).join("")}</select></label>`;
-  const tile = x => { const k = F.cart.get(x.item) || 0;
+  const sq = glSq(id);
+  if (!sq) return fireRoleIn(id) === "logi" ? "" : '<p class="note">Naskoč do squadu v Místech a můžeš objednávat.</p>';
+  const me = state.me.user_id, mine = glList(id, sq), lead = glLeadOf(id, sq), sl = !!lead && lead.user_id === me, all = glItems();
+  const total = listSum(glDrafts(id, sq).filter(o => o.created_by !== me), mine), tot = stacks(total), name = lead ? `SL ${esc(lead.who ? lead.who.name : "?")}` : "";
+  const tile = x => { const k = mine.get(x.item) || 0;
     return `<div class="lg-t${k ? " on" : ""}"><button type="button" class="lg-add" data-gl-add="${esc(x.item)}" aria-label="Přidat ${esc(x.item)}">${itemIcon(x.icon)}<span class="lg-n">${esc(x.item)}</span>
       <span class="lg-s">${x.per > 1 ? `stack ${x.per} ks` : "1 ks"}</span>${k ? `<b class="lg-c">${k}×</b>` : ""}</button>${k ? `<button type="button" class="lg-sub" data-gl-sub="${esc(x.item)}" aria-label="Ubrat ${esc(x.item)}">−</button>` : ""}</div>`; };
-  const all = gameItems(c), mine = F.logi.filter(o => o.game_id === id && o.created_by === me).slice().reverse().slice(0, 3);
-  const hist = mine.length ? `<ul class="lg-hist">${mine.map(o => `<li class="${o.state}"><span class="lg-st">${glState(o)}</span><span class="lg-sum">${esc(logiSum(o.items))}</span>
-      <button type="button" class="act" data-gl-again="${o.id}">Objednat znovu</button>${o.state === "open" || o.state === "approved" ? `<button type="button" class="act" data-gl-no="${o.id}">Zrušit</button>` : ""}</li>`).join("")}</ul>` : "";
-  return `<div class="pf-gl-order"><h3>Objednat</h3>${pick}${hist}${c ? "" : '<p class="note">Vyber svoji roli, ukážu výbavu, kterou nosíš.</p>'}
-    ${[0, 1, 2].map(r => all.filter(x => x.row === r)).filter(r => r.length).map(r => `<div class="lg-tiles">${r.map(tile).join("")}</div>`).join("")}
-    <div class="lg-bar"><button type="button" class="lg-call" data-gl-call${n ? "" : " disabled"}>Zavolat logistiku${n ? ` · ${plural(n, "stack", "stacky", "stacků")}` : ""}</button></div></div>`;
+  const hist = state.fire.logi.filter(o => o.game_id === id && o.squad === sq && o.state !== "draft").slice().reverse().slice(0, 2);
+  const histHtml = hist.length ? `<ul class="lg-hist">${hist.map(o => `<li class="${o.state}"><span class="lg-st">${glState(o)}</span><span class="lg-sum">${esc(logiSum(o.items))}</span>
+      ${sl ? `<button type="button" class="act" data-gl-again="${o.id}">Objednat znovu</button>${o.state === "open" ? `<button type="button" class="act" data-gl-no="${o.id}">Zrušit</button>` : ""}` : ""}</li>`).join("")}</ul>` : "";
+  const bar = sl ? `${shipHtml(all, total)}<div class="lg-bar"><button type="button" class="lg-call" data-gl-call${tot ? "" : " disabled"}>Potvrdit a odeslat logistice${tot ? ` · ${plural(tot, "stack", "stacky", "stacků")}` : ""}</button></div>`
+    : `<div class="lg-bar"><p class="lg-last">Tvůj seznam: ${plural(stacks(mine), "stack", "stacky", "stacků")}. Celou zásilku squadu odešle ${name || "SL, až si ho squad v Místech vybere"}.</p></div>`;
+  return `<div class="pf-gl-order"><h3>${glSqName(sq)} · ${name || "bez SL"}</h3>${histHtml}
+    ${[0, 1, 2].map(r => all.filter(x => x.row === r)).filter(r => r.length).map(r => `<div class="lg-tiles">${r.map(tile).join("")}</div>`).join("")}${bar}</div>`;
 }
-const glHtml = id => glInbox(id) + glOrder(id);
+function glHtml(id) {
+  const g = fireGame(id);
+  if (!g.event_id) return glInbox(id) + glOrder(id);
+  const op = glOp(g);  // a game of an operation: the operation's logistics, the same blocks as the Logistika page
+  if (!op) return `<p class="note">${state.opsLoaded ? "Akce téhle hry už je uzavřená, logistika skončila." : "Načítám…"}</p>`;
+  const r = logiRole(op), sq = logiSquad(op), order = sq ? logiOrderBlock(op, sq) : "", inbox = r.crew || r.cmd ? logiInbox(op) : "";
+  return order || inbox ? (r.crew && !r.squad ? inbox + order : order + inbox) : '<p class="note">Logistika akce je pro členy jejích squadů, velení a posádku logi heli.</p>';
+}
 function glBump(item, d) {
-  const F = state.fire, n = Math.max(0, (F.cart.get(item) || 0) + d), x = gameItems(glClass()).find(t => t.item === item);
-  if (n) F.cart.set(item, n); else F.cart.delete(item);
-  if (x) F.cartPer.set(item, x.per);
+  const F = state.fire, id = fireRoute(), sq = glSq(id), items = new Map(glList(id, sq)), n = Math.max(0, (items.get(item) || 0) + d);
+  if (n) items.set(item, n); else items.delete(item);
+  F.local = { id, sq, items };
   sound(d > 0 ? "add" : "remove");
   renderFire();
+  clearTimeout(F.timer);
+  F.timer = setTimeout(glSave, 500);  // saved shortly after the last click: the page stays instant
 }
+async function glSave() {
+  const F = state.fire, L = F.local;
+  if (!L) return;
+  const per = new Map(glItems().map(x => [x.item, x.per])), row = glOwn(L.id, L.sq);
+  const items = [...L.items].filter(([, k]) => k > 0).map(([item, stacks]) => ({ item, stacks, per: per.get(item) || 1 }));
+  const ok = await fireWrite(row ? sb.from("logi_orders").update({ items }).eq("id", row.id) : sb.from("logi_orders").insert({ game_id: L.id, squad: L.sq, items }));
+  if (ok && F.local === L) { F.local = null; renderFire(); }
+}
+// the SL sends every member's list as one shipment (logi_send, 073); my last clicks are saved first
 async function glCall(id) {
-  const F = state.fire, items = [...F.cart].map(([item, stacks]) => ({ item, stacks, per: F.cartPer.get(item) || 1 }));
-  if (!items.length) return;
-  if (await fireWrite(sb.from("logi_orders").insert({ game_id: id, state: "open", items }))) { F.cart = new Map(); sound("unlock"); renderFire(); }
+  const F = state.fire;
+  clearTimeout(F.timer);
+  if (F.local) await glSave();
+  if (await fireWrite(sb.rpc("logi_send", { p_event: null, p_game: id, p_squad: glSq(id) }))) sound("unlock");
 }
 const glSet = (oid, st) => fireWrite(sb.from("logi_orders").update({ state: st }).eq("id", oid));
-const glAgain = oid => { const o = state.fire.logi.find(x => x.id === oid); return o && fireWrite(sb.from("logi_orders").insert({ game_id: o.game_id, state: "open", items: o.items })); };
-document.addEventListener("change", e => {
-  if (e.target.id !== "pf-gl-role") return;
-  state.fire.role = e.target.value || null;
-  try { localStorage.setItem("kin-palba-role", e.target.value); } catch { /* blocked storage: this page keeps it */ }
-  renderFire();
-});
+const glAgain = oid => { const o = state.fire.logi.find(x => x.id === oid); return o && fireWrite(sb.from("logi_orders").insert({ game_id: o.game_id, squad: o.squad, state: "open", items: o.items })); };
 function fireGamesHtml() {
   const F = state.fire;
   return F.games.length ? F.games.map(g => { const n = r => F.slots.filter(s => s.game_id === g.id && s.role === r).length;
     return `<a class="pf-game" href="#/palba/${g.id}"><b>${esc(g.name)}</b><span>${fireLabel(FIRE_MAPS, g.map)} · ${esc(g.founder ? g.founder.name : "?")}</span>
-      <span>Objednávači ${n("caller")}/${FIRE_CAP.caller} · Střelci ${n("gun")}/${FIRE_CAP.gun} · Logi heli ${n("logi")}/${FIRE_CAP.logi}</span>${fireMine(g.id) ? "<em>jsi v ní</em>" : ""}</a>`; }).join("")
+      <span>${g.event_id ? "K akci · " : ""}Objednávači ${n("caller")}/${FIRE_CAP.caller} · Střelci ${n("gun")}/${FIRE_CAP.gun}${g.event_id ? "" : ` · Logi heli ${n("logi")}/${FIRE_CAP.logi}`}</span>${fireMine(g.id) ? "<em>jsi v ní</em>" : ""}</a>`; }).join("")
     : '<p class="note">Teď neběží žádná hra. Založ první.</p>';
 }
-// the two sides of a game: who is in, my way in, out or across (one place a member, P3)
+// the places of a game: who is in, my way in, out or across (one place a member, P3). An own game puts its callers in
+// five squads (073); a game of an operation has the operation's squads and Logi heli
+function glSquadHtml(id, n, all, me) {
+  const ss = all.filter(s => s.squad === n), here = !!me && me.squad === n;
+  const btn = !here ? (ss.length >= GL_MAX ? '<span class="pf-full">Plno</span>' : `<button type="button" class="act" data-fire-squad="${n}">Naskočit</button>`)
+    : (me.lead ? '<button type="button" class="act" data-fire-lead="0">Nejsem SL</button>' : ss.some(s => s.lead) ? "" : '<button type="button" class="act" data-fire-lead="1">Jsem SL</button>')
+      + (me.role === "gun" ? '<button type="button" class="act" data-fire-join="caller">Objednávat palbu</button>' : "");
+  const who = s => `<li>${esc(s.who ? s.who.name : "?")}${s.lead ? " · SL" : ""}${s.role === "gun" ? " · střelec" : ""}</li>`;
+  return `<div class="pf-place"><h3>Squad ${n} ${ss.length}/${ss.length < GL_SHOWN ? GL_SHOWN : GL_MAX}</h3>${btn}${ss.length ? `<ul>${ss.map(who).join("")}</ul>` : ""}</div>`;
+}
 function fireSlotsHtml(id) {
-  const mine = fireRoleIn(id), all = state.fire.slots.filter(s => s.game_id === id);
+  const mine = fireRoleIn(id), all = state.fire.slots.filter(s => s.game_id === id), g = fireGame(id);
   const side = (role, head, go) => { const ss = all.filter(s => s.role === role);
     const btn = mine === role ? "" : ss.length >= FIRE_CAP[role] ? '<span class="pf-full">Plno</span>' : `<button type="button" class="act" data-fire-join="${role}">${go}</button>`;
     const who = s => `<li>${esc(s.who ? s.who.name : "?")}${role === "gun" ? ` · ${s.x != null ? fireLabel(FIRE_WEAPONS, s.weapon) : "bez postavení"}` : ""}</li>`;
     return `<div class="pf-place"><h3>${head} ${ss.length}/${FIRE_CAP[role]}</h3>${btn}${ss.length ? `<ul>${ss.map(who).join("")}</ul>` : ""}</div>`; };
-  return `<div class="pf-places">${side("caller", "Objednávači", "Objednávat")}${side("gun", "Střelci", "Střílet")}${side("logi", "Logi heli", "Létat logi")}</div>${mine ? '<button type="button" class="act" data-fire-leave>Odejít ze hry</button>' : ""}`;
+  const out = mine ? '<button type="button" class="act" data-fire-leave>Odejít ze hry</button>' : "";
+  if (g.event_id) return `<div class="pf-places">${side("caller", "Objednávači", "Objednávat")}${side("gun", "Střelci", "Střílet")}</div>${out}`;
+  return `<div class="pf-squads">${GL_SQUADS.map(n => glSquadHtml(id, n, all, fireMine(id))).join("")}</div><div class="pf-places">${side("gun", "Střelci", "Střílet")}${side("logi", "Logi heli", "Létat logi")}</div>${out}`;
 }
 const fireKey = id => { const F = state.fire, g = id && fireGame(id);
   return !F.loaded ? "wait" : !id ? "list" : !g ? `gone|${id}` : `${id}|${fireRoleIn(id)}|${!!fireMyGun(id)}|${F.edit}|${F.endAsk === id}`; };
 const fireMsg = () => { const F = state.fire; return F.flash ? `<p class="err" role="alert">${esc(F.flash)}</p>` : F.err ? '<p class="err" role="alert">Palba se nenačetla, zkus stránku načíst znovu.</p>' : ""; };
+// a game of an open operation takes its squads and logistics, an own game has its own five squads (Petr 2026-11-05, 073)
+const fireOpsHtml = () => { const ops = (state.ops || []).filter(isSq), F = state.fire;
+  return ops.length ? `<div class="pf-seg vbar seg" role="group" aria-label="Logistika">${[[0, "Vlastní hra"], ...ops.map(o => [o.id, `K akci · ${docName(o.doctrine)} · ${fmtWhen(o.starts_at)}`])]
+    .map(([k, l]) => `<button type="button" data-fire-newop="${k}" aria-pressed="${(F.newOp || 0) === k}">${esc(l)}</button>`).join("")}</div>` : ""; };
 function viewPalba(id) {
   const F = state.fire, head = (h, sub) => `<header class="unit-head"><div><h1>${h}</h1>${sub ? `<p>${sub}</p>` : ""}</div></header>`;
   if (!fireMember()) return head("Palba") + '<p class="note">Palba je pro členy klanu.</p>';
@@ -3149,6 +3217,7 @@ function viewPalba(id) {
     <section class="pf-sec"><h2>Hry</h2><div id="pf-games" class="pf-games">${fireGamesHtml()}</div></section>
     <section class="pf-sec"><h2>Založit hru</h2><label class="pf-f">Název<input id="pf-name" maxlength="40" autocomplete="off" value="${esc(F.newName)}"></label>
       <div class="pf-seg vbar seg" role="group" aria-label="Mapa">${FIRE_MAPS.map(([k, l]) => `<button type="button" data-fire-newmap="${k}" aria-pressed="${F.newMap === k}">${l}</button>`).join("")}</div>
+      ${fireOpsHtml()}
       <button type="button" class="pf-go" data-fire-new${F.newName.trim() && F.newMap ? "" : " disabled"}>Založit hru</button></section></div>`;
   const g = fireGame(id);
   if (!g) return `${head("Palba")}<div id="pf-root" data-key="${fireKey(id)}"><p class="note">Hra skončila.</p><p><a class="act" href="#/palba">Zpět na hry</a></p></div>`;
@@ -3183,10 +3252,13 @@ function renderFire() {
     const set = (el, html) => { const e = document.getElementById(el); if (e && e.innerHTML !== html) e.innerHTML = html; };
     set("pf-msg", fireMsg());
     if (!id) set("pf-games", fireGamesHtml());
-    else {
+    else if (fireGame(id)) {
       set("pf-slots", fireSlotsHtml(id)); set("pf-cover", fireCoverHtml(id, parseXY(F.tgt))); set("pf-mine", fireMineHtml(id));
       if (!F.edit) set("pf-gun", fireGunHtml(id));
-      set("pf-list", fireListHtml(id)); set("pf-own-out", fireOwnHtml(id)); set("pf-logi", glHtml(id));
+      set("pf-list", fireListHtml(id)); set("pf-own-out", fireOwnHtml(id));
+      // the logistics only when its HTML changed: the browser serializes it differently, the tiles' icons flashed (as 2026-10-31)
+      const lg = document.getElementById("pf-logi"), h = glHtml(id);
+      if (lg && lg._html !== h) { lg.innerHTML = h; lg._html = h; }
     }
   }
   const n = fireCount();
@@ -3206,7 +3278,7 @@ document.addEventListener("input", e => {
 const fireGunReady = () => { const F = state.fire, b = document.querySelector("[data-fire-gun-save]"); if (b) b.disabled = !(parseXY(F.gunXY) && F.pickWeapon); };
 const fireNewReady = () => { const F = state.fire, b = document.querySelector("[data-fire-new]"); if (b) b.disabled = !(F.newName.trim() && F.newMap); };
 document.addEventListener("click", e => {
-  const b = e.target.closest?.("[data-fire-send],[data-fire-salvo],[data-fire-take],[data-fire-done],[data-fire-again],[data-fire-cancel],[data-fire-weapon],[data-fire-gun-save],[data-fire-gun-edit],[data-fire-gun-drop],[data-fire-new],[data-fire-newmap],[data-fire-join],[data-fire-leave],[data-fire-end],[data-fire-mute],[data-gl-add],[data-gl-sub],[data-gl-call],[data-gl-ok],[data-gl-no],[data-gl-done],[data-gl-again]");
+  const b = e.target.closest?.("[data-fire-send],[data-fire-salvo],[data-fire-take],[data-fire-done],[data-fire-again],[data-fire-cancel],[data-fire-weapon],[data-fire-gun-save],[data-fire-gun-edit],[data-fire-gun-drop],[data-fire-new],[data-fire-newmap],[data-fire-join],[data-fire-leave],[data-fire-end],[data-fire-mute],[data-fire-squad],[data-fire-lead],[data-fire-newop],[data-gl-add],[data-gl-sub],[data-gl-call],[data-gl-no],[data-gl-done],[data-gl-again]");
   if (!b || b.disabled) return;
   const d = b.dataset, F = state.fire, id = fireRoute();
   if (d.fireSend !== undefined) fireSend(id);
@@ -3219,12 +3291,13 @@ document.addEventListener("click", e => {
   else if (d.glAdd !== undefined) glBump(d.glAdd, 1);
   else if (d.glSub !== undefined) glBump(d.glSub, -1);
   else if (d.glCall !== undefined) glCall(id);
-  else if (d.glOk) glSet(+d.glOk, "approved");
   else if (d.glNo) glSet(+d.glNo, "cancelled");
   else if (d.glDone) glSet(+d.glDone, "delivered");
   else if (d.glAgain) glAgain(+d.glAgain);
-  else if (d.fireWeapon || d.fireNewmap) {
-    if (d.fireWeapon) F.pickWeapon = d.fireWeapon; else F.newMap = d.fireNewmap;
+  else if (d.fireSquad) fireSquad(id, +d.fireSquad);
+  else if (d.fireLead) fireLead(id, d.fireLead === "1");
+  else if (d.fireWeapon || d.fireNewmap || d.fireNewop) {
+    if (d.fireWeapon) F.pickWeapon = d.fireWeapon; else if (d.fireNewmap) F.newMap = d.fireNewmap; else F.newOp = +d.fireNewop || null;
     b.parentElement.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
     fireGunReady(); fireNewReady();
   }
