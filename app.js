@@ -3499,7 +3499,7 @@ function viewGate() {
   return `<section class="gate">
     <img src="znacka/kin-emblem.svg" alt="Emblém Kinetic Solutions" width="200" height="200">
     <h1>War Room</h1>
-    <p class="lede">Plány, role a výcvik klanu Kinetic Solutions. Jen pro členy: přihlas se přes Discord, dovnitř tě to pustí od role Rekrut.</p>
+    <p class="lede">Plány, role a výcvik klanu Kinetic Solutions. Jen pro členy: přihlas se přes Discord, dovnitř tě to pustí od role Rekrut. Navržený host uvidí BCT.</p>
     ${state.error ? `<p class="err">${esc(state.error)}</p>` : ""}
     ${wait ? `<p class="note">${esc(wait)}</p>` : '<button type="button" class="act big" data-login>Přihlásit přes Discord</button>'}
   </section>`;
