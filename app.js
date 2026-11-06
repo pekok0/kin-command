@@ -743,7 +743,7 @@ function renderEvBar() {
     const st = mine ? `Máš místo: ${esc(mine.slot_label)}` : said ? esc((RSVP.find(x => x[0] === said) || [, said])[1]) : "Odpověz, jestli přijdeš";
     return `<a class="evt${i ? "" : " next"}${mine || said ? "" : " need"}" href="${op ? `#/akce/${ev.id}` : "#/akce"}">
       <span class="evt-k">${op ? `Operace · ${esc(docName(ev.doctrine))}` : `${esc(label(KINDS, ev.kind))} · ${esc(ev.title)}`}</span>${op && ev.open_to_hosts ? '<b class="hosts evt-h">Otevřená hostům</b>' : ""}
-      <span class="evt-w">${!op && isTbd(ev) ? "<b>Dnes</b><span>čas určí instruktor</span>" : `<b>${esc(fmtWhen(ev.starts_at))}</b><span class="tminus" data-t0="${esc(ev.starts_at)}">${tminus(ev.starts_at)}</span>`}</span>
+      <span class="evt-w">${!op && isTbd(ev) ? "<b>Termín</b><span>určí instruktor</span>" : `<b>${esc(fmtWhen(ev.starts_at))}</b><span class="tminus" data-t0="${esc(ev.starts_at)}">${tminus(ev.starts_at)}</span>`}</span>
       <span class="evt-s">${st}</span></a>`; }).join("")}</nav>`;
 }
 
@@ -1197,11 +1197,11 @@ const isBct = tr => tr.topic === "bct";
 const capOf = tr => isBct(tr) ? Math.min(tr.capacity || 6, 6) : tr.capacity;
 const trCount = tr => capOf(tr) ? `${goers(tr)} / ${esc(capOf(tr))}` : String(goers(tr));
 const canInstruct = () => leadsOps() || !!state.me.is_sl || !!state.me.is_instructor;
-// specs/bct-rolling (054): topics with two daily cards without a time, the floor between the operations and the other
-// trainings; "Mam zajem" before the time is set is the same yes row as "Prijdu" (Petr 2026-10-31). ACT later: add its topic
+// specs/bct-rolling (054), since 075 specs/bct-jedna-karta: topics with a card without a date, the floor between the
+// operations and the other trainings; "Mam zajem" before the date is set is the same yes row as "Prijdu". ACT later: add its topic
 const ROLLING = ["bct"];
 const isTbd = tr => !!tr.time_tbd;
-const whenOf = tr => isTbd(tr) ? "Dnes, čas určí instruktor" : fmtSpan(tr);
+const whenOf = tr => isTbd(tr) ? "Termín určí instruktor" : fmtSpan(tr);
 const flashFor = ids => state.trFlash && ids.includes(state.trFlashId) ? `<p class="err ros-msg" role="alert">${esc(state.trFlash)}</p>` : "";
 
 function trainingsSection() {
@@ -1210,11 +1210,11 @@ function trainingsSection() {
     : '<p class="note">Teď není vypsaný žádný trénink ani kurz.</p>';
   return `<section class="block" id="treninky"><h2>Tréninky a kurzy</h2>${flashFor(xs.map(t => t.id))}${list}</section>`;
 }
-// the BCT floor (specs/bct-rolling R2): every open BCT, the two daily cards and any founded by hand, as small plates
+// the BCT floor (specs/bct-rolling R2): every open BCT (075: one card at a time, a hand-made one counts), as small plates
 function bctSection() {
   const xs = state.trainings.filter(isBct);
   const list = xs.length ? `<ul class="trl bctl">${xs.map(trainingRow).join("")}</ul>`
-    : '<p class="note">Dnes už žádný Basic Combat Training není, o půlnoci přibudou dvě nové karty.</p>';
+    : '<p class="note">Teď není vypsaný žádný Basic Combat Training.</p>';
   return `<section class="block" id="bct"><h2>Basic Combat Training</h2>${flashFor(xs.map(t => t.id))}${list}</section>`;
 }
 
@@ -1301,13 +1301,18 @@ async function rsvpTraining(id, status) {
   await loadEvent();
 }
 
-// 054: the instructor takes a BCT card and sets its time; the day is the card's (the database refuses another day or a
-// time already gone). A card with a time shows that time prefilled, so taking it as it is costs one more click
+// 054, 075 (Petr 2026-11-06 "instruktor ... navoli datum a cas"): the instructor takes the BCT card and sets its day and
+// time (the database refuses a time already gone); the card without a date offers today, after 19:00 tomorrow. A card
+// with a time shows it prefilled, so taking it as it is costs one more click
+const isoDay = d => d.toLocaleDateString("sv-SE");  // YYYY-MM-DD in the browser's zone, what <input type=date> takes
 function leadForm(tr) {
+  const now = new Date(), soon = now.getHours() < 19 ? now : new Date(+now + 864e5);
+  const day = isoDay(isTbd(tr) ? soon : new Date(tr.starts_at));
   const at = isTbd(tr) ? "19:00" : new Date(tr.starts_at).toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
   const len = tr.ends_at && !isTbd(tr) ? String((new Date(tr.ends_at) - new Date(tr.starts_at)) / 3600e3) : "2";
   const opts = [["1", "1 h"], ["1.5", "1,5 h"], ["2", "2 h"], ["3", "3 h"]], sel = opts.some(([v]) => v === len) ? len : "2";
   return `<details class="lead${esc(tr.id)}"><summary>Povedu jako instruktor</summary><form class="leadf" data-form="lead" data-id="${esc(tr.id)}">
+    <label>Den <input type="date" name="day" value="${esc(day)}" min="${esc(isoDay(now))}" required></label>
     <label>Od <input type="time" name="at" value="${esc(at)}" required></label>
     <label>Délka <select name="hours">${opts.map(([v, l]) => `<option value="${v}"${v === sel ? " selected" : ""}>${l}</option>`).join("")}</select></label>
     <button type="submit" class="act">Povedu v tento čas</button></form></details>`;
@@ -1317,14 +1322,13 @@ async function leadTraining(id, take, starts = null, ends = null) {
   const { error } = await sb.rpc("bct_lead", starts ? { e: id, take, starts, ends } : { e: id, take });
   state.trFlashId = id;
   state.trFlash = !error ? null : error.code !== "23514" ? saveErr(error) : /minulosti/.test(error.message) ? "Ten čas už je pryč, vyber pozdější."
-    : /mimo den/.test(error.message) ? "Čas musí být v den karty." : "Instruktora už má někdo jiný.";
+    : /cas chybi/.test(error.message) ? "Vyber den a čas." : "Instruktora už má někdo jiný.";
   await loadEvent();
 }
 async function leadTime(f) {
   const tr = state.trainings.find(t => t.id === Number(f.dataset.id));
   if (!tr) return;
-  const [h, m] = f.elements.at.value.split(":").map(Number), start = new Date(tr.starts_at);
-  start.setHours(h, m, 0, 0);  // ponytail: the browser's day, not Prague's; abroad the database says "mimo den" and the card flashes it
+  const start = new Date(`${f.elements.day.value}T${f.elements.at.value}`);  // ponytail: the browser's zone, not Prague's (abroad it shifts)
   const hours = Number(f.elements.hours.value);
   await leadTraining(tr.id, true, start.toISOString(), hours ? new Date(+start + hours * 3600e3).toISOString() : null);
 }
