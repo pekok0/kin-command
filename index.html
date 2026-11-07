@@ -523,6 +523,18 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .lg-done { min-height: 64px; font: 700 26px/1 var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--ground); background: var(--fr); border: 0; cursor: pointer; }
 .lg-done:hover { background: oklch(0.86 0.095 215 / 0.9); }
 @media (max-width: 720px) { .lg-items li { grid-template-columns: 52px 2.6em minmax(0, 1fr); font-size: 18px; } .lg-items .item { width: 52px; height: 36px; } .lg-items small { grid-column: 3; } }
+/* bedny (2026-11-07): the pilot's helicopter, the crates of a shipment, the supply crate */
+.lg-heli { margin: 0; }
+.lg-crates .lg-gh { margin-top: 4px; }
+.lg-cr { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 8px; }
+.lg-crate { padding: 10px 12px; border: 1px solid var(--rule); background: var(--panel-2); }
+.lg-crate header { justify-content: space-between; margin-bottom: 8px; font: 700 20px/1 var(--cond); letter-spacing: .06em; text-transform: uppercase; }
+.lg-crate header span { font: 600 15px/1 var(--sans); color: var(--ink-3); }
+.lg-crate ul { list-style: none; display: grid; gap: 6px; }
+.lg-crate li { display: grid; grid-template-columns: 44px 2.4em minmax(0, 1fr); align-items: center; gap: 8px; font-size: 16px; }
+.lg-crate li b { font: 700 24px/1 var(--cond); color: var(--fr); }
+.lg-crate .item.sm { width: 44px; height: 30px; padding: 2px; }
+.lg-zas { border-color: var(--rule); }
 /* Palba (Petr 2026-11-01, hub/specs/palba): like Logistika everything big, the gun needs only two numbers */
 #pf-root { display: grid; gap: 36px; margin-top: 18px; }
 .pf-sec { display: grid; gap: 14px; }

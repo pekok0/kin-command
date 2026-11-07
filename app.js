@@ -12,7 +12,7 @@ const sb = window.supabase ? supabase.createClient(window.KIN_BACKEND.url, windo
 const hadSession = (() => { try { return Object.keys(localStorage).some(k => /^sb-.*-auth-token$/.test(k)); } catch { return false; } })();
 // never echo the provider's error text from the URL (content spoofing); drop it so a reload is clean
 let state = { me: null, error: urlQs.has("error") ? "Přihlášení přes Discord selhalo." : null, event: null, claims: [], rsvps: [], trainings: [], ops: [], focusId: null, opsLoaded: false, flash: null, trFlash: null, tadd: {}, novaFlash: null, checking: !!sb && (hadSession || FRESH),
-  logi: { orders: [], have: new Map(), local: null, timer: null, pick: null, flash: null, err: false, loaded: null, chan: null, html: null, node: null },
+  logi: { orders: [], have: new Map(), local: null, timer: null, pick: null, flash: null, err: false, loaded: null, chan: null, html: null, node: null, heli: null },
   fire: { games: [], slots: [], missions: [], flash: null, err: false, loaded: false, asked: false, chan: null, tgt: "", note: "", salvos: 1,
     gunXY: "", pickWeapon: null, edit: false, newName: "", newMap: null, endAsk: null, own: "", logi: [], local: null, timer: null, newOp: null } };
 if (urlQs.has("error")) history.replaceState(null, "", location.pathname + location.hash);
@@ -2847,13 +2847,97 @@ function logiOrderBlock(op, sq) {
       ? `<button type="button" class="lg-call" data-logi-call${tot ? "" : " disabled"}>Potvrdit a odeslat logistice${tot ? ` · ${plural(tot, "stack", "stacky", "stacků")}` : ""}</button>`
       : `<p class="lg-last">Tvůj seznam: ${plural(n, "stack", "stacky", "stacků")}. Celou zásilku squadu odešle ${sl ? `SL ${esc(sl.members.name)}` : "SL squadu"}.</p>`}</div></section>`;
 }
+// ---------- bedny (Petr 2026-11-07, specs/logistika-objednavky B1-B7) ----------
+// the pilot picks his helicopter (the MH-6 flies a Small Crate, only the Lakota a Large one); each open shipment splits
+// into the fewest crates its grid holds, every item spread over all of them ("aby kazda krabice mela od kazdeho neco"),
+// and one supply crate waits for when nobody orders. Nothing is written: the page counts it from the order
+const LOGI_HELI = "kin-logi-heli";
+function logiHeli() {
+  let id = state.logi.heli;
+  if (!id) try { id = localStorage.getItem(LOGI_HELI); } catch { /* a private window: the doctrine's MH-6 */ }
+  return D.logi.heli.find(h => h.item === id) || D.logi.heli[0];
+}
+// one crate: every stack on its own cells, the biggest first, at the first free spot from the top left, turned by 90°
+// when only so it fits (rotation in a crate is unverified in the game, spec decision 2)
+function packCrate(sizes, [W, H]) {
+  const used = Array.from({ length: H }, () => Array(W).fill(false));
+  const free = (x, y, w, h) => { if (x + w > W || y + h > H) return false;
+    for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) if (used[j][i]) return false;
+    return true; };
+  for (const s of [...sizes].sort((a, b) => b[0] * b[1] - a[0] * a[1] || Math.max(...b) - Math.max(...a))) {
+    let spot = null;
+    for (let y = 0; y < H && !spot; y++) for (let x = 0; x < W && !spot; x++) for (const [w, h] of [s, [s[1], s[0]]]) if (!spot && free(x, y, w, h)) spot = [x, y, w, h];
+    if (!spot) return false;
+    const [x, y, w, h] = spot;
+    for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) used[j][i] = true;
+  }
+  return true;
+}
+// [{item, stacks, grid}] -> {crates: [[{item, stacks}]] in the order's item order, big: items no crate holds}. From the
+// fewest crates the cells allow: each crate gets its share of every item (the biggest items first, a remainder to the
+// emptiest crates); a crate that still does not pack gives single stacks to the emptiest crate that takes them, never
+// its last one of an item while another can go. With a crate per stack everything packs, so the loop always ends
+function logiCrates(items, grid) {
+  const cells = x => x.grid[0] * x.grid[1];
+  const big = items.filter(x => !x.grid || !packCrate([x.grid], grid)).map(x => x.item);
+  const fit = items.filter(x => x.stacks > 0 && !big.includes(x.item)), total = fit.reduce((s, x) => s + x.stacks, 0);
+  const area = c => fit.reduce((s, x) => s + (c.get(x.item) || 0) * cells(x), 0);
+  const packs = c => packCrate(fit.flatMap(x => Array(c.get(x.item) || 0).fill(x.grid)), grid);
+  const plus = (c, item, d) => { const k = (c.get(item) || 0) + d; if (k) c.set(item, k); else c.delete(item); };
+  const settle = crates => {
+    for (let i = 0; i <= total; i++) {  // each move takes a stack out of a crate that does not pack: at most total moves
+      const bad = crates.find(c => !packs(c));
+      if (!bad) return true;
+      const give = [...bad].sort((a, b) => (b[1] > 1) - (a[1] > 1) || b[1] - a[1]).map(([item]) => item);
+      const to = crates.filter(c => c !== bad).sort((a, b) => area(a) - area(b));
+      const move = give.flatMap(item => to.map(c => [item, c])).find(([item, c]) => { plus(c, item, 1); const ok = packs(c); plus(c, item, -1); return ok; });
+      if (!move) return false;
+      plus(move[1], move[0], 1);
+      plus(bad, move[0], -1);
+    }
+    return false;
+  };
+  for (let n = Math.max(1, Math.ceil(fit.reduce((s, x) => s + x.stacks * cells(x), 0) / (grid[0] * grid[1]))); n <= total; n++) {
+    const crates = Array.from({ length: n }, () => new Map());
+    for (const x of [...fit].sort((a, b) => cells(b) - cells(a) || b.stacks - a.stacks)) {
+      const extra = [...crates.keys()].sort((a, b) => area(crates[a]) - area(crates[b]) || a - b).slice(0, x.stacks % n);
+      crates.forEach((c, i) => plus(c, x.item, Math.floor(x.stacks / n) + (extra.includes(i) ? 1 : 0)));
+    }
+    if (settle(crates)) return { crates: crates.map(c => fit.filter(x => c.has(x.item)).map(x => ({ item: x.item, stacks: c.get(x.item) }))), big };
+  }
+  return { crates: [], big };  // an empty order
+}
+// the supply crate for the contact zone (B6): the fixed stacks of doktrina.toml [logi.zasoba], then its fill item while
+// it still fits
+function zasobaCrate(grid) {
+  const z = D.logi.zasoba, sizes = z.items.flatMap(x => Array(x.stacks).fill(x.grid));
+  let fill = 0;
+  while (packCrate([...sizes, ...Array(fill + 1).fill(z.fill.grid)], grid)) fill++;
+  return { items: [...z.items, ...(fill ? [{ ...z.fill, stacks: fill }] : [])], fits: packCrate(sizes, grid) };
+}
+const crateLine = (x, icon) => `<li data-item="${esc(x.item)}" data-n="${x.stacks}">${itemIcon(icon, "sm")}<b>${x.stacks}×</b><span>${esc(x.item)}</span>`;
+function cratesHtml(items) {
+  const h = logiHeli(), G = D.logi.grid, r = logiCrates(items.map(i => ({ item: i.item, stacks: i.stacks, grid: G[i.item] })), h.grid);
+  const used = c => c.reduce((s, x) => s + x.stacks * G[x.item][0] * G[x.item][1], 0);
+  return `<div class="lg-crates"><h3 class="lg-gh">Bedny: ${r.crates.length}× ${esc(h.crate)}</h3><div class="lg-cr">${r.crates.map((c, n) =>
+    `<section class="lg-crate"><header><b>Bedna ${n + 1}</b><span>${used(c)}/${h.grid[0] * h.grid[1]} polí</span></header><ul>${c.map(x => crateLine(x, logiIcon(x.item)) + "</li>").join("")}</ul></section>`).join("")}</div>
+    ${r.big.length ? `<p class="err">Nevejde se do ${esc(h.crate)}: ${esc(r.big.join(", "))}</p>` : ""}</div>`;
+}
+function zasobaHtml() {
+  const h = logiHeli(), z = zasobaCrate(h.grid);
+  return `<article class="lg-o lg-zas"><header><b class="lg-sq">Zásoba do CZ</b><span>1× ${esc(h.crate)} · vozí se předem, když nikdo neobjednává</span></header>
+    <ul class="lg-items">${z.items.map(x => `${crateLine(x, x.icon)}<small>${x.stacks * (x.stack || 1)} ks</small></li>`).join("")}</ul>
+    ${z.fits ? "" : `<p class="err">Pevné položky zásoby se do jedné ${esc(h.crate)} nevejdou.</p>`}</article>`;
+}
+const heliBar = () => { const h = logiHeli();
+  return `<div class="lg-heli vbar seg" role="group" aria-label="Vrtulník">${D.logi.heli.map(x => `<button type="button" data-logi-heli="${esc(x.item)}" aria-pressed="${x === h}"><b>${esc(x.item)}</b><small>${esc(x.crate)}</small></button>`).join("")}</div>`; };
 function logiInbox(op) {
   const open = state.logi.orders.filter(x => x.state === "open"), done = state.logi.orders.filter(x => x.state === "delivered").slice(-5).reverse();
   const card = x => `<article class="lg-o"><header><b class="lg-sq">${esc(squadName(op, x.squad))}</b><span>${esc(x.author ? x.author.name : "?")} · ${ago(x.sent_at)}</span></header>
     <ul class="lg-items">${x.items.map(i => `<li>${itemIcon(logiIcon(i.item), "sm")}<b>${i.stacks}×</b><span>${esc(i.item)}</span><small>${i.stacks * i.per} ks</small></li>`).join("")}</ul>
-    <button type="button" class="lg-done" data-logi-done="${x.id}">Doručeno</button></article>`;
-  return `<section class="lg-sec" id="lg-inbox"><header class="lg-h"><h2>Pro logi heli <span class="num">${open.length}</span></h2></header>
-    ${open.length ? open.map(card).join("") : ""}
+    ${cratesHtml(x.items)}<button type="button" class="lg-done" data-logi-done="${x.id}">Doručeno</button></article>`;
+  return `<section class="lg-sec" id="lg-inbox"><header class="lg-h"><h2>Pro logi heli <span class="num">${open.length}</span></h2>${heliBar()}</header>
+    ${open.length ? open.map(card).join("") : ""}${zasobaHtml()}
     ${done.length ? `<h3 class="lg-gh">Naposledy doručeno</h3><ul class="lg-hist">${done.map(x => `<li class="delivered"><span class="lg-st">${esc(squadName(op, x.squad))} · ${x.courier ? esc(x.courier.name) : ""} · ${ago(x.delivered_at)}</span><span class="lg-sum">${esc(logiSum(x.items))}</span></li>`).join("")}</ul>` : ""}</section>`;
 }
 function viewLogistika() {
@@ -2881,7 +2965,7 @@ function renderLogi() {
   renderNav(navActive);
 }
 document.addEventListener("click", e => {
-  const b = e.target.closest?.("[data-logi-add],[data-logi-sub],[data-logi-call],[data-logi-done],[data-logi-again],[data-logi-cancel],[data-logi-sq]");
+  const b = e.target.closest?.("[data-logi-add],[data-logi-sub],[data-logi-call],[data-logi-done],[data-logi-again],[data-logi-cancel],[data-logi-sq],[data-logi-heli]");
   if (!b || b.disabled) return;
   const d = b.dataset;
   if (d.logiAdd !== undefined) logiBump(d.logiAdd, 1);
@@ -2891,6 +2975,11 @@ document.addEventListener("click", e => {
   else if (d.logiAgain) logiSet(+d.logiAgain, "open", true);
   else if (d.logiCancel) logiSet(+d.logiCancel, "cancelled");
   else if (d.logiSq) { state.logi.pick = d.logiSq; renderLogi(); }
+  else if (d.logiHeli) {
+    state.logi.heli = d.logiHeli;
+    try { localStorage.setItem(LOGI_HELI, d.logiHeli); } catch { /* a private window: kept for this visit only */ }
+    renderLogi();
+  }
 });
 
 // ---------- palba (Petr 2026-11-01, hub/specs/palba, 063; v2 games 065) ----------
