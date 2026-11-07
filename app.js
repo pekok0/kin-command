@@ -76,8 +76,10 @@ async function onAuth(session) {
   // 055 (D47): a guest reads no content, unlocks or Tracker (RLS); the page only has to stop "checking" and show the BCT list
   if (data.guest) { D.strategies = []; state.checking = false; renderWho(); loadEvent(); subscribe(); render(); return; }  // the empty plan list opens render() like the old row 'host' did
   // unlocks need the seasons from the content, so they load after it (both at once = haveSet never set, Viktor UAT)
+  // the lobby's unlocks need them as well: the roster below loads before the 1 MB content, so it loads once more after it
+  // (2026-11-07: they stayed null until some claim changed, no readiness chips and no shopping list)
   if (!was) loadContent(data.is_raid ? "raid" : "hub")  // a guest returned above (055); RAID reads only its row (059)
-    .then(() => isRaid() || Promise.all([loadUnlocks().catch(e => { console.error(e); haveSet = null; }), loadTracker().catch(e => console.error(e))]))
+    .then(() => { loadEvent(); return isRaid() || Promise.all([loadUnlocks().catch(e => { console.error(e); haveSet = null; }), loadTracker().catch(e => console.error(e))]); })
     // history pages and loadout cards wait for the login to know what to load / which boxes to tick
     .then(() => { if (isRaid()) return; if (onHistRoute() || onCardRoute()) { const y = scrollY; render(); scrollTo(0, y); } autoSyncTracker(); },
       () => { state.error = "Obsah se nenačetl. Zkus stránku načíst znovu."; state.checking = false; renderWho(); render(); });
@@ -158,6 +160,7 @@ async function loadEvent() {
 // hub/specs/nakupni-seznam: what the members of the open operations unlocked this season; members nest their items so
 // the row cap counts people, not unlocks (like Pokrytí); a member without rows has no Tracker data
 async function loadLobbyHave(ops) {
+  if (!D.seasons) return null;  // the content is not here yet: onAuth loads the roster again after it
   const s = currentSeason(), ids = [...new Set(ops.flatMap(ev => ev.claims.map(c => c.user_id)))];
   if (!s || !ids.length) return new Map();
   const { data, error } = await sb.from("members").select("user_id, unlocks!inner(item)").in("user_id", ids).eq("unlocks.season", s.id);
