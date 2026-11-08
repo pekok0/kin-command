@@ -2736,7 +2736,8 @@ function squadItems(op, card) {
   for (const st of D.signaly || []) add(st, 0, 1);
   if (logiCar(card)) {  // the vehicle's own load first (doktrina.toml [[swarm.slot]] gear: shells, belts, smokes), never the vehicle itself
     const v = D.doktrina.swarm.slots.find(s => s.id === card.split("-")[1]);
-    for (const g of (v && v.gear) || []) if (g.item && !g.seat && !out.has(g.item)) out.set(g.item, { item: g.item, icon: g.icon, per: g.stack || 1, rank: -1, row: 0 });
+    // + logi: the load of the other vehicle of the kind (120mm for the L2A6); shells first, side by side (Petr 2026-11-06)
+    for (const g of v ? [...(v.gear || []), ...(v.logi || [])] : []) if (g.item && !g.seat && !out.has(g.item)) out.set(g.item, { item: g.item, icon: g.icon, per: g.stack || 1, rank: / Shell$/.test(g.item) ? -2 : -1, row: 0 });
   }
   return [...out.values()].sort((a, b) => a.row - b.row || a.rank - b.rank);
 }
