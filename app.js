@@ -3240,8 +3240,9 @@ const glCard = (o, act) => `<article class="lg-o"><header><b class="lg-sq">${glS
 function glInbox(id) {
   if (!fireCanEnd(fireGame(id)) && fireRoleIn(id) !== "logi") return "";
   const open = state.fire.logi.filter(o => o.game_id === id && o.state === "open");
-  return `<div class="pf-gl-in"><h3>Pro logi heli <span class="num">${open.length}</span></h3>${open.map(o => glCard(o, `<button type="button" class="lg-done" data-gl-done="${o.id}">Doručeno</button>`)).join("")
-    || '<p class="note">Nic nečeká.</p>'}</div>`;
+  // the helicopter, the crates and the supply crate as on the Logistika page (Petr 2026-11-08)
+  return `<div class="pf-gl-in"><h3>Pro logi heli <span class="num">${open.length}</span></h3>${heliBar()}${open.map(o => glCard(o, `${cratesHtml(o.items)}<button type="button" class="lg-done" data-gl-done="${o.id}">Doručeno</button>`)).join("")
+    || '<p class="note">Nic nečeká.</p>'}${zasobaHtml()}</div>`;
 }
 function glOrder(id) {
   const sq = glSq(id);
