@@ -2929,7 +2929,7 @@ function cratesHtml(items) {
 }
 function zasobaHtml() {
   const h = logiHeli(), z = zasobaCrate(h.grid);
-  return `<article class="lg-o lg-zas"><header><b class="lg-sq">Zásoba do CZ</b><span>1× ${esc(h.crate)} · vozí se předem, když nikdo neobjednává</span></header>
+  return `<article class="lg-o lg-zas"><header><b class="lg-sq">Zásoba do CZ</b><span>${D.logi.zasoba.crates}× ${esc(h.crate)} na let, v každé stejně · vozí se předem, když nikdo neobjednává</span></header>
     <ul class="lg-items">${z.items.map(x => `${crateLine(x, x.icon)}<small>${x.stacks * (x.stack || 1)} ks</small></li>`).join("")}</ul>
     ${z.fits ? "" : `<p class="err">Pevné položky zásoby se do jedné ${esc(h.crate)} nevejdou.</p>`}</article>`;
 }
