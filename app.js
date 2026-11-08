@@ -2917,7 +2917,8 @@ function zasobaCrate(grid) {
   const z = D.logi.zasoba, sizes = z.items.flatMap(x => Array(x.stacks).fill(x.grid));
   let fill = 0;
   while (packCrate([...sizes, ...Array(fill + 1).fill(z.fill.grid)], grid)) fill++;
-  return { items: [...z.items, ...(fill ? [{ ...z.fill, stacks: fill }] : [])], fits: packCrate(sizes, grid) };
+  const items = z.items.map(x => x.item === z.fill.item ? { ...x, stacks: x.stacks + fill } : x);  // the fill joins the AP already listed
+  return { items: items.some(x => x.item === z.fill.item) || !fill ? items : [...items, { ...z.fill, stacks: fill }], fits: packCrate(sizes, grid) };
 }
 const crateLine = (x, icon) => `<li data-item="${esc(x.item)}" data-n="${x.stacks}">${itemIcon(icon, "sm")}<b>${x.stacks}×</b><span>${esc(x.item)}</span>`;
 function cratesHtml(items) {
