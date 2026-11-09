@@ -12,9 +12,10 @@ const sb = window.supabase ? supabase.createClient(window.KIN_BACKEND.url, windo
 const hadSession = (() => { try { return Object.keys(localStorage).some(k => /^sb-.*-auth-token$/.test(k)); } catch { return false; } })();
 // never echo the provider's error text from the URL (content spoofing); drop it so a reload is clean
 let state = { me: null, error: urlQs.has("error") ? "Přihlášení přes Discord selhalo." : null, event: null, claims: [], rsvps: [], trainings: [], ops: [], focusId: null, opsLoaded: false, flash: null, trFlash: null, tadd: {}, novaFlash: null, checking: !!sb && (hadSession || FRESH),
-  logi: { orders: [], have: new Map(), local: null, timer: null, pick: null, flash: null, err: false, loaded: null, chan: null, html: null, node: null, heli: null },
+  logi: { orders: [], rides: [], have: new Map(), local: null, timer: null, pick: null, flash: null, err: false, loaded: null, chan: null, html: null, node: null, heli: null },
   fire: { games: [], slots: [], missions: [], flash: null, err: false, loaded: false, asked: false, chan: null, tgt: "", note: "", salvos: 1,
-    gunXY: "", pickWeapon: null, edit: false, newName: "", newMap: null, endAsk: null, own: "", logi: [], local: null, timer: null, newOp: null } };
+    gunXY: "", pickWeapon: null, edit: false, newName: "", newMap: null, endAsk: null, own: "", logi: [], rides: [], local: null, timer: null, newOp: null },
+  taxi: { place: "", dest: "", pax: 1 } };
 if (urlQs.has("error")) history.replaceState(null, "", location.pathname + location.hash);
 
 const LOGIN_ERR = "Přihlášení se nepovedlo. Zkus to znovu.";
@@ -2211,12 +2212,16 @@ async function loadUnlocks() {
   if (!state.me || state.me.user_id !== uid) return;  // logged out while loading
   haveSet = new Set(data.map(r => r.item)); haveSeason = s.id;
 }
-// a re-render replaces the focused control: put keyboard focus back on its twin
+// a re-render replaces the focused control: put keyboard focus back on its twin; a field being typed in by its id, with
+// the caret (the taxi form, 076)
 function keepFocus(fn) {
   const a = document.activeElement, k = a && ["data-tracker", "data-nova", "data-rsvp", "data-trsvp", "data-role", "data-squad", "data-sqdrop", "data-cmd", "data-seat", "data-fx", "data-support"].find(x => a.hasAttribute(x));
-  const sel = k && `[${k}="${CSS.escape(a.getAttribute(k))}"]`, i = sel ? [...document.querySelectorAll(sel)].indexOf(a) : -1;
+  const caret = a && a.tagName === "INPUT" && a.id && a.selectionStart != null ? [a.selectionStart, a.selectionEnd] : null;
+  const sel = k ? `[${k}="${CSS.escape(a.getAttribute(k))}"]` : caret && `#${CSS.escape(a.id)}`, i = sel ? [...document.querySelectorAll(sel)].indexOf(a) : -1;
   fn();
-  if (sel) document.querySelectorAll(sel)[i]?.focus({ preventScroll: true });
+  const b = sel && document.querySelectorAll(sel)[i];
+  b?.focus({ preventScroll: true });
+  if (caret && b && b !== a) b.setSelectionRange(...caret);
 }
 const rerenderKeep = () => { const restore = keepForms(); keepFocus(() => { const y = scrollY; render(); scrollTo(0, y); }); restore(); };
 // ---------- WARDOGS Tracker (hub/specs/vybava-zebricky v2, migration 015) ----------
@@ -2600,7 +2605,7 @@ function viewPlayer(m, rows, season, have, prog, merits = [], done = new Set(), 
 // one item per question a member asks (Petr 2026-10-19, specs/akce-flow rozhodnuti 8)
 const NAV = [["akce", "Akce"], ["mapy", "Mapy"], ["vybava", "Výbava"], ["doktrina", "Doktrína"]];
 // Logistika (052) for the command, the squad leaders and the crew of Logi heli in the open operation; the crew's count
-const navLogi = () => !state.me || !seesLogi() ? [] : [["logistika", "Logistika", logiRole(logiOp()).crew || logiRole(logiOp()).cmd ? state.logi.orders.filter(x => x.state === "open").length : 0]];
+const navLogi = () => !state.me || !seesLogi() ? [] : [["logistika", "Logistika", logiRole(logiOp()).crew || logiRole(logiOp()).cmd ? logiWaiting() : 0]];
 // the Commander's own item after Doktrina (specs/ukoly-velitele U1), with the count of what waits for him
 const navCmd = () => !state.me || !state.me.is_commander ? [] : [["moje-ukoly", "Úkoly", state.cmdTasks ? state.cmdTasks.filter(waitsForMe).length : 0],
   ["podezreli", "Podezřelí", state.flags ? state.flags.length : 0]];  // 056 (D52)
@@ -2715,10 +2720,13 @@ function logiRole(op) {
   const car = mine.map(c => slotCard(c.slot_key)).find(logiCar);
   // a plain member of a squad clicks his own list too (Petr 2026-11-05, 073); only the SL (or a vehicle seat) sends
   const place = mine.map(c => slotCard(c.slot_key)).find(k => /^Q\d+$/.test(k || ""));
-  return { cmd: !!op && leadsLobby(op), crew: mine.some(c => /^SW-LP\d+$/.test(c.slot_key)), squad: lead ? slotCard(lead.slot_key) : car || place || null, sl: !!lead || !!car };
+  // any place calls the taxi (076), even one outside a squad
+  return { cmd: !!op && leadsLobby(op), crew: mine.some(c => /^SW-LP\d+$/.test(c.slot_key)), squad: lead ? slotCard(lead.slot_key) : car || place || null, sl: !!lead || !!car, seat: mine.length > 0 };
 }
 const logiCar = k => !!k && k.startsWith("POD-") && k !== "POD-LP";
-const seesLogi = () => { const op = logiOp(), r = logiRole(op); return !!op && isSq(op) && (r.cmd || r.crew || !!r.squad); };
+const seesLogi = () => { const op = logiOp(), r = logiRole(op); return !!op && isSq(op) && (r.cmd || r.crew || r.seat); };
+// what waits for the crew: the open shipments and the taxis nobody took yet (the menu and the tab's count)
+const logiWaiting = () => state.logi.orders.filter(x => x.state === "open").length + state.logi.rides.filter(taxiFresh).length;
 const logiSquads = op => [...new Set(op.claims.map(c => slotCard(c.slot_key)).filter(k => /^Q\d+$/.test(k || "") || logiCar(k)))]
   .sort((a, b) => (logiCar(a) - logiCar(b)) || a.localeCompare(b, undefined, { numeric: true }));  // squads, then vehicles
 const logiSquad = op => { const r = logiRole(op); return r.squad || (r.cmd ? (logiSquads(op).includes(state.logi.pick) ? state.logi.pick : logiSquads(op)[0]) || null : null); };
@@ -2819,15 +2827,16 @@ async function logiSet(id, st, again) {
 async function loadLogi() {
   const op = logiOp();
   if (!sb || !state.me || !op) return renderLogi();
-  const [o, h] = await Promise.all([
+  const [o, h, t] = await Promise.all([
     sb.from("logi_orders").select("id, squad, state, items, created_by, sent_at, delivered_at, author:members!logi_orders_created_by_fkey(name), courier:members!logi_orders_delivered_by_fkey(name)").eq("event_id", op.id).order("id"),
-    sb.from("logi_have").select("user_id, items").eq("event_id", op.id)]);
-  if (o.error || h.error) { console.error(o.error || h.error); state.logi.err = true; return renderLogi(); }
+    sb.from("logi_have").select("user_id, items").eq("event_id", op.id),
+    sb.from("logi_rides").select(TAXI_COLS).eq("event_id", op.id).order("id")]);
+  if (o.error || h.error || t.error) { console.error(o.error || h.error || t.error); state.logi.err = true; return renderLogi(); }
   const was = new Set(state.logi.orders.filter(x => x.state === "open").map(x => x.id)), r = logiRole(op);
-  // a new call rings for the crew and the command, not on the first load
-  if ((r.crew || r.cmd) && state.logi.loaded === op.id && o.data.some(x => x.state === "open" && !was.has(x.id))) sound("lead");
-  Object.assign(state.logi, { orders: o.data, have: new Map(h.data.map(x => [x.user_id, new Set(x.items)])), err: false, loaded: op.id });
-  if (!state.logi.chan) state.logi.chan = sb.channel("logi").on("postgres_changes", { event: "*", schema: "public", table: "logi_orders" }, () => loadLogi()).subscribe();
+  // a new call rings for the crew and the command, not on the first load; my taxi rings when a pilot takes it and lands
+  if (state.logi.loaded === op.id && ((r.crew || r.cmd) && o.data.some(x => x.state === "open" && !was.has(x.id)) || taxiRings(state.logi.rides, t.data, () => r.crew || r.cmd))) sound("lead");
+  Object.assign(state.logi, { orders: o.data, rides: t.data, have: new Map(h.data.map(x => [x.user_id, new Set(x.items)])), err: false, loaded: op.id });
+  if (!state.logi.chan) state.logi.chan = ["logi_orders", "logi_rides"].reduce((c, tb) => c.on("postgres_changes", { event: "*", schema: "public", table: tb }, () => loadLogi()), sb.channel("logi")).subscribe();
   renderLogi();
 }
 const logiSum = items => items.map(i => `${i.item} ${i.stacks}×`).join(", ");
@@ -2921,6 +2930,14 @@ function zasobaCrate(grid) {
   return { items: items.some(x => x.item === z.fill.item) || !fill ? items : [...items, { ...z.fill, stacks: fill }], fits: packCrate(sizes, grid) };
 }
 const crateLine = (x, icon) => `<li data-item="${esc(x.item)}" data-n="${x.stacks}">${itemIcon(icon, "sm")}<b>${x.stacks}×</b><span>${esc(x.item)}</span>`;
+// what the logi buys, tab by tab as the vendor sells it (Petr 2026-11-08, D.logi.tabs from doktrina.toml [[logi.tab]]); inside
+// a tab the order's own order; an item with no tab (a magazine, a pallet) comes last under "Ostatní"
+function logiTabs(items, line) {
+  const of = i => D.logi.tab[i.item] || "Ostatní";
+  return `<div class="lg-buy">${[...D.logi.tabs, "Ostatní"].map(t => [t, items.filter(i => of(i) === t)]).filter(([, l]) => l.length)
+    .map(([t, l]) => `<section class="lg-tab"><h4>${esc(t)}</h4><ul class="lg-items">${l.map(line).join("")}</ul></section>`).join("")}</div>`;
+}
+const logiLine = i => `<li>${itemIcon(logiIcon(i.item), "sm")}<b>${i.stacks}×</b><span>${esc(i.item)}</span><small>${i.stacks * i.per} ks</small></li>`;
 function cratesHtml(items) {
   const h = logiHeli(), G = D.logi.grid, r = logiCrates(items.map(i => ({ item: i.item, stacks: i.stacks, grid: G[i.item] })), h.grid);
   const used = c => c.reduce((s, x) => s + x.stacks * G[x.item][0] * G[x.item][1], 0);
@@ -2931,7 +2948,7 @@ function cratesHtml(items) {
 function zasobaHtml() {
   const h = logiHeli(), z = zasobaCrate(h.grid);
   return `<article class="lg-o lg-zas"><header><b class="lg-sq">Zásoba do CZ</b><span>${D.logi.zasoba.crates}× ${esc(h.crate)} na let, v každé stejně · vozí se předem, když nikdo neobjednává</span></header>
-    <ul class="lg-items">${z.items.map(x => `${crateLine(x, x.icon)}<small>${x.stacks * (x.stack || 1)} ks</small></li>`).join("")}</ul>
+    ${logiTabs(z.items, x => `${crateLine(x, x.icon)}<small>${x.stacks * (x.stack || 1)} ks</small></li>`)}
     ${z.fits ? "" : `<p class="err">Pevné položky zásoby se do jedné ${esc(h.crate)} nevejdou.</p>`}</article>`;
 }
 const heliBar = () => { const h = logiHeli();
@@ -2939,20 +2956,21 @@ const heliBar = () => { const h = logiHeli();
 function logiInbox(op) {
   const open = state.logi.orders.filter(x => x.state === "open"), done = state.logi.orders.filter(x => x.state === "delivered").slice(-5).reverse();
   const card = x => `<article class="lg-o"><header><b class="lg-sq">${esc(squadName(op, x.squad))}</b><span>${esc(x.author ? x.author.name : "?")} · ${ago(x.sent_at)}</span></header>
-    <ul class="lg-items">${x.items.map(i => `<li>${itemIcon(logiIcon(i.item), "sm")}<b>${i.stacks}×</b><span>${esc(i.item)}</span><small>${i.stacks * i.per} ks</small></li>`).join("")}</ul>
+    ${logiTabs(x.items, logiLine)}
     ${cratesHtml(x.items)}<button type="button" class="lg-done" data-logi-done="${x.id}">Doručeno</button></article>`;
-  return `<section class="lg-sec" id="lg-inbox"><header class="lg-h"><h2>Pro logi heli <span class="num">${open.length}</span></h2>${heliBar()}</header>
-    ${open.length ? open.map(card).join("") : ""}${zasobaHtml()}
+  const seatOf = uid => { const c = op.claims.find(c => c.user_id === uid), k = c && slotCard(c.slot_key); return k ? squadName(op, k) : ""; };
+  return `<section class="lg-sec" id="lg-inbox"><header class="lg-h"><h2>Pro logi heli <span class="num">${logiWaiting()}</span></h2>${heliBar()}</header>
+    ${taxiPrompt(state.logi.rides, seatOf)}${taxiInbox(state.logi.rides, seatOf)}${open.length ? open.map(card).join("") : ""}${zasobaHtml()}
     ${done.length ? `<h3 class="lg-gh">Naposledy doručeno</h3><ul class="lg-hist">${done.map(x => `<li class="delivered"><span class="lg-st">${esc(squadName(op, x.squad))} · ${x.courier ? esc(x.courier.name) : ""} · ${ago(x.delivered_at)}</span><span class="lg-sum">${esc(logiSum(x.items))}</span></li>`).join("")}</ul>` : ""}</section>`;
 }
 function viewLogistika() {
   const op = logiOp(), head = '<header class="unit-head"><div><h1>Logistika</h1></div></header>';  // a glance page: no lede
   if (!op) return head + `<p class="note">${state.opsLoaded ? "Teď není otevřená žádná operace." : "Načítám…"}</p>`;
   const r = logiRole(op), sq = logiSquad(op);
-  if (!(r.cmd || r.crew || r.squad)) return head + '<p class="note">Logistika je pro velení, členy squadů a posádku logi heli téhle operace.</p>';
+  if (!(r.cmd || r.crew || r.seat)) return head + '<p class="note">Logistika je pro velení a každého, kdo má místo v téhle operaci.</p>';
   const msg = state.logi.flash ? `<p class="err" role="alert">${esc(state.logi.flash)}</p>` : state.logi.err ? '<p class="err" role="alert">Objednávky se nenačetly, zkus stránku načíst znovu.</p>' : "";
-  const order = sq ? logiOrderBlock(op, sq) : "", inbox = r.crew || r.cmd ? logiInbox(op) : "";
-  return `${head}${msg}<div class="lg-wrap">${r.crew && !r.squad ? inbox + order : order + inbox}</div>`;
+  const order = sq ? logiOrderBlock(op, sq) : "", inbox = r.crew || r.cmd ? logiInbox(op) : "", taxi = r.seat && !r.crew ? taxiHtml(state.logi.rides) : "";
+  return `${head}${msg}<div class="lg-wrap">${r.crew && !r.squad ? inbox + order : taxi + order + inbox}</div>`;
 }
 function renderLogi() {
   if (!/^#\/logistika/.test(location.hash)) return fireRoute() ? renderFire() : renderNav(navActive);  // a game of an operation shows it too
@@ -2961,19 +2979,25 @@ function renderLogi() {
   // the DOM alone: rebuilt from the same HTML, the tiles flashed and their icons loaded twice (Petr 2026-10-31)
   if (html !== state.logi.html || $app.firstChild !== state.logi.node) {
     const y = scrollY;
-    $app.innerHTML = html;
+    keepFocus(() => { $app.innerHTML = html; });
     scrollTo(0, y);
     Object.assign(state.logi, { html, node: $app.firstChild });
   }
-  const op = logiOp(), r = logiRole(op), n = op ? state.logi.orders.filter(x => x.state === "open").length : 0;
+  const op = logiOp(), r = logiRole(op), n = op ? logiWaiting() : 0;
   document.title = (r.crew || r.cmd) && n ? `(${n}) Logistika · KIN` : "Logistika · KIN";
   renderNav(navActive);
+  taxiSecs();
 }
 document.addEventListener("click", e => {
-  const b = e.target.closest?.("[data-logi-add],[data-logi-sub],[data-logi-call],[data-logi-done],[data-logi-again],[data-logi-cancel],[data-logi-sq],[data-logi-heli]");
+  const b = e.target.closest?.("[data-logi-add],[data-logi-sub],[data-logi-call],[data-logi-done],[data-logi-again],[data-logi-cancel],[data-logi-sq],[data-logi-heli],[data-taxi-call],[data-taxi-pax],[data-taxi-fly],[data-taxi-done],[data-taxi-cancel]");
   if (!b || b.disabled) return;
   const d = b.dataset;
-  if (d.logiAdd !== undefined) logiBump(d.logiAdd, 1);
+  if (d.taxiCall !== undefined) taxiCall();
+  else if (d.taxiPax) { state.taxi.pax = +d.taxiPax; b.parentElement.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); }
+  else if (d.taxiFly) taxiSet(+d.taxiFly, "flying");
+  else if (d.taxiDone) taxiSet(+d.taxiDone, "done");
+  else if (d.taxiCancel) taxiSet(+d.taxiCancel, "cancelled");
+  else if (d.logiAdd !== undefined) logiBump(d.logiAdd, 1);
   else if (d.logiSub !== undefined) logiBump(d.logiSub, -1);
   else if (d.logiCall !== undefined) logiCall();
   else if (d.logiDone) logiSet(+d.logiDone, "delivered");
@@ -2985,6 +3009,102 @@ document.addEventListener("click", e => {
     try { localStorage.setItem(LOGI_HELI, d.logiHeli); } catch { /* a private window: kept for this visit only */ }
     renderLogi();
   }
+});
+
+// ---------- taxi (Petr 2026-11-09, specs/logistika-objednavky "Taxi" T1-T7, 076) ----------
+// "zavolat si odvoz helikopterou ala zavolat si taxi": a member with a place says where from, where to and how many; the
+// crew of Logi heli takes it ("Letim") and the pilot marks it done. The same blocks on the Logistika page and in a Palba
+// game; an own game's taxis are the game's (game_id), a game of an operation has the operation's
+const TAXI_COLS = "id, game_id, state, place, dest, pax, created_by, created_at, pilot, flying_at, done_at, who:members!logi_rides_created_by_fkey(name), flier:members!logi_rides_pilot_fkey(name)";
+const paxText = n => n >= 5 ? "5+ lidí" : plural(n, "člověk", "lidé", "lidí");
+const taxiRoute = r => `<b>${esc(r.place)}</b>${r.dest ? ` → <b>${esc(r.dest)}</b>` : ""} · ${paxText(r.pax)}`;
+const flierName = r => esc(r.flier ? r.flier.name : "?");
+// a taxi waits this long for a pilot (Petr 2026-11-09 evening "rychlou vyzvu pro pilota k potvrzeni s casovym limitem"):
+// = public.taxi_limit() in 076, which refuses a later "Letim"; counted by this computer's clock (spec decision 7)
+const TAXI_LIMIT_MS = 20e3;  // Petr 2026-11-09: "20 vterin"
+const taxiUntil = r => Date.parse(r.created_at) + TAXI_LIMIT_MS;
+const taxiFresh = r => r.state === "open" && Date.now() < taxiUntil(r);
+// the seconds left: taxiSecs writes them every second, the HTML keeps none (the page's redraw check stays put)
+const secsLeft = r => `<span class="lg-taxi-t" data-taxi-until="${taxiUntil(r)}"></span>`;
+// the caller's block: the form, or his taxi on its way instead of it; a call nobody took in time says so at once (T10)
+function taxiHtml(rides, h = "h2") {
+  const T = state.taxi, mine = rides.filter(r => r.created_by === state.me.user_id);
+  const live = mine.find(r => r.state === "flying" || taxiFresh(r)), last = mine[mine.length - 1];
+  const note = !last ? "" : last.state === "done" ? `<p class="lg-last delivered">Hotovo · ${flierName(last)} · ${ago(last.done_at)}</p>`
+    : last.state === "expired" || last.state === "open" ? `<div class="lg-taxi-busy" role="alert"><b>Všichni piloti jsou zaneprázdnění</b>
+      <p>Nikdo nepotvrdil do ${TAXI_LIMIT_MS / 1000} s (${ago(last.created_at)}). Dostaň se tam jinak, nebo zavolej znovu.</p></div>` : "";
+  const body = live ? `<div class="lg-taxi-st ${live.state}"><b>${live.state === "open" ? `Čeká na pilota · zbývá ${secsLeft(live)}` : `Letí pro tebe ${flierName(live)} · ${ago(live.flying_at)}`}</b>
+      <p>${taxiRoute(live)}</p><button type="button" class="act" data-taxi-cancel="${live.id}">Zrušit</button></div>`
+    : `${note}<div class="lg-taxi-f">
+      <label class="pf-f">Odkud<input id="lg-taxi-place" maxlength="60" autocomplete="off" placeholder="např. FOB sever" value="${esc(T.place)}"></label>
+      <label class="pf-f">Kam<input id="lg-taxi-dest" maxlength="60" autocomplete="off" placeholder="nepovinné" value="${esc(T.dest)}"></label>
+      <p class="lg-pax-l">Kolik vás je</p><div class="lg-pax vbar seg" role="group" aria-label="Kolik vás je">${[1, 2, 3, 4, 5].map(n => `<button type="button" data-taxi-pax="${n}" aria-pressed="${T.pax === n}">${n < 5 ? n : "5+"}</button>`).join("")}</div>
+      <button type="button" class="lg-call" data-taxi-call${T.place.trim() ? "" : " disabled"}>Zavolat taxi</button></div>`;
+  return `<section class="lg-sec lg-taxi" id="lg-taxi"><header class="lg-h"><${h}>Taxi</${h}></header>${body}</section>`;
+}
+// the crew's prompt for every taxi still waiting, pinned to the bottom of the screen with its seconds, the oldest on top (T8)
+function taxiPrompt(rides, seatOf) {
+  const wait = rides.filter(taxiFresh);
+  return wait.length ? `<div class="lg-taxi-call" role="alert">${wait.map(r => `<div class="lg-taxi-p"><div><b class="lg-sq">Taxi · ${esc(r.who ? r.who.name : "?")}</b>
+    <span>${esc(seatOf(r.created_by))}</span><p class="lg-taxi-where">${taxiRoute(r)}</p></div>${secsLeft(r)}
+    <button type="button" class="lg-done" data-taxi-fly="${r.id}">Letím</button></div>`).join("")}</div>` : "";
+}
+// the crew's cards on top of its inbox: the taxis in the air, the pilot's own with "Hotovo"
+function taxiInbox(rides, seatOf) {
+  const me = state.me.user_id;
+  return rides.filter(r => r.state === "flying").map(r => `<article class="lg-o lg-taxi-o ${r.state}">
+    <header><b class="lg-sq">Taxi · ${esc(r.who ? r.who.name : "?")}</b><span>${[seatOf(r.created_by), ago(r.created_at)].filter(Boolean).map(esc).join(" · ")}</span></header>
+    <p class="lg-taxi-where">${taxiRoute(r)}</p>${r.pilot === me ? `<button type="button" class="lg-done" data-taxi-done="${r.id}">Hotovo</button>`
+      : `<p class="lg-last">Letí ${flierName(r)} · ${ago(r.flying_at)}</p>`}</article>`).join("");
+}
+// what rings since the last load: a new taxi for the crew (crew(ride)), my own when a pilot takes it and when he lands
+function taxiRings(prev, next, crew) {
+  const me = state.me.user_id, was = new Map(prev.map(x => [x.id, x.state]));
+  return next.some(x => !was.has(x.id) ? taxiFresh(x) && x.created_by !== me && crew(x)
+    : was.get(x.id) !== x.state && x.created_by === me && (x.state === "flying" || x.state === "done"));
+}
+const taxiSecs = () => { for (const el of document.querySelectorAll("[data-taxi-until]")) el.textContent = `${Math.max(0, Math.ceil((el.dataset.taxiUntil - Date.now()) / 1000))} s`; };
+// every second the seconds left; a taxi crossing its limit redraws the page (the prompt goes, the caller sees "vsichni
+// piloti jsou zaneprazdneni") and the caller's page ends it as expired, with a sound when it just happened (T10)
+const taxiOver = new Set();
+function taxiTick() {
+  taxiSecs();
+  if (!state.me) return;
+  const over = [...state.logi.rides, ...state.fire.rides].filter(r => r.state === "open" && !taxiFresh(r) && !taxiOver.has(r.id));
+  if (!over.length) return;
+  for (const r of over) {
+    taxiOver.add(r.id);
+    if (r.created_by !== state.me.user_id) continue;
+    sb.from("logi_rides").update({ state: "expired" }).eq("id", r.id).eq("state", "open").then(({ error }) => { if (error) console.error(error); });
+    if (Date.now() - taxiUntil(r) < 5000 && !(fireRoute() && fireQuiet().has("logi"))) sound("remove");  // not an old one found on load
+  }
+  renderLogi();  // the Logistika page, or a Palba game (renderLogi passes it on)
+}
+setInterval(taxiTick, 1000);
+const taxiGame = () => { const g = fireRoute() ? fireGame(fireRoute()) : null; return g && !g.event_id ? g : null; };
+async function taxiWrite(req, undo) {
+  const { error } = await req, inGame = !!fireRoute();
+  const msg = error ? (console.error(error), error.code === "23505" ? "Taxi už voláš." : /taxi_expired/.test(error.message || "") ? "Pozdě, limit vypršel: volající už ví, že nikdo neletí."
+    : "Taxi se nepodařilo uložit, zkus to znovu.") : null;
+  if (error && undo) undo();
+  if (inGame) state.fire.flash = msg; else state.logi.flash = msg;
+  await (taxiGame() ? loadFire() : loadLogi());
+  return !error;
+}
+async function taxiCall() {
+  const T = state.taxi, was = { ...T }, g = taxiGame();
+  const row = { ...(g ? { game_id: g.id } : { event_id: logiOp().id }), place: T.place.trim(), dest: T.dest.trim() || null, pax: T.pax };
+  if (!row.place) return;
+  Object.assign(T, { place: "", dest: "", pax: 1 });  // the form empties at once; a failed call gets its text back
+  if (await taxiWrite(sb.from("logi_rides").insert(row), () => Object.assign(T, was))) sound("unlock");
+}
+const taxiSet = (id, st) => taxiWrite(sb.from("logi_rides").update({ state: st }).eq("id", id));
+document.addEventListener("input", e => {
+  const id = e.target.id;
+  if (id !== "lg-taxi-place" && id !== "lg-taxi-dest") return;
+  state.taxi[id === "lg-taxi-place" ? "place" : "dest"] = e.target.value;
+  const b = document.querySelector("[data-taxi-call]");
+  if (b) b.disabled = !state.taxi.place.trim();
 });
 
 // ---------- palba (Petr 2026-11-01, hub/specs/palba, 063; v2 games 065) ----------
@@ -3077,12 +3197,13 @@ function fireNotify(prev) {
     else if (was && was !== x.state && (x.state === "taken" || x.state === "done") && x.created_by === me) fireCallout(x.state);
   }
 }
-// the logistics of the games (073): a shipment rings for the game's Logi heli, its delivery for the SL who sent it
-function glNotify(prev) {
+// the logistics of the games (073): a shipment rings for the game's Logi heli, its delivery for the SL who sent it; a taxi
+// (076) for the Logi heli, its pilot and landing for its caller
+function glNotify(prev, prevRides) {
   const me = state.me.user_id;
   const ring = state.fire.logi.some(o => { const was = prev.get(o.id);
     return !was ? o.state === "open" && fireRoleIn(o.game_id) === "logi" : was !== o.state && o.state === "delivered" && o.created_by === me; });
-  if (ring) glBeep();
+  if (ring || taxiRings(prevRides, state.fire.rides, r => fireRoleIn(r.game_id) === "logi")) glBeep();
 }
 let fireSeq = 0;
 // every live game with its places and calls: after login and on every change, so a gun hears a call on any page (P11)
@@ -3092,19 +3213,20 @@ async function loadFire() {
   const g = await sb.from("fire_games").select("id, name, map, event_id, created_by, created_at, founder:members!fire_games_created_by_fkey(name)")
     .is("ended_at", null).gt("active_at", new Date(Date.now() - FIRE_QUIET_MS).toISOString());
   const ids = g.error ? [] : g.data.map(x => x.id);
-  const [s, m, l] = ids.length ? await Promise.all([
+  const [s, m, l, t] = ids.length ? await Promise.all([
     sb.from("fire_slots").select("game_id, user_id, role, squad, lead, weapon, x, y, who:members!fire_slots_user_id_fkey(name)").in("game_id", ids),
     sb.from("fire_missions").select("id, game_id, x, y, salvos, note, state, created_by, created_at, taken_by, taken_at, done_at, author:members!fire_missions_created_by_fkey(name), gunner:members!fire_missions_taken_by_fkey(name)").in("game_id", ids).order("id"),
-    sb.from("logi_orders").select("id, game_id, squad, state, items, created_by, sent_at, delivered_at, author:members!logi_orders_created_by_fkey(name), courier:members!logi_orders_delivered_by_fkey(name)").in("game_id", ids).order("id")])
-    : [{ data: [] }, { data: [] }, { data: [] }];
+    sb.from("logi_orders").select("id, game_id, squad, state, items, created_by, sent_at, delivered_at, author:members!logi_orders_created_by_fkey(name), courier:members!logi_orders_delivered_by_fkey(name)").in("game_id", ids).order("id"),
+    sb.from("logi_rides").select(TAXI_COLS).in("game_id", ids).order("id")])
+    : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }];
   if (seq !== fireSeq) return;  // a newer load is on its way
-  const err = g.error || s.error || m.error || l.error;
+  const err = g.error || s.error || m.error || l.error || t.error;
   if (err) { console.error(err); F.err = true; return renderFire(); }
   const prev = F.loaded ? new Map(F.missions.map(x => [x.id, x.state])) : null;  // the first load stays quiet
-  const prevL = F.loaded ? new Map(F.logi.map(x => [x.id, x.state])) : null;
-  Object.assign(F, { games: g.data.slice().sort((a, b) => b.id - a.id), slots: s.data, missions: m.data, logi: l.data, err: false, loaded: true });
-  if (prev) { fireNotify(prev); glNotify(prevL); }
-  if (!F.chan) F.chan = ["fire_games", "fire_slots", "fire_missions", "logi_orders"].reduce((c, t) => c.on("postgres_changes", { event: "*", schema: "public", table: t }, () => loadFire()), sb.channel("fire")).subscribe();
+  const prevL = F.loaded ? new Map(F.logi.map(x => [x.id, x.state])) : null, prevR = F.rides;
+  Object.assign(F, { games: g.data.slice().sort((a, b) => b.id - a.id), slots: s.data, missions: m.data, logi: l.data, rides: t.data, err: false, loaded: true });
+  if (prev) { fireNotify(prev); glNotify(prevL, prevR); }
+  if (!F.chan) F.chan = ["fire_games", "fire_slots", "fire_missions", "logi_orders", "logi_rides"].reduce((c, t) => c.on("postgres_changes", { event: "*", schema: "public", table: t }, () => loadFire()), sb.channel("fire")).subscribe();
   renderFire();
   const on = fireGame(fireRoute());  // a game of an operation shows the operation's logistics (073)
   if (on && on.event_id && state.logi.loaded !== on.event_id) setTimeout(loadLogi);
@@ -3232,19 +3354,21 @@ function glList(id, sq) {  // my list: my clicks until they are saved, else my d
   const row = glOwn(id, sq);
   return new Map((row ? row.items : []).map(x => [x.item, x.stacks]));
 }
-// what waits for me: the shipments of the games where I fly the Logi heli
-const glTodo = () => state.fire.logi.filter(o => o.state === "open" && fireRoleIn(o.game_id) === "logi");
+// what waits for me: the shipments and the taxis of the games where I fly the Logi heli
+const glTodo = () => [...state.fire.logi.filter(o => o.state === "open"), ...state.fire.rides.filter(taxiFresh)].filter(o => fireRoleIn(o.game_id) === "logi");
 const glState = o => o.state === "open" ? `Čeká na logistiku · ${ago(o.sent_at)}`
   : o.state === "delivered" ? `Doručeno${o.courier ? ` · ${esc(o.courier.name)}` : ""} · ${ago(o.delivered_at)}` : "Zrušeno";
 const glCard = (o, act) => `<article class="lg-o"><header><b class="lg-sq">${glSqName(o.squad)}</b><span>SL ${esc(o.author ? o.author.name : "?")} · ${glState(o)}</span></header>
-  <ul class="lg-items">${o.items.map(i => `<li>${itemIcon(logiIcon(i.item), "sm")}<b>${i.stacks}×</b><span>${esc(i.item)}</span><small>${i.stacks * i.per} ks</small></li>`).join("")}</ul>${act}</article>`;
+  ${logiTabs(o.items, logiLine)}${act}</article>`;
 function glInbox(id) {
   if (!fireCanEnd(fireGame(id)) && fireRoleIn(id) !== "logi") return "";
-  const open = state.fire.logi.filter(o => o.game_id === id && o.state === "open");
-  // the helicopter, the crates and the supply crate as on the Logistika page (Petr 2026-11-08)
-  return `<div class="pf-gl-in"><h3>Pro logi heli <span class="num">${open.length}</span></h3>${heliBar()}${open.map(o => glCard(o, `${cratesHtml(o.items)}<button type="button" class="lg-done" data-gl-done="${o.id}">Doručeno</button>`)).join("")
-    || '<p class="note">Nic nečeká.</p>'}${zasobaHtml()}</div>`;
+  const open = state.fire.logi.filter(o => o.game_id === id && o.state === "open"), rides = glRides(id);
+  const seatOf = uid => { const s = state.fire.slots.find(s => s.game_id === id && s.user_id === uid); return s && s.squad ? glSqName(`Q${s.squad}`) : ""; };
+  // the helicopter, the crates and the supply crate as on the Logistika page (Petr 2026-11-08); the taxis on top (076)
+  return `<div class="pf-gl-in"><h3>Pro logi heli <span class="num">${open.length + rides.filter(taxiFresh).length}</span></h3>${heliBar()}${taxiPrompt(rides, seatOf)}${taxiInbox(rides, seatOf)}${open.map(o => glCard(o, `${cratesHtml(o.items)}<button type="button" class="lg-done" data-gl-done="${o.id}">Doručeno</button>`)).join("")
+    || (rides.some(r => taxiFresh(r) || r.state === "flying") ? "" : '<p class="note">Nic nečeká.</p>')}${zasobaHtml()}</div>`;
 }
+const glRides = id => state.fire.rides.filter(r => r.game_id === id);
 function glOrder(id) {
   const sq = glSq(id);
   if (!sq) return fireRoleIn(id) === "logi" ? "" : '<p class="note">Naskoč do squadu v Místech a můžeš objednávat.</p>';
@@ -3262,12 +3386,13 @@ function glOrder(id) {
     ${[0, 1, 2].map(r => all.filter(x => x.row === r)).filter(r => r.length).map(r => `<div class="lg-tiles">${r.map(tile).join("")}</div>`).join("")}${bar}</div>`;
 }
 function glHtml(id) {
-  const g = fireGame(id);
-  if (!g.event_id) return glInbox(id) + glOrder(id);
+  const g = fireGame(id), role = fireRoleIn(id);
+  if (!g.event_id) return glInbox(id) + (role && role !== "logi" ? taxiHtml(glRides(id), "h3") : "") + glOrder(id);
   const op = glOp(g);  // a game of an operation: the operation's logistics, the same blocks as the Logistika page
   if (!op) return `<p class="note">${state.opsLoaded ? "Akce téhle hry už je uzavřená, logistika skončila." : "Načítám…"}</p>`;
   const r = logiRole(op), sq = logiSquad(op), order = sq ? logiOrderBlock(op, sq) : "", inbox = r.crew || r.cmd ? logiInbox(op) : "";
-  return order || inbox ? (r.crew && !r.squad ? inbox + order : order + inbox) : '<p class="note">Logistika akce je pro členy jejích squadů, velení a posádku logi heli.</p>';
+  const taxi = r.seat && !r.crew ? taxiHtml(state.logi.rides) : "";
+  return order || inbox || taxi ? (r.crew && !r.squad ? inbox + order : taxi + order + inbox) : '<p class="note">Logistika akce je pro velení a každého, kdo má místo v akci.</p>';
 }
 function glBump(item, d) {
   const F = state.fire, id = fireRoute(), sq = glSq(id), items = new Map(glList(id, sq)), n = Math.max(0, (items.get(item) || 0) + d);
@@ -3378,12 +3503,13 @@ function renderFire() {
       set("pf-list", fireListHtml(id)); set("pf-own-out", fireOwnHtml(id));
       // the logistics only when its HTML changed: the browser serializes it differently, the tiles' icons flashed (as 2026-10-31)
       const lg = document.getElementById("pf-logi"), h = glHtml(id);
-      if (lg && lg._html !== h) { lg.innerHTML = h; lg._html = h; }
+      if (lg && lg._html !== h) keepFocus(() => { lg.innerHTML = h; lg._html = h; });
     }
   }
   const n = fireCount();
   document.title = n ? `(${n}) Palba · KIN` : "Palba · KIN";
   renderNav(navActive);
+  taxiSecs();
 }
 document.addEventListener("input", e => {
   const F = state.fire, id = e.target.id;

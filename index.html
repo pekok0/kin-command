@@ -517,6 +517,9 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .lg-sq { font: 700 clamp(28px, 1.4vw + 20px, 40px)/1 var(--cond); letter-spacing: .04em; text-transform: uppercase; }
 .lg-o header span { font-size: 18px; color: var(--ink-2); }
 .lg-items { list-style: none; display: grid; gap: 8px; }
+.lg-buy { display: grid; gap: 14px; }
+.lg-tab + .lg-tab { border-top: 1px solid var(--rule); padding-top: 12px; }
+.lg-tab h4 { font: 700 16px/1 var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
 .lg-items li { display: grid; grid-template-columns: 66px 3.4em minmax(0, 1fr) auto; align-items: center; gap: 12px; font-size: 20px; }
 .lg-items b { font: 700 30px/1 var(--cond); color: var(--fr); }
 .lg-items small { font: 600 16px/1 var(--sans); color: var(--ink-3); white-space: nowrap; }
@@ -535,6 +538,32 @@ tr.sync .synctag { font: 700 13px/1 var(--cond); letter-spacing: .12em; border: 
 .lg-crate li b { font: 700 24px/1 var(--cond); color: var(--fr); }
 .lg-crate .item.sm { width: 44px; height: 30px; padding: 2px; }
 .lg-zas { border-color: var(--rule); }
+/* taxi (076): the caller's form or his taxi on its way, the crew's cards (a waiting one in yellow) */
+.lg-taxi-f { display: grid; gap: 14px; max-width: 720px; }
+.lg-pax-l { font: 700 15px/1 var(--cond); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin-bottom: -6px; }
+.lg-pax { margin: 0; }
+.lg-pax button { min-height: 56px; min-width: 56px; font: 700 26px/1 var(--cond); }
+.lg-taxi-st { display: grid; justify-items: start; gap: 10px; max-width: 720px; padding: 16px; border: 1px solid var(--rule); background: var(--panel-2); }
+.lg-taxi-st > b { font: 700 clamp(24px, 1.2vw + 18px, 34px)/1.1 var(--cond); letter-spacing: .04em; text-transform: uppercase; }
+.lg-taxi-st.open > b { color: var(--un); }
+.lg-taxi-st.flying > b { color: var(--fr); }
+.lg-taxi-st p, .lg-taxi-where { font-size: 22px; }
+.lg-taxi-o.flying { border-color: var(--rule); }
+.lg-taxi-busy { display: grid; gap: 6px; max-width: 720px; margin-bottom: 14px; padding: 14px 16px; border: 1px solid var(--un); background: var(--un-fill); }
+.lg-taxi-busy b { font: 700 clamp(22px, 1vw + 16px, 30px)/1.1 var(--cond); letter-spacing: .04em; text-transform: uppercase; color: var(--un); }
+.lg-taxi-busy p { font-size: 18px; color: var(--ink-2); }
+/* the crew's prompt (T8): pinned to the bottom over everything, the seconds left big */
+.lg-taxi-call { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: grid; gap: 1px; max-height: 60vh; overflow-y: auto;
+  border-top: 2px solid var(--un); background: var(--un); box-shadow: 0 -12px 40px rgb(0 0 0 / 0.5); }
+.lg-taxi-p { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(140px, 260px); align-items: center; gap: 8px 20px; padding: 12px max(16px, calc((100vw - 1640px) / 2)); background: var(--plate-bg); }
+.lg-taxi-p span { font-size: 18px; color: var(--ink-2); margin-left: 12px; }
+.lg-taxi-p .lg-taxi-where { margin-top: 4px; }
+.lg-taxi-t { font: 700 clamp(30px, 1.6vw + 20px, 48px)/1 var(--cond); color: var(--un); font-variant-numeric: tabular-nums; }
+.lg-taxi-st .lg-taxi-t { font-size: inherit; }
+@media (max-width: 720px) { .lg-taxi-p { grid-template-columns: minmax(0, 1fr) auto; } .lg-taxi-p .lg-done { grid-column: 1 / -1; } }
+#app:has(.lg-taxi-call) { padding-bottom: 220px; }  /* the page's own end stays reachable under the prompt */
+/* the page's rise animation leaves a transform on its block, which pins a fixed child to the block, not the screen */
+#app > *:has(.lg-taxi-call) { animation: none; }
 /* Palba (Petr 2026-11-01, hub/specs/palba): like Logistika everything big, the gun needs only two numbers */
 #pf-root { display: grid; gap: 36px; margin-top: 18px; }
 .pf-sec { display: grid; gap: 14px; }
