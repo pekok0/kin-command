@@ -1719,7 +1719,14 @@ function refChip(s, ref) {
   if (gs.length) return gs.map(g => `<a class="ref" href="#/s/${s.id}/squad/${g.id}">${esc(g.name)}</a>`).join(" ");
   return `<span class="ref">${esc(ref)}</span>`;
 }
-function unlockText(u) { return `${esc(u.track)} ${u.level}`; }
+// Season 3: armor, backpacks, vests, parachutes and ammo open in several role tracks (unlock.alt, same cash). With the
+// Tracker's levels the label names the track this member is closest in, else the earliest one; the rest is in the title
+const unlockTracks = u => [u, ...(u.alt || [])];
+const unlockReached = (u, lv) => !!lv && unlockTracks(u).some(t => (lv[t.track] || 0) >= t.level);
+function unlockText(u) {
+  const lv = trk && trk.levels, b = lv ? unlockTracks(u).reduce((a, t) => (lv[t.track] || 0) - t.level > (lv[a.track] || 0) - a.level ? t : a) : u;
+  return `${esc(b.track)} ${b.level}${u.alt ? ` <span class="ua" title="${esc(unlockTracks(u).filter(t => t !== b).map(t => `${t.track} ${t.level}`).join(" · "))}">nebo jiná role</span>` : ""}`;
+}
 
 // ---------- views ----------
 // open event + my status on the home page (kept current by renderRoster after every roster load)
@@ -2168,7 +2175,7 @@ function viewSwarm(k) {
     <section class="block"><h2>Velení a komunikace</h2>${bullets(s.command)}</section>
     <section class="block"><h2>Postupy</h2>${s.procedure.map(x => `<div class="sq"><h3>${esc(x.title)}</h3>${procList(x.steps)}</div>`).join("")}</section>
     <section class="block"><h2>Protokoly: když se stane, reaguj</h2>${docRx(s.protocol)}</section>
-    <section class="block"><h2>Výbava podle odemčení (Season 2)</h2>${bullets(s.kit)}</section>
+    <section class="block"><h2>Výbava podle odemčení (Season 3)</h2>${bullets(s.kit)}</section>
     <section class="block"><h2>Podle počtu lidí</h2><table class="data"><thead><tr>${s.sizes.cols.map(c => c ? `<th>${esc(c)}</th>` : "<td></td>").join("")}</tr></thead><tbody>
       ${s.sizes.rows.map(r => `<tr>${r.map((c, i) => i ? `<td>${esc(c)}</td>` : `<td><b>${esc(c)}</b></td>`).join("")}</tr>`).join("")}</tbody></table></section>`;
 }
@@ -2194,7 +2201,7 @@ function viewDoktrina(tab, sub) {
 function viewCw(c) {
   return `<section class="block"><h2>${esc(c.title)}</h2><p class="lede">${esc(c.tagline)}</p>${bullets(c.points)}
     <p class="note">Nákup bereš z loadoutu své role ve <a href="#/vybava">Výbavě</a>.</p></section>
-    ${c.kit ? `<section class="block"><h2>Výbava a ceny (Season 2)</h2>${bullets(c.kit)}</section>` : ""}`;
+    ${c.kit ? `<section class="block"><h2>Výbava a ceny (Season 3)</h2>${bullets(c.kit)}</section>` : ""}`;
 }
 
 // ---------- squads + loadouts ----------
@@ -2306,20 +2313,20 @@ const SRC = { A: "A", B: "B", C: "C", ODVOZENO: "odvozeno" };
 function ladderBlock(lad, lv) {
   if (lad.free) return `<div class="lad free"><div class="lad-h"><span class="sl">${SLOT_LABEL[lad.slot]}</span></div><p class="fr-n">Libovolná zbraň: klan ji pro tuhle roli nepředepisuje.</p>${lad.note ? `<p class="note">${esc(lad.note)}</p>` : ""}</div>`;
   const have = lad.steps.map(st => !st.unlock || !!(haveSet && haveSet.has(st.item)));
-  const reach = lad.steps.map(st => !st.unlock || !!(lv && (lv[st.unlock.track] || 0) >= st.unlock.level));
+  const reach = lad.steps.map(st => !st.unlock || unlockReached(st.unlock, lv));
   const mine = have.lastIndexOf(true), next = reach.indexOf(false, mine + 1);
   const nu = next >= 0 && lad.steps[next].unlock, g = trk && trk.status === "ok" && grade(lad, mine);
-  return `<div class="lad${g ? " g-" + g : ""}"><div class="lad-h"><span class="sl">${lad.group ? esc(lad.group) : SLOT_LABEL[lad.slot]}</span>${nu ? `<span class="lad-next">Další: od ${esc(nu.track)} ${nu.level}</span>` : ""}</div>
+  return `<div class="lad${g ? " g-" + g : ""}"><div class="lad-h"><span class="sl">${lad.group ? esc(lad.group) : SLOT_LABEL[lad.slot]}</span>${nu ? `<span class="lad-next">Další: od ${unlockText(nu)}</span>` : ""}</div>
     <ol class="lad-steps">${lad.steps.map((st, i) => { const can = i > mine && reach[i] && !have[i];
       return `<li class="st${i === mine ? " mine" : ""}${can ? " can" : ""}${i === next ? " next" : ""}${i > mine && !reach[i] ? " locked" : ""}">
-      ${itemIcon(st.icon)}<span class="st-n">${esc(st.item)}</span><span class="st-u">${st.unlock ? `${esc(st.unlock.track)} ${st.unlock.level} · ${usd(st.unlock.cash)}` : "hned"}</span>
+      ${itemIcon(st.icon)}<span class="st-n">${esc(st.item)}</span><span class="st-u">${st.unlock ? `${unlockText(st.unlock)} · ${usd(st.unlock.cash)}` : "hned"}</span>
       <span class="st-src" title="Síla zdroje · počet zdrojů">${SRC[st.source]} · ${st.n}</span>${i === mine ? `<span class="st-tag">${asWho ? "Má" : "Tvůj"}</span>` : can ? `<span class="st-tag can" title="Máš level, chybí odemknout za ${usd(st.unlock.cash)}">Odemkni</span>` : ""}</li>`; }).join("")}</ol></div>`;  // no "Proc" (Petr 2026-10-30)
 }
 function ladderSection(c) {
   if (!c.ladders || !c.ladders.length) return "";
   const lv = trk && trk.levels || null;
   return `<section class="block lads-sec"><h2>Co máš a co máš mít</h2>
-    <p class="note">Co klan doporučuje, od startu po cíl (meta Season 2, rešerše 22. 10.). ${asWho ? "<b>Má</b> = nejlepší, co má odemčené. <b>Odemkni</b> = level má, chybí koupit. <b>Další</b> = kam míří." : "<b>Tvůj</b> = nejlepší, co máš odemčené. <b>Odemkni</b> = level máš, chybí koupit. <b>Další</b> = kam míříš."}${lv || asWho ? "" : ` Propoj WARDOGS Tracker ve <a href="#/vybava">Výbavě</a> a uvidíš, co máš.`} Zdroj: A data nebo oficiální, B víc hráčů, C jeden zdroj; číslo = kolik zdrojů.</p>
+    <p class="note">Co klan doporučuje, od startu po cíl (meta Season 2, rešerše 22. 10.; ceny a odemčení Season 3). ${asWho ? "<b>Má</b> = nejlepší, co má odemčené. <b>Odemkni</b> = level má, chybí koupit. <b>Další</b> = kam míří." : "<b>Tvůj</b> = nejlepší, co máš odemčené. <b>Odemkni</b> = level máš, chybí koupit. <b>Další</b> = kam míříš."}${lv || asWho ? "" : ` Propoj WARDOGS Tracker ve <a href="#/vybava">Výbavě</a> a uvidíš, co máš.`} Zdroj: A data nebo oficiální, B víc hráčů, C jeden zdroj; číslo = kolik zdrojů.</p>
     <div class="lads">${c.ladders.map(lad => ladderBlock(lad.group === "Munice" ? municeFor(lad, (myKit(c).slots.slot1 || {}).st) : lad, lv) + (lad.slot === "slot1" ? doplnkyBlocks(lad) : "")).join("")}</div></section>`;
 }
 // hub/specs/vybava-doplnky (Petr 2026-10-27): attachments of the weapons in the role's weapon ladder, main first, then
@@ -2331,7 +2338,7 @@ function doplnkyBlocks(lad) {
     const own = x => !x.unlock || !!(haveSet && haveSet.has(x.item)), first = s.items.findIndex(own);
     const mine = (x, i) => s.podle_mapy ? own(x) : i === first;
     return `<div class="lad dop"><div class="lad-h"><span class="sl">${esc(s.slot)} · ${esc(b.weapons.join(", "))}</span></div>
-      <ol class="lad-steps">${s.items.map((x, i) => `<li class="st${mine(x, i) ? " mine" : ""}">${itemIcon(x.icon)}<span class="st-n">${esc(x.item)}</span><span class="st-u">${x.unlock ? `${esc(x.unlock.track)} ${x.unlock.level} · ${usd(x.unlock.cash)}` : "hned"}</span>
+      <ol class="lad-steps">${s.items.map((x, i) => `<li class="st${mine(x, i) ? " mine" : ""}">${itemIcon(x.icon)}<span class="st-n">${esc(x.item)}</span><span class="st-u">${x.unlock ? `${unlockText(x.unlock)} · ${usd(x.unlock.cash)}` : "hned"}</span>
         <span class="st-src">${s.podle_mapy ? "Podle mapy" : i ? `Náhrada ${i}` : "Hlavní"}</span>${mine(x, i) ? `<span class="st-tag">${asWho ? "Má" : "Tvůj"}</span>` : ""}</li>`).join("")}</ol>
       ${s.note ? `<p class="note">${esc(s.note)}</p>` : ""}
 </div>`;
